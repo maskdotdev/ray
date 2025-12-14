@@ -1,0 +1,399 @@
+# Nero API - Architecture & Design
+
+This document describes the architecture and design decisions of the Nero high-level API.
+
+## Overview
+
+The Nero API is a **type-safe, schema-first wrapper** around a low-level embedded graph database. It provides a Drizzle-like developer experience with full TypeScript type inference.
+
+## Design Philosophy
+
+1. **Schema-First**: Define types upfront with `defineNode` and `defineEdge`
+2. **Type-Safe**: Full TypeScript inference for all operations
+3. **Ergonomic**: Fluent builder pattern for queries
+4. **Composable**: Chain operations naturally
+5. **Zero-Cost**: Abstraction doesn't sacrifice performance
+6. **Escapable**: Access raw database when needed via `$raw`
+
+## Core Concepts
+
+### 1. Schema Layer (`schema.ts`)
+
+The schema layer defines the structure of your graph:
+
+**Property Types:**
+```typescript
+prop.string('name')     // UTF-8 strings
+prop.int('age')         // 64-bit integers (bigint)
+prop.float('score')     // 64-bit floats
+prop.bool('active')     // Booleans
+```
+
+**Node Definitions:**
+```typescript
+const user = defineNode('user', {
+  key: (id: string) => `user:${id}`,  // Key generation
+  props: {
+    name: prop.string('name'),
+    email: prop.string('email'),
+    age: optional(prop.int('age')),   // Optional property
+  },
+});
+```
+
+**Edge Definitions:**
+```typescript
+const knows = defineEdge('knows', {
+  since: prop.int('since'),
+  confidence: optional(prop.float('confidence')),
+});
+
+const follows = defineEdge('follows');  // Edge without properties
+```
+
+**Type Inference:**
+
+The schema layer uses advanced TypeScript generics to automatically infer:
+
+- `InferNodeInsert<N>` - What you pass to `insert().values()`
+- `InferNode<N>` - What you get back from queries
+- `InferEdgeProps<E>` - Edge properties type
+
+```typescript
+type InsertUser = InferNodeInsert<typeof user>;
+// Result: { key: string; name: string; email: string; age?: bigint; }
+
+type User = InferNode<typeof user>;
+// Result: { $id: bigint; $key: string; name: string; email: string; age?: bigint; }
+```
+
+### 2. Database Context (`nero.ts`)
+
+The `Nero` class is the main interface for all operations:
+
+**Initialization:**
+```typescript
+const db = await nero('./my-db', {
+  nodes: [user, company],
+  edges: [knows, worksAt],
+});
+```
+
+The database handles:
+- Schema registration with the underlying database
+- Transaction management
+- Property key ID resolution
+- Edge type ID resolution
+- Node ref creation with properties
+
+**Key Responsibilities:**
+
+1. **Schema Resolution**: Maps user-defined types to internal IDs
+2. **Transaction Context**: Provides `transaction()` and `batch()` APIs
+3. **CRUD Builders**: Returns appropriate builders for operations
+4. **Traversal**: Creates traversal builders starting from nodes
+5. **Maintenance**: Stats, check, optimize operations
+
+### 3. Query Builders (`builders.ts`)
+
+Builders implement the fluent API pattern:
+
+**Insert Builder Chain:**
+```
+Insert → values() → InsertExecutor → returning() / execute()
+```
+
+**Update Builder Chain:**
+```
+Update → set() → UpdateExecutor → where() → execute()
+```
+
+**Delete Builder Chain:**
+```
+Delete → where() → DeleteExecutor → execute()
+```
+
+**Link/Unlink:**
+```
+Direct methods on Nero (no builder needed)
+```
+
+**Design Notes:**
+
+- Builders are immutable and return new instances
+- The `_toBatchOp()` method allows operations to be batched
+- Batch operations receive a `TxHandle` for transaction context
+- Where conditions support both `$id` and `$key` lookups
+
+### 4. Traversal (`traversal.ts`)
+
+Traversal uses a **lazy async iterable** pattern:
+
+**Builder Chaining:**
+```
+from(node) → out(edge) → whereNode() → take(n) → nodes()
+                                                 ↓
+                                      AsyncTraversalResult
+```
+
+**Step Types:**
+- `out(edge)` - Follow outgoing edges
+- `in(edge)` - Follow incoming edges
+- `both(edge)` - Follow both directions
+- `traverse(edge, options)` - Variable-depth BFS
+
+**Filtering:**
+- `whereEdge(predicate)` - Filter by edge properties
+- `whereNode(predicate)` - Filter by node properties
+- `take(limit)` - Limit results
+
+**Results:**
+- `nodes()` - Return nodes as async iterable
+- `edges()` - Return edges as async iterable
+- `first()` - Get first result
+- `count()` - Count results
+- `toArray()` - Collect all results
+
+**Implementation Details:**
+
+- Uses BFS (breadth-first search) for variable-depth traversal
+- Generators for memory efficiency
+- Optional deduplication with `unique` flag
+- Supports early termination with limit/take
+
+## Data Flow
+
+### Insert Operation
+
+```
+User calls: db.insert(user).values({...}).returning()
+                ↓
+createInsertBuilder() returns InsertBuilder
+                ↓
+.values() returns InsertExecutor with lazy execute function
+                ↓
+.returning() calls execute() which:
+  1. createNode() for each value
+  2. setNodeProp() for each property
+  3. commit() transaction
+  4. Return NodeRef objects
+```
+
+### Traversal Operation
+
+```
+User calls: db.from(alice).out(knows).nodes().toArray()
+                ↓
+createTraversalBuilder() sets up execution state
+                ↓
+.out(knows) pushes traversal step
+                ↓
+.nodes() returns AsyncTraversalResult with execute generator
+                ↓
+.toArray() iterates through generator which:
+  1. Starts with startNodes
+  2. Applies each step via executeStep()
+  3. Filters results with whereEdge/whereNode
+  4. Applies limit with take()
+  5. Yields results
+```
+
+## Property Type System
+
+```
+Nero Type          TypeScript Type    Storage        Tag
+─────────────────────────────────────────────────────────
+prop.string()      string             String         4
+prop.int()         bigint             i64            2
+prop.float()       number             f64            3
+prop.bool()        boolean            bool           1
+```
+
+When inserting:
+```typescript
+await db.insert(user).values({
+  key: 'alice',
+  name: 'Alice',        // string → stored as STRING
+  age: 30,              // number → converted to bigint → stored as I64
+  score: 95.5,          // number → stored as F64
+  active: true,         // boolean → stored as BOOL
+});
+```
+
+When reading:
+```typescript
+const alice = await db.get(user, 'alice');
+typeof alice.name;      // 'string'
+typeof alice.age;       // 'bigint'
+typeof alice.score;     // 'number'
+typeof alice.active;    // 'boolean'
+```
+
+## Key Design Patterns
+
+### 1. NodeRef Pattern
+
+```typescript
+export interface NodeRef<N extends NodeDef = NodeDef> {
+  readonly $id: NodeID;      // Internal numeric ID
+  readonly $key: string;     // Application key
+  readonly $def: N;          // Node definition
+  [key: string]: unknown;    // Properties
+}
+```
+
+NodeRefs combine:
+- System fields (ID, key, definition)
+- Properties from the node
+- Type information for type safety
+
+### 2. Builder Pattern
+
+All query builders follow this pattern:
+
+```typescript
+interface SomeBuilder {
+  config(): SomeExecutor;    // Set configuration
+}
+
+interface SomeExecutor {
+  execute(): Promise<void>;  // Execute and get result
+  _toBatchOp(): BatchOperation;  // For batching
+}
+```
+
+Benefits:
+- Flexible configuration
+- Lazy execution
+- Support for transactions
+- Batch operation composition
+
+### 3. Where Conditions
+
+Flexible WHERE matching:
+
+```typescript
+type WhereCondition = { $key: string } | { $id: NodeID };
+```
+
+Allows:
+- `where({ $key: 'user:alice' })` - String lookup
+- `where({ $id: 123n })` - Direct ID (from NodeRef)
+
+### 4. Escape Hatch
+
+```typescript
+const raw: GraphDB = db.$raw;
+```
+
+Provides:
+- Full access to low-level API
+- Direct transaction handling
+- Numeric ID operations
+- When the high-level API doesn't fit
+
+## Transaction Model
+
+**Single-Writer Pattern:**
+- Only one transaction at a time per database
+- Other operations wait for transaction to complete
+- Lock is managed by underlying GraphDB
+
+**Automatic Rollback:**
+```typescript
+try {
+  await db.transaction(async (ctx) => {
+    // ... operations ...
+    throw new Error('Fail');
+  });
+} catch (e) {
+  // Transaction automatically rolled back
+}
+```
+
+**Batch vs Transaction:**
+- `batch()` - Multiple operations in one transaction
+- `transaction()` - Full control with async callback
+
+## Error Handling
+
+| Scenario | Behavior | Throws |
+|----------|----------|--------|
+| Node not found with get() | Returns null | No |
+| Node not found with where() | Operation skipped | No |
+| Update/delete has no matches | Operation skipped | No |
+| Invalid property type | Throws | Yes |
+| Unknown edge type | Throws | Yes |
+| Transaction error | Rollback | Yes |
+| Disk error | Throws | Yes |
+
+## Performance Characteristics
+
+| Operation | Complexity | Notes |
+|-----------|-----------|-------|
+| Insert node | O(1) | WAL append |
+| Create edge | O(log n) | After compaction |
+| Key lookup | O(1) | Hash index |
+| Edge exists? | O(log n) | Binary search |
+| Traversal | O(k) | k = edges touched |
+| Read snapshot | O(1) | Zero-copy mmap |
+
+## Comparison with Other APIs
+
+### vs. Raw GraphDB (`src/db/`)
+
+| Feature | Nero API | Raw GraphDB |
+|---------|-------------|-----------|
+| Type safety | Full | Manual |
+| Schema | Defined | Implicit |
+| Property types | Inferred | Manual tags |
+| Key lookup | `get(node, id)` | `getNodeByKey()` |
+| Builders | Yes | No |
+| Ergonomics | High | Low |
+
+**When to use Nero API:**
+- Building applications
+- Need type safety
+- Want ergonomic API
+
+**When to use Raw GraphDB:**
+- Building frameworks
+- Need maximum control
+- Working with IDs directly
+
+### vs. Other Databases
+
+| Aspect | Nero | SQL | NoSQL | Neo4j |
+|--------|----------|-----|-------|-------|
+| Embedded | Yes | No | Sometimes | No |
+| Graph-first | Yes | No | No | Yes |
+| Type safety | Strong | Varies | Weak | Weak |
+| Schema | Required | Required | Optional | Optional |
+| Performance | Fast reads | Varies | Fast | Slower |
+
+## Future Considerations
+
+Potential extensions:
+
+1. **Advanced Traversal**
+   - Path finding (Dijkstra, A*)
+   - Subgraph matching
+   - GQL query language
+
+2. **Caching Layer**
+   - Property cache
+   - Traversal cache
+   - Query result caching
+
+3. **Advanced Schema**
+   - Constraints (unique, foreign keys)
+   - Validation functions
+   - Schema versioning
+
+4. **Multi-Version Concurrency Control**
+   - MVCC for read concurrency
+   - Snapshot isolation
+
+5. **Distributed**
+   - Multi-node replication
+   - Sharding support
