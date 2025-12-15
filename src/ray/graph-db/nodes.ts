@@ -381,7 +381,7 @@ export function getNodeProp(
       
       // Check delta first (modifications take precedence)
       const nodeDelta = getNodeDelta(db._delta, nodeId);
-      if (nodeDelta) {
+      if (nodeDelta?.props) {
         const deltaValue = nodeDelta.props.get(keyId);
         if (deltaValue !== undefined) {
           if (!tx && cache) {
@@ -428,7 +428,7 @@ export function getNodeProp(
 
   // Check delta first (modifications take precedence)
   const nodeDelta = getNodeDelta(db._delta, nodeId);
-  if (nodeDelta) {
+  if (nodeDelta?.props) {
     const deltaValue = nodeDelta.props.get(keyId);
     if (deltaValue !== undefined) {
       if (cache) {
@@ -496,7 +496,7 @@ export function getNodeProps(
 
   // Apply delta modifications
   const nodeDelta = getNodeDelta(db._delta, nodeId);
-  if (nodeDelta) {
+  if (nodeDelta?.props) {
     for (const [keyId, value] of nodeDelta.props) {
       if (value === null) {
         props.delete(keyId);

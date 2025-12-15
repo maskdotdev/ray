@@ -156,9 +156,16 @@ describe("Concurrency Stress Tests", () => {
     let conflicts = 0;
     const errors: Error[] = [];
 
-    // Spawn many writers all trying to modify the same node
-    const promises = Array.from({ length: WRITERS }, async (_, i) => {
-      const tx = beginTx(db);
+    // Begin ALL transactions synchronously FIRST to ensure they all have the same
+    // startTs (snapshot timestamp). This simulates true concurrency where all
+    // transactions start before any commits.
+    const txHandles: Array<{ tx: ReturnType<typeof beginTx>; i: number }> = [];
+    for (let i = 0; i < WRITERS; i++) {
+      txHandles.push({ tx: beginTx(db), i });
+    }
+
+    // Now execute all writes and commits concurrently
+    const promises = txHandles.map(async ({ tx, i }) => {
       try {
         // Read and modify
         const current = getNodeProp(db, sharedNode, propKey);

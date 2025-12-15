@@ -9,14 +9,19 @@ import { VersionChainManager } from "./version-chain.ts";
 
 export interface GcStats {
   versionsPruned: bigint;
+  chainsTruncated: bigint;
   gcRuns: number;
   lastGcTime: bigint;
 }
+
+/** Default max chain depth before truncation */
+export const DEFAULT_MAX_CHAIN_DEPTH = 10;
 
 export class GarbageCollector {
   private intervalId: ReturnType<typeof setInterval> | null = null;
   private stats: GcStats = {
     versionsPruned: 0n,
+    chainsTruncated: 0n,
     gcRuns: 0,
     lastGcTime: 0n,
   };
@@ -27,6 +32,7 @@ export class GarbageCollector {
     private versionChain: VersionChainManager,
     private intervalMs: number = 5000,
     private retentionMs: number = 60000,
+    private maxChainDepth: number = DEFAULT_MAX_CHAIN_DEPTH,
   ) {}
 
   /**
@@ -80,12 +86,17 @@ export class GarbageCollector {
       // Prune old versions
       const pruned = this.versionChain.pruneOldVersions(horizonTs);
 
+      // Truncate deep chains (bounds worst-case traversal time)
+      // Pass minActiveTs to preserve versions needed by active readers
+      const truncated = this.versionChain.truncateDeepChains(this.maxChainDepth, minActiveTs);
+
       // Clean up old committed transactions
       // This ensures activeTxs doesn't grow unboundedly in concurrent workloads
       this.cleanupOldTransactions(horizonTs);
 
       // Update stats
       this.stats.versionsPruned += BigInt(pruned);
+      this.stats.chainsTruncated += BigInt(truncated);
       this.stats.gcRuns++;
       this.stats.lastGcTime = BigInt(Date.now());
     } catch (error) {

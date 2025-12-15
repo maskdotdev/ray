@@ -18,6 +18,7 @@ import {
   nodeExists,
   edgeExists,
 } from "../src/mvcc/index.ts";
+import { VersionPool, SoaPropertyVersions, NULL_IDX } from "../src/mvcc/version-pool.ts";
 import { ConflictError } from "../src/types.ts";
 import {
   beginTx,
@@ -164,9 +165,9 @@ describe("TxManager", () => {
 
 describe("VersionChainManager", () => {
   let versionChain: VersionChainManager;
-  const nodeId: NodeID = 1n;
-  const src: NodeID = 1n;
-  const dst: NodeID = 2n;
+  const nodeId: NodeID = 1;
+  const src: NodeID = 1;
+  const dst: NodeID = 2;
   const etype: ETypeID = 1;
   const propKeyId: PropKeyID = 1;
 
@@ -342,12 +343,12 @@ describe("Visibility", () => {
 
   test("nodeExists: deleted node not visible", () => {
     const v1 = createVersion<NodeVersionData>(
-      { nodeId: 1n, delta: createNodeDelta() },
+      { nodeId: 1, delta: createNodeDelta() },
       1n,
       10n,
     );
     const v2 = createVersion<NodeVersionData>(
-      { nodeId: 1n, delta: createNodeDelta() },
+      { nodeId: 1, delta: createNodeDelta() },
       2n,
       20n,
       v1,
@@ -359,12 +360,12 @@ describe("Visibility", () => {
 
   test("nodeExists: deleted by own transaction not visible", () => {
     const v1 = createVersion<NodeVersionData>(
-      { nodeId: 1n, delta: createNodeDelta() },
+      { nodeId: 1, delta: createNodeDelta() },
       1n,
       10n,
     );
     const v2 = createVersion<NodeVersionData>(
-      { nodeId: 1n, delta: createNodeDelta() },
+      { nodeId: 1, delta: createNodeDelta() },
       2n,
       20n,
       v1,
@@ -376,7 +377,7 @@ describe("Visibility", () => {
 
   test("edgeExists: added edge visible", () => {
     const version = createVersion<EdgeVersionData>(
-      { src: 1n, etype: 1, dst: 2n, added: true },
+      { src: 1, etype: 1, dst: 2, added: true },
       1n,
       10n,
     );
@@ -386,12 +387,12 @@ describe("Visibility", () => {
 
   test("edgeExists: deleted edge not visible", () => {
     const v1 = createVersion<EdgeVersionData>(
-      { src: 1n, etype: 1, dst: 2n, added: true },
+      { src: 1, etype: 1, dst: 2, added: true },
       1n,
       10n,
     );
     const v2 = createVersion<EdgeVersionData>(
-      { src: 1n, etype: 1, dst: 2n, added: false },
+      { src: 1, etype: 1, dst: 2, added: false },
       2n,
       20n,
       v1,
@@ -405,12 +406,12 @@ describe("Visibility", () => {
     // When added=false, the edge is deleted - we should NOT walk back
     // to find earlier versions where it was added
     const v1 = createVersion<EdgeVersionData>(
-      { src: 1n, etype: 1, dst: 2n, added: true },
+      { src: 1, etype: 1, dst: 2, added: true },
       1n,
       10n,
     );
     const v2 = createVersion<EdgeVersionData>(
-      { src: 1n, etype: 1, dst: 2n, added: false }, // Deleted
+      { src: 1, etype: 1, dst: 2, added: false }, // Deleted
       2n,
       20n,
       v1,
@@ -425,18 +426,18 @@ describe("Visibility", () => {
 
   test("edgeExists: edge re-addition after deletion", () => {
     const v1 = createVersion<EdgeVersionData>(
-      { src: 1n, etype: 1, dst: 2n, added: true },
+      { src: 1, etype: 1, dst: 2, added: true },
       1n,
       10n,
     );
     const v2 = createVersion<EdgeVersionData>(
-      { src: 1n, etype: 1, dst: 2n, added: false }, // Deleted
+      { src: 1, etype: 1, dst: 2, added: false }, // Deleted
       2n,
       20n,
       v1,
     );
     const v3 = createVersion<EdgeVersionData>(
-      { src: 1n, etype: 1, dst: 2n, added: true }, // Re-added
+      { src: 1, etype: 1, dst: 2, added: true }, // Re-added
       3n,
       30n,
       v2,
@@ -577,10 +578,10 @@ describe("GarbageCollector", () => {
   });
 
   test("force GC cycle", () => {
-    const delta = { nodeId: 1n, delta: createNodeDelta() };
+    const delta = { nodeId: 1, delta: createNodeDelta() };
 
-    versionChain.appendNodeVersion(1n, delta, 1n, 10n);
-    versionChain.appendNodeVersion(1n, delta, 2n, 20n);
+    versionChain.appendNodeVersion(1, delta, 1n, 10n);
+    versionChain.appendNodeVersion(1, delta, 2n, 20n);
 
     const pruned = gc.forceGc();
     expect(pruned).toBeGreaterThanOrEqual(0);
@@ -596,15 +597,15 @@ describe("GarbageCollector", () => {
   });
 
   test("GC respects active transaction snapshots", () => {
-    const delta = { nodeId: 1n, delta: createNodeDelta() };
+    const delta = { nodeId: 1, delta: createNodeDelta() };
 
     const tx = txManager.beginTx(); // Creates active transaction
-    versionChain.appendNodeVersion(1n, delta, 1n, 10n);
+    versionChain.appendNodeVersion(1, delta, 1n, 10n);
 
     // GC should not prune versions needed by active transaction
     gc.forceGc();
 
-    const version = versionChain.getNodeVersion(1n);
+    const version = versionChain.getNodeVersion(1);
     expect(version).not.toBeNull(); // Should still exist
   });
 });
@@ -655,12 +656,12 @@ describe("MvccManager", () => {
 
   test("version chain creation through coordinator", () => {
     const { txid } = mvcc.txManager.beginTx();
-    const delta = { nodeId: 1n, delta: createNodeDelta() };
+    const delta = { nodeId: 1, delta: createNodeDelta() };
 
     const commitTs = mvcc.txManager.commitTx(txid);
-    mvcc.versionChain.appendNodeVersion(1n, delta, txid, commitTs);
+    mvcc.versionChain.appendNodeVersion(1, delta, txid, commitTs);
 
-    const version = mvcc.versionChain.getNodeVersion(1n);
+    const version = mvcc.versionChain.getNodeVersion(1);
     expect(version).not.toBeNull();
     expect(version?.txid).toBe(txid);
   });
@@ -701,27 +702,29 @@ describe("GraphDB MVCC Integration", () => {
 
   test("transaction operations update version chains", async () => {
     const db = await openGraphDB(testDir, { mvcc: true });
+    const mvcc = db._mvcc as MvccManager;
 
-    // First transaction creates a node - version chain always created in MVCC mode
+    // First transaction creates a node with no concurrent readers
+    // With lazy version chain optimization, version chain is NOT created
+    // when there are no other active transactions
     const tx1 = beginTx(db);
     const nodeId = createNode(tx1, { key: "test" });
     await commit(tx1);
     
-    // In MVCC mode, version chains are always created for proper snapshot isolation
-    const mvcc = db._mvcc as MvccManager;
+    // No version chain created when there are no concurrent readers (optimization)
     const versionAfterSingle = mvcc.versionChain.getNodeVersion(nodeId);
-    expect(versionAfterSingle).not.toBeNull(); // Version chain should exist
+    expect(versionAfterSingle).toBeNull(); // Version chain should NOT exist (lazy optimization)
     
-    // The node should exist
+    // The node should still exist (it's in the delta layer)
     expect(dbNodeExists(db, nodeId)).toBe(true);
     
-    // Test with concurrent transactions - version chain should also be created
+    // Test with concurrent transactions - version chain SHOULD be created
     const tx2 = beginTx(db); // Start a reader transaction
     const tx3 = beginTx(db); // Start another transaction that will commit
     const nodeId2 = createNode(tx3, { key: "test2" });
-    await commit(tx3); // Commit while tx2 is still active
+    await commit(tx3); // Commit while tx2 is still active - creates version chain
     
-    // Version chain should exist
+    // Version chain should exist because tx2 was active during commit
     const versionAfterConcurrent = mvcc.versionChain.getNodeVersion(nodeId2);
     expect(versionAfterConcurrent).not.toBeNull();
     
@@ -857,6 +860,174 @@ describe("GraphDB MVCC Integration", () => {
     // The read transaction should see the snapshot from when it started
 
     await closeGraphDB(db);
+  });
+});
+
+describe("SOA Storage", () => {
+  test("VersionPool basic operations", () => {
+    const pool = new VersionPool<string>();
+    
+    // Allocate some slots
+    const idx1 = pool.alloc(1n, 100n, NULL_IDX, false, "data1");
+    const idx2 = pool.alloc(2n, 200n, idx1, false, "data2");
+    const idx3 = pool.alloc(3n, 300n, idx2, true, "deleted");
+    
+    // Verify allocations
+    expect(idx1).toBe(0);
+    expect(idx2).toBe(1);
+    expect(idx3).toBe(2);
+    
+    // Verify data retrieval
+    const v1 = pool.get(idx1);
+    expect(v1).not.toBeNull();
+    expect(v1!.txid).toBe(1n);
+    expect(v1!.commitTs).toBe(100n);
+    expect(v1!.prevIdx).toBe(NULL_IDX);
+    expect(v1!.deleted).toBe(false);
+    expect(v1!.data).toBe("data1");
+    
+    const v2 = pool.get(idx2);
+    expect(v2!.prevIdx).toBe(idx1);
+    
+    const v3 = pool.get(idx3);
+    expect(v3!.deleted).toBe(true);
+    
+    // Fast path accessors
+    expect(pool.getTxid(idx1)).toBe(1n);
+    expect(pool.getCommitTs(idx2)).toBe(200n);
+    expect(pool.getPrevIdx(idx2)).toBe(idx1);
+    expect(pool.isDeleted(idx3)).toBe(true);
+    expect(pool.getData(idx1)).toBe("data1");
+    
+    // Active count
+    expect(pool.getActiveCount()).toBe(3);
+    
+    // Free a slot and verify reuse
+    pool.free(idx1);
+    expect(pool.getActiveCount()).toBe(2);
+    expect(pool.get(idx1)).toBeUndefined();
+    
+    // New allocation should reuse freed slot
+    const idx4 = pool.alloc(4n, 400n, NULL_IDX, false, "data4");
+    expect(idx4).toBe(idx1); // Reused slot
+    expect(pool.getActiveCount()).toBe(3);
+  });
+  
+  test("SoaPropertyVersions basic operations", () => {
+    const store = new SoaPropertyVersions<string>();
+    
+    const key1 = 1n;
+    const key2 = 2n;
+    
+    // Append versions to key1
+    store.append(key1, "v1", 1n, 100n);
+    store.append(key1, "v2", 2n, 200n);
+    
+    // Append version to key2
+    store.append(key2, "v3", 3n, 300n);
+    
+    // Verify heads
+    const head1 = store.getHead(key1);
+    expect(head1).not.toBeNull();
+    expect(head1!.data).toBe("v2"); // Latest version
+    expect(head1!.txid).toBe(2n);
+    expect(head1!.prevIdx).not.toBe(NULL_IDX);
+    
+    // Walk chain for key1
+    const prev1 = store.getAt(head1!.prevIdx);
+    expect(prev1!.data).toBe("v1");
+    expect(prev1!.prevIdx).toBe(NULL_IDX);
+    
+    // Check key2
+    const head2 = store.getHead(key2);
+    expect(head2!.data).toBe("v3");
+    
+    // Size
+    expect(store.size).toBe(2);
+    
+    // Delete key1
+    store.delete(key1);
+    expect(store.has(key1)).toBe(false);
+    expect(store.size).toBe(1);
+  });
+  
+  test("SoaPropertyVersions chain truncation", () => {
+    const store = new SoaPropertyVersions<number>();
+    
+    const key = 1n;
+    
+    // Create a chain of 10 versions
+    for (let i = 1; i <= 10; i++) {
+      store.append(key, i, BigInt(i), BigInt(i * 100));
+    }
+    
+    // Walk chain to verify length
+    let depth = 0;
+    let idx = store.getHeadIdx(key);
+    while (idx !== -1) {
+      depth++;
+      idx = store.getPrevIdx(idx);
+    }
+    expect(depth).toBe(10);
+    
+    // Truncate at depth 5
+    const truncated = store.truncateDeepChains(5);
+    expect(truncated).toBe(1);
+    
+    // Verify new depth
+    depth = 0;
+    idx = store.getHeadIdx(key);
+    while (idx !== -1) {
+      depth++;
+      idx = store.getPrevIdx(idx);
+    }
+    expect(depth).toBe(5);
+  });
+  
+  test("VersionChainManager uses SOA for property versions", () => {
+    const vc = new VersionChainManager(true); // SOA enabled
+    
+    const nodeId = 1;
+    const propKeyId = 1;
+    
+    // Append property versions
+    vc.appendNodePropVersion(nodeId, propKeyId, { tag: PropValueTag.I64, value: 100n }, 1n, 100n);
+    vc.appendNodePropVersion(nodeId, propKeyId, { tag: PropValueTag.I64, value: 200n }, 2n, 200n);
+    
+    // Retrieve via API (should return VersionedRecord for compatibility)
+    const version = vc.getNodePropVersion(nodeId, propKeyId);
+    expect(version).not.toBeNull();
+    expect(version!.data).toEqual({ tag: PropValueTag.I64, value: 200n });
+    expect(version!.txid).toBe(2n);
+    expect(version!.prev).not.toBeNull();
+    expect(version!.prev!.data).toEqual({ tag: PropValueTag.I64, value: 100n });
+    
+    // Verify SOA is enabled
+    expect(vc.isSoaEnabled()).toBe(true);
+    
+    // Check memory usage
+    const memUsage = vc.getSoaMemoryUsage();
+    expect(memUsage.nodePropBytes).toBeGreaterThan(0);
+  });
+  
+  test("VersionChainManager legacy mode still works", () => {
+    const vc = new VersionChainManager(false); // SOA disabled
+    
+    const nodeId = 1;
+    const propKeyId = 1;
+    
+    // Append property versions
+    vc.appendNodePropVersion(nodeId, propKeyId, { tag: PropValueTag.STRING, value: "v1" }, 1n, 100n);
+    vc.appendNodePropVersion(nodeId, propKeyId, { tag: PropValueTag.STRING, value: "v2" }, 2n, 200n);
+    
+    // Retrieve
+    const version = vc.getNodePropVersion(nodeId, propKeyId);
+    expect(version).not.toBeNull();
+    expect(version!.data).toEqual({ tag: PropValueTag.STRING, value: "v2" });
+    expect(version!.prev).not.toBeNull();
+    
+    // Verify SOA is disabled
+    expect(vc.isSoaEnabled()).toBe(false);
   });
 });
 

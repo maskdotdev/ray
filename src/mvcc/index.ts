@@ -7,13 +7,13 @@
 export { TxManager } from "./tx-manager.ts";
 export { VersionChainManager } from "./version-chain.ts";
 export { ConflictDetector } from "./conflict-detector.ts";
-export { GarbageCollector, type GcStats } from "./gc.ts";
+export { GarbageCollector, type GcStats, DEFAULT_MAX_CHAIN_DEPTH } from "./gc.ts";
 export * from "./visibility.ts";
 
 import { TxManager } from "./tx-manager.ts";
 import { VersionChainManager } from "./version-chain.ts";
 import { ConflictDetector } from "./conflict-detector.ts";
-import { GarbageCollector } from "./gc.ts";
+import { GarbageCollector, DEFAULT_MAX_CHAIN_DEPTH } from "./gc.ts";
 import type { GraphDB, OpenOptions } from "../types.ts";
 
 /**
@@ -30,6 +30,7 @@ export class MvccManager {
     initialCommitTs: bigint = 1n,
     gcIntervalMs: number = 5000,
     retentionMs: number = 60000,
+    maxChainDepth: number = DEFAULT_MAX_CHAIN_DEPTH,
   ) {
     this.txManager = new TxManager(initialTxId, initialCommitTs);
     this.versionChain = new VersionChainManager();
@@ -42,6 +43,7 @@ export class MvccManager {
       this.versionChain,
       gcIntervalMs,
       retentionMs,
+      maxChainDepth,
     );
   }
 

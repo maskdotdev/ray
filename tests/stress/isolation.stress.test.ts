@@ -240,8 +240,8 @@ describe("MVCC Isolation Stress Tests", () => {
 
   test("lost update prevention under concurrent modifications", async () => {
     const db = await openGraphDB(testDir, { mvcc: true });
-    const ITERATIONS = config.isolation.iterations;
-    const WORKERS = 10;
+    const ROUNDS = config.isolation.iterations / 10; // Fewer rounds, more concurrent txs per round
+    const CONCURRENT_TXS = 10;
 
     // Create counter node
     const setupTx = beginTx(db);
@@ -253,27 +253,40 @@ describe("MVCC Isolation Stress Tests", () => {
     let successfulIncrements = 0;
     let conflicts = 0;
 
-    // Multiple workers incrementing counter
-    const promises = Array.from({ length: WORKERS }, async (_, workerId) => {
-      for (let i = 0; i < ITERATIONS / WORKERS; i++) {
-        const tx = beginTx(db);
-        try {
-          // Read using transaction-aware API for conflict detection
-          const current = getNodeProp(tx, counterId, counterProp);
-          const val = current?.tag === PropValueTag.I64 ? current.value : 0n;
-          setNodeProp(tx, counterId, counterProp, { tag: PropValueTag.I64, value: val + 1n });
-          await commit(tx);
-          successfulIncrements++;
-        } catch (e) {
-          if (e instanceof ConflictError) {
-            conflicts++;
-          }
-          rollback(tx);
-        }
+    // Run multiple rounds where each round has truly concurrent transactions
+    for (let round = 0; round < ROUNDS; round++) {
+      // Begin all transactions synchronously FIRST to ensure same startTs
+      const txs: ReturnType<typeof beginTx>[] = [];
+      for (let i = 0; i < CONCURRENT_TXS; i++) {
+        txs.push(beginTx(db));
       }
-    });
 
-    await Promise.all(promises);
+      // Now execute all read-modify-write operations concurrently
+      const results = await Promise.all(
+        txs.map(async (tx) => {
+          try {
+            // Read using transaction-aware API for conflict detection
+            const current = getNodeProp(tx, counterId, counterProp);
+            const val = current?.tag === PropValueTag.I64 ? current.value : 0n;
+            setNodeProp(tx, counterId, counterProp, { tag: PropValueTag.I64, value: val + 1n });
+            await commit(tx);
+            return "success";
+          } catch (e) {
+            if (e instanceof ConflictError) {
+              rollback(tx);
+              return "conflict";
+            }
+            rollback(tx);
+            throw e;
+          }
+        })
+      );
+
+      for (const result of results) {
+        if (result === "success") successfulIncrements++;
+        else if (result === "conflict") conflicts++;
+      }
+    }
 
     // Final counter value should equal successful increments (reading outside transaction)
     const finalVal = getNodeProp(db, counterId, counterProp);
@@ -283,6 +296,8 @@ describe("MVCC Isolation Stress Tests", () => {
 
     // With transaction-aware reads and conflict detection, final counter should equal successful commits
     expect(finalCounter).toBe(BigInt(successfulIncrements));
+    // We should see some conflicts since transactions are truly concurrent
+    expect(conflicts).toBeGreaterThan(0);
 
     await closeGraphDB(db);
   }, 120000);

@@ -54,9 +54,19 @@ export function getVisibleVersion<T>(
     return null;
   }
 
+  // Fast path: single-version chain (most common case)
+  // Avoids the loop setup and iteration overhead for the majority of lookups
+  if (!head.prev) {
+    // Single version - just check visibility directly
+    if (isVisible(head, txSnapshotTs, txid)) {
+      return head;
+    }
+    return null;
+  }
+
+  // Slow path: multi-version chain - walk from newest to oldest
   let current: VersionedRecord<T> | null = head;
 
-  // Walk the chain from newest to oldest
   while (current) {
     if (isVisible(current, txSnapshotTs, txid)) {
       // Found a visible version - return it immediately
