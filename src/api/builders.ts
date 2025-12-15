@@ -16,7 +16,7 @@ import {
 	getNodeByKey,
 	setEdgeProp,
 	setNodeProp,
-} from "../nero/graph-db.ts";
+} from "../ray/graph-db.ts";
 import type {
 	ETypeID,
 	GraphDB,
@@ -66,21 +66,32 @@ export function createNodeRef<N extends NodeDef>(
 // ============================================================================
 
 export interface InsertBuilder<N extends NodeDef> {
-	values(data: InferNodeInsert<N> | InferNodeInsert<N>[]): InsertExecutor<N>;
+	values(data: InferNodeInsert<N>): InsertExecutorSingle<N>;
+	values(data: InferNodeInsert<N>[]): InsertExecutorMultiple<N>;
 }
 
-export interface InsertExecutor<N extends NodeDef> {
-	/** Execute insert and return the created node(s) */
-	returning(): Promise<
-		N extends NodeDef
-			? (NodeRef<N> & InferNode<N>) | (NodeRef<N> & InferNode<N>)[]
-			: never
-	>;
+export interface InsertExecutorSingle<N extends NodeDef> {
+	/** Execute insert and return the created node */
+	returning(): Promise<NodeRef<N> & InferNode<N>>;
 	/** Execute insert without returning */
 	execute(): Promise<void>;
 	/** For batch operations - returns the operation descriptor */
 	_toBatchOp(): BatchOperation;
 }
+
+export interface InsertExecutorMultiple<N extends NodeDef> {
+	/** Execute insert and return the created nodes */
+	returning(): Promise<(NodeRef<N> & InferNode<N>)[]>;
+	/** Execute insert without returning */
+	execute(): Promise<void>;
+	/** For batch operations - returns the operation descriptor */
+	_toBatchOp(): BatchOperation;
+}
+
+/** @deprecated Use InsertExecutorSingle or InsertExecutorMultiple */
+export type InsertExecutor<N extends NodeDef> =
+	| InsertExecutorSingle<N>
+	| InsertExecutorMultiple<N>;
 
 export interface BatchOperation {
 	type: "insert" | "update" | "delete" | "link" | "unlink";
@@ -92,52 +103,60 @@ export function createInsertBuilder<N extends NodeDef>(
 	nodeDef: N,
 	resolvePropKeyId: (nodeDef: NodeDef, propName: string) => PropKeyID,
 ): InsertBuilder<N> {
-	return {
-		values(data) {
-			const dataArray = Array.isArray(data) ? data : [data];
-			const isSingle = !Array.isArray(data);
+	function values(
+		data: InferNodeInsert<N>,
+	): InsertExecutorSingle<N>;
+	function values(
+		data: InferNodeInsert<N>[],
+	): InsertExecutorMultiple<N>;
+	function values(
+		data: InferNodeInsert<N> | InferNodeInsert<N>[],
+	): InsertExecutorSingle<N> | InsertExecutorMultiple<N> {
+		const dataArray = Array.isArray(data) ? data : [data];
+		const isSingle = !Array.isArray(data);
 
-			const execute = async (
-				tx?: TxHandle,
-			): Promise<(NodeRef<N> & InferNode<N>)[]> => {
-				const ownTx = !tx;
-				const handle = tx ?? beginTx(db);
-				const results: (NodeRef<N> & InferNode<N>)[] = [];
+		const execute = async (
+			tx?: TxHandle,
+		): Promise<(NodeRef<N> & InferNode<N>)[]> => {
+			const ownTx = !tx;
+			const handle = tx ?? beginTx(db);
+			const results: (NodeRef<N> & InferNode<N>)[] = [];
 
-				for (const item of dataArray) {
-					const { key: keyArg, ...props } = item as {
-						key: string | number;
-					} & Record<string, unknown>;
-					const fullKey = nodeDef.keyFn(keyArg as never);
+			for (const item of dataArray) {
+				const { key: keyArg, ...props } = item as {
+					key: string | number;
+				} & Record<string, unknown>;
+				const fullKey = nodeDef.keyFn(keyArg as never);
 
-					// Create the node
-					const nodeId = createNode(handle, { key: fullKey });
+				// Create the node
+				const nodeId = createNode(handle, { key: fullKey });
 
-					// Set properties
-					for (const [propName, value] of Object.entries(props)) {
-						if (value === undefined) continue;
-						const propDef = nodeDef.props[propName];
-						if (!propDef) continue;
+				// Set properties
+				for (const [propName, value] of Object.entries(props)) {
+					if (value === undefined) continue;
+					const propDef = nodeDef.props[propName];
+					if (!propDef) continue;
 
-						const propKeyId = resolvePropKeyId(nodeDef, propName);
-						const propValue = toPropValue(propDef, value);
-						setNodeProp(handle, nodeId, propKeyId, propValue);
-					}
-
-					results.push(createNodeRef(nodeDef, nodeId, fullKey, props));
+					const propKeyId = resolvePropKeyId(nodeDef, propName);
+					const propValue = toPropValue(propDef, value);
+					setNodeProp(handle, nodeId, propKeyId, propValue);
 				}
 
-				if (ownTx) {
-					await commit(handle);
-				}
+				results.push(createNodeRef(nodeDef, nodeId, fullKey, props));
+			}
 
-				return results;
-			};
+			if (ownTx) {
+				await commit(handle);
+			}
 
+			return results;
+		};
+
+		if (isSingle) {
 			return {
 				async returning() {
 					const results = await execute();
-					return (isSingle ? results[0] : results) as never;
+					return results[0];
 				},
 				async execute() {
 					await execute();
@@ -149,8 +168,24 @@ export function createInsertBuilder<N extends NodeDef>(
 					};
 				},
 			};
-		},
-	};
+		}
+		return {
+			async returning() {
+				return execute();
+			},
+			async execute() {
+				await execute();
+			},
+			_toBatchOp(): BatchOperation {
+				return {
+					type: "insert",
+					execute: async (tx) => execute(tx),
+				};
+			},
+		};
+	}
+
+	return { values };
 }
 
 // ============================================================================

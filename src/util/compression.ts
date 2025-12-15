@@ -70,14 +70,24 @@ export function compress(
 			return data;
 
 		case CompressionType.ZSTD:
-			return new Uint8Array(Bun.zstdCompressSync(data, { level }));
+			return new Uint8Array(
+				Bun.zstdCompressSync(data, { level }) as unknown as ArrayBuffer,
+			);
 
 		case CompressionType.GZIP:
-			return new Uint8Array(Bun.gzipSync(data, { level: Math.min(level, 9) }));
+			return new Uint8Array(
+				Bun.gzipSync(
+					data as unknown as ArrayBuffer,
+					{ level: Math.min(level, 9) as 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 },
+				) as unknown as ArrayBuffer,
+			);
 
 		case CompressionType.DEFLATE:
 			return new Uint8Array(
-				Bun.deflateSync(data, { level: Math.min(level, 9) }),
+				Bun.deflateSync(
+					data as unknown as ArrayBuffer,
+					{ level: Math.min(level, 9) as 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 },
+				) as unknown as ArrayBuffer,
 			);
 
 		default:
@@ -101,13 +111,19 @@ export function decompress(
 			return data;
 
 		case CompressionType.ZSTD:
-			return new Uint8Array(Bun.zstdDecompressSync(data));
+			return new Uint8Array(
+				Bun.zstdDecompressSync(data) as unknown as ArrayBuffer,
+			);
 
 		case CompressionType.GZIP:
-			return new Uint8Array(Bun.gunzipSync(data));
+			return new Uint8Array(
+				Bun.gunzipSync(data as unknown as ArrayBuffer) as unknown as ArrayBuffer,
+			);
 
 		case CompressionType.DEFLATE:
-			return new Uint8Array(Bun.inflateSync(data));
+			return new Uint8Array(
+				Bun.inflateSync(data as unknown as ArrayBuffer) as unknown as ArrayBuffer,
+			);
 
 		default:
 			throw new Error(`Unknown compression type: ${type}`);
