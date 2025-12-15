@@ -40,14 +40,40 @@ export function createDelta(): DeltaState {
 }
 
 /**
- * Create an empty node delta
+ * Create an empty node delta (lazy allocation - no collections until needed)
  */
 export function createNodeDelta(): NodeDelta {
-  return {
-    labels: new Set(),
-    labelsDeleted: new Set(),
-    props: new Map(),
-  };
+  return {};
+}
+
+/**
+ * Get or create the labels set for a node delta (lazy allocation)
+ */
+function getOrCreateLabels(nodeDelta: NodeDelta): Set<LabelID> {
+  if (!nodeDelta.labels) {
+    nodeDelta.labels = new Set();
+  }
+  return nodeDelta.labels;
+}
+
+/**
+ * Get or create the labelsDeleted set for a node delta (lazy allocation)
+ */
+function getOrCreateLabelsDeleted(nodeDelta: NodeDelta): Set<LabelID> {
+  if (!nodeDelta.labelsDeleted) {
+    nodeDelta.labelsDeleted = new Set();
+  }
+  return nodeDelta.labelsDeleted;
+}
+
+/**
+ * Get or create the props map for a node delta (lazy allocation)
+ */
+function getOrCreateProps(nodeDelta: NodeDelta): Map<PropKeyID, PropValue | null> {
+  if (!nodeDelta.props) {
+    nodeDelta.props = new Map();
+  }
+  return nodeDelta.props;
 }
 
 // ============================================================================
@@ -437,7 +463,7 @@ export function setNodeProp(
   isNewNode: boolean,
 ): void {
   const nodeDelta = getOrCreateNodeDelta(delta, nodeId, isNewNode);
-  nodeDelta.props.set(keyId, value);
+  getOrCreateProps(nodeDelta).set(keyId, value);
 }
 
 /**
@@ -450,7 +476,7 @@ export function deleteNodeProp(
   isNewNode: boolean,
 ): void {
   const nodeDelta = getOrCreateNodeDelta(delta, nodeId, isNewNode);
-  nodeDelta.props.set(keyId, null); // null marks deletion
+  getOrCreateProps(nodeDelta).set(keyId, null); // null marks deletion
 }
 
 /**
@@ -513,8 +539,8 @@ export function addNodeLabel(
   isNewNode: boolean,
 ): void {
   const nodeDelta = getOrCreateNodeDelta(delta, nodeId, isNewNode);
-  nodeDelta.labelsDeleted.delete(labelId);
-  nodeDelta.labels.add(labelId);
+  nodeDelta.labelsDeleted?.delete(labelId);
+  getOrCreateLabels(nodeDelta).add(labelId);
 }
 
 /**
@@ -527,9 +553,9 @@ export function removeNodeLabel(
   isNewNode: boolean,
 ): void {
   const nodeDelta = getOrCreateNodeDelta(delta, nodeId, isNewNode);
-  nodeDelta.labels.delete(labelId);
+  nodeDelta.labels?.delete(labelId);
   if (!isNewNode) {
-    nodeDelta.labelsDeleted.add(labelId);
+    getOrCreateLabelsDeleted(nodeDelta).add(labelId);
   }
 }
 

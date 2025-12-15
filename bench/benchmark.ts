@@ -235,8 +235,8 @@ interface GraphData {
   nodeKeys: string[];
   hubNodes: NodeID[];
   leafNodes: NodeID[];
-  outDegree: Map<bigint, number>;
-  inDegree: Map<bigint, number>;
+  outDegree: Map<NodeID, number>;
+  inDegree: Map<NodeID, number>;
   etypes: {
     calls: number;
     references: number;
@@ -251,8 +251,8 @@ async function buildRealisticGraph(
 ): Promise<GraphData> {
   const nodeIds: NodeID[] = [];
   const nodeKeys: string[] = [];
-  const outDegree = new Map<bigint, number>();
-  const inDegree = new Map<bigint, number>();
+  const outDegree = new Map<NodeID, number>();
+  const inDegree = new Map<NodeID, number>();
 
   // Use large batch sizes for setup
   const batchSize = 5000;

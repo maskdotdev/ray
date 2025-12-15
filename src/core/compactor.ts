@@ -147,17 +147,21 @@ export async function optimize(
       const nodeLabels: LabelID[] = [];
       const nodeDelta = getNodeDelta(db._delta, nodeId);
       if (nodeDelta) {
-        for (const [keyId, value] of nodeDelta.props) {
-          if (value === null) {
-            props.delete(keyId);
-          } else {
-            props.set(keyId, value);
+        if (nodeDelta.props) {
+          for (const [keyId, value] of nodeDelta.props) {
+            if (value === null) {
+              props.delete(keyId);
+            } else {
+              props.set(keyId, value);
+            }
           }
         }
         // Collect labels added in delta (for existing nodes, snapshot labels + delta)
         // Note: snapshot doesn't store per-node labels yet, so we only have delta labels
-        for (const labelId of nodeDelta.labels) {
-          nodeLabels.push(labelId);
+        if (nodeDelta.labels) {
+          for (const labelId of nodeDelta.labels) {
+            nodeLabels.push(labelId);
+          }
         }
       }
 
@@ -236,16 +240,18 @@ export async function optimize(
   // Add nodes created in delta
   for (const [nodeId, nodeDelta] of db._delta.createdNodes) {
     const props = new Map<PropKeyID, PropValue>();
-    for (const [keyId, value] of nodeDelta.props) {
-      if (value !== null) {
-        props.set(keyId, value);
+    if (nodeDelta.props) {
+      for (const [keyId, value] of nodeDelta.props) {
+        if (value !== null) {
+          props.set(keyId, value);
+        }
       }
     }
 
     nodes.push({
       nodeId,
       key: nodeDelta.key,
-      labels: [...nodeDelta.labels],
+      labels: nodeDelta.labels ? [...nodeDelta.labels] : [],
       props,
     });
   }

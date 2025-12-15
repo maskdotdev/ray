@@ -105,7 +105,7 @@ export function parseSnapshot(buffer: Uint8Array): SnapshotData {
   offset += 8;
   const numEdges = readU64(view, offset);
   offset += 8;
-  const maxNodeId = readU64(view, offset);
+  const maxNodeId = Number(readU64(view, offset));
   offset += 8;
   const numLabels = readU64(view, offset);
   offset += 8;
@@ -296,18 +296,17 @@ export function parseSnapshot(buffer: Uint8Array): SnapshotData {
  * Get NodeID for a physical node index
  */
 export function getNodeId(snapshot: SnapshotData, phys: PhysNode): NodeID {
-  return readU64At(snapshot.physToNodeId, phys);
+  return Number(readU64At(snapshot.physToNodeId, phys));
 }
 
 /**
  * Get physical node index for a NodeID, or -1 if not present
  */
 export function getPhysNode(snapshot: SnapshotData, nodeId: NodeID): PhysNode {
-  const idx = Number(nodeId);
-  if (idx < 0 || idx >= snapshot.nodeIdToPhys.byteLength / 4) {
+  if (nodeId < 0 || nodeId >= snapshot.nodeIdToPhys.byteLength / 4) {
     return -1;
   }
-  return readI32At(snapshot.nodeIdToPhys, idx);
+  return readI32At(snapshot.nodeIdToPhys, nodeId);
 }
 
 /**
@@ -488,7 +487,7 @@ export function lookupByKey(
     if (entryHash !== hash64) continue; // Different bucket collision
 
     const stringId = snapshot.keyEntries.getUint32(offset + 8, true);
-    const nodeId = snapshot.keyEntries.getBigUint64(offset + 16, true);
+    const nodeId = Number(snapshot.keyEntries.getBigUint64(offset + 16, true));
 
     // Compare actual key bytes
     const entryKey = getString(snapshot, stringId);

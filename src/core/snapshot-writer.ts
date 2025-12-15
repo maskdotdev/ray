@@ -356,7 +356,7 @@ export async function buildSnapshot(
   // Build mappings
   const physToNodeId: NodeID[] = nodes.map((n) => n.nodeId);
   const nodeIdToPhys: Map<NodeID, PhysNode> = new Map();
-  let maxNodeId = 0n;
+  let maxNodeId = 0;
 
   for (let i = 0; i < nodes.length; i++) {
     const nodeId = nodes[i]!.nodeId;
@@ -454,14 +454,14 @@ export async function buildSnapshot(
     const data = new Uint8Array(numNodes * 8);
     const view = new DataView(data.buffer);
     for (let i = 0; i < numNodes; i++) {
-      view.setBigUint64(i * 8, physToNodeId[i]!, true);
+      view.setBigUint64(i * 8, BigInt(physToNodeId[i]!), true);
     }
     addSection(SectionId.PHYS_TO_NODEID, data);
   }
 
   // nodeid_to_phys: i32[max_node_id + 1]
   {
-    const size = Number(maxNodeId) + 1;
+    const size = maxNodeId + 1;
     const data = new Uint8Array(size * 4);
     const view = new DataView(data.buffer);
     // Initialize all to -1
@@ -470,7 +470,7 @@ export async function buildSnapshot(
     }
     // Set valid mappings
     for (const [nodeId, phys] of nodeIdToPhys) {
-      view.setInt32(Number(nodeId) * 4, phys, true);
+      view.setInt32(nodeId * 4, phys, true);
     }
     addSection(SectionId.NODEID_TO_PHYS, data);
   }
@@ -599,7 +599,7 @@ export async function buildSnapshot(
       view.setBigUint64(offset, entry.hash64, true);
       view.setUint32(offset + 8, entry.stringId, true);
       view.setUint32(offset + 12, 0, true); // reserved
-      view.setBigUint64(offset + 16, entry.nodeId, true);
+      view.setBigUint64(offset + 16, BigInt(entry.nodeId), true);
     }
     addSection(SectionId.KEY_ENTRIES, data);
   }
@@ -811,7 +811,7 @@ export async function buildSnapshot(
   offset += 8;
   view.setBigUint64(offset, BigInt(numEdges), true);
   offset += 8;
-  view.setBigUint64(offset, maxNodeId, true);
+  view.setBigUint64(offset, BigInt(maxNodeId), true);
   offset += 8;
   view.setBigUint64(offset, BigInt(labels.size), true);
   offset += 8;

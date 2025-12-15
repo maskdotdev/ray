@@ -63,9 +63,9 @@ describe("Snapshot", () => {
     const input: SnapshotBuildInput = {
       generation: 1n,
       nodes: [
-        { nodeId: 1n, labels: [], props: new Map() },
-        { nodeId: 2n, key: "user:alice", labels: [], props: new Map() },
-        { nodeId: 5n, key: "user:bob", labels: [], props: new Map() },
+        { nodeId: 1, labels: [], props: new Map() },
+        { nodeId: 2, key: "user:alice", labels: [], props: new Map() },
+        { nodeId: 5, key: "user:bob", labels: [], props: new Map() },
       ],
       edges: [],
       labels: new Map(),
@@ -77,18 +77,18 @@ describe("Snapshot", () => {
     const snapshot = await loadSnapshot(testDir, 1n);
 
     expect(snapshot.header.numNodes).toBe(3n);
-    expect(snapshot.header.maxNodeId).toBe(5n);
+    expect(snapshot.header.maxNodeId).toBe(5);
 
     // Check mappings
-    expect(hasNode(snapshot, 1n)).toBe(true);
-    expect(hasNode(snapshot, 2n)).toBe(true);
-    expect(hasNode(snapshot, 5n)).toBe(true);
-    expect(hasNode(snapshot, 3n)).toBe(false);
-    expect(hasNode(snapshot, 100n)).toBe(false);
+    expect(hasNode(snapshot, 1)).toBe(true);
+    expect(hasNode(snapshot, 2)).toBe(true);
+    expect(hasNode(snapshot, 5)).toBe(true);
+    expect(hasNode(snapshot, 3)).toBe(false);
+    expect(hasNode(snapshot, 100)).toBe(false);
 
     // Check keys
-    expect(lookupByKey(snapshot, "user:alice")).toBe(2n);
-    expect(lookupByKey(snapshot, "user:bob")).toBe(5n);
+    expect(lookupByKey(snapshot, "user:alice")).toBe(2);
+    expect(lookupByKey(snapshot, "user:bob")).toBe(5);
     expect(lookupByKey(snapshot, "user:charlie")).toBe(null);
 
     const result = checkSnapshot(snapshot);
@@ -99,14 +99,14 @@ describe("Snapshot", () => {
     const input: SnapshotBuildInput = {
       generation: 1n,
       nodes: [
-        { nodeId: 1n, labels: [], props: new Map() },
-        { nodeId: 2n, labels: [], props: new Map() },
-        { nodeId: 3n, labels: [], props: new Map() },
+        { nodeId: 1, labels: [], props: new Map() },
+        { nodeId: 2, labels: [], props: new Map() },
+        { nodeId: 3, labels: [], props: new Map() },
       ],
       edges: [
-        { src: 1n, etype: 1, dst: 2n, props: new Map() },
-        { src: 1n, etype: 1, dst: 3n, props: new Map() },
-        { src: 2n, etype: 2, dst: 3n, props: new Map() },
+        { src: 1, etype: 1, dst: 2, props: new Map() },
+        { src: 1, etype: 1, dst: 3, props: new Map() },
+        { src: 2, etype: 2, dst: 3, props: new Map() },
       ],
       labels: new Map(),
       etypes: new Map([
@@ -123,16 +123,16 @@ describe("Snapshot", () => {
     expect(snapshot.header.numEdges).toBe(3n);
 
     // Check out-edges
-    const phys1 = getPhysNode(snapshot, 1n);
+    const phys1 = getPhysNode(snapshot, 1);
     const outEdges1 = getOutEdges(snapshot, phys1);
     expect(outEdges1).toHaveLength(2);
 
-    const phys2 = getPhysNode(snapshot, 2n);
+    const phys2 = getPhysNode(snapshot, 2);
     const outEdges2 = getOutEdges(snapshot, phys2);
     expect(outEdges2).toHaveLength(1);
 
     // Check in-edges
-    const phys3 = getPhysNode(snapshot, 3n);
+    const phys3 = getPhysNode(snapshot, 3);
     const inEdges3 = getInEdges(snapshot, phys3);
     expect(inEdges3).toHaveLength(2);
 
@@ -146,17 +146,17 @@ describe("Snapshot", () => {
     const input: SnapshotBuildInput = {
       generation: 1n,
       nodes: [
-        { nodeId: 1n, labels: [], props: new Map() },
-        { nodeId: 2n, labels: [], props: new Map() },
-        { nodeId: 3n, labels: [], props: new Map() },
-        { nodeId: 4n, labels: [], props: new Map() },
+        { nodeId: 1, labels: [], props: new Map() },
+        { nodeId: 2, labels: [], props: new Map() },
+        { nodeId: 3, labels: [], props: new Map() },
+        { nodeId: 4, labels: [], props: new Map() },
       ],
       edges: [
         // Deliberately out of order
-        { src: 1n, etype: 2, dst: 4n, props: new Map() },
-        { src: 1n, etype: 1, dst: 3n, props: new Map() },
-        { src: 1n, etype: 2, dst: 2n, props: new Map() },
-        { src: 1n, etype: 1, dst: 2n, props: new Map() },
+        { src: 1, etype: 2, dst: 4, props: new Map() },
+        { src: 1, etype: 1, dst: 3, props: new Map() },
+        { src: 1, etype: 2, dst: 2, props: new Map() },
+        { src: 1, etype: 1, dst: 2, props: new Map() },
       ],
       labels: new Map(),
       etypes: new Map([
@@ -170,7 +170,7 @@ describe("Snapshot", () => {
     const snapshot = await loadSnapshot(testDir, 1n);
 
     // Edges should be sorted by (etype, dst)
-    const phys1 = getPhysNode(snapshot, 1n);
+    const phys1 = getPhysNode(snapshot, 1);
     const outEdges = getOutEdges(snapshot, phys1);
 
     expect(outEdges).toHaveLength(4);
@@ -203,7 +203,7 @@ describe("Snapshot", () => {
     const nodes = [];
     for (let i = 1; i <= 100; i++) {
       nodes.push({
-        nodeId: BigInt(i),
+        nodeId: i,
         key: `key${i}`,
         labels: [],
         props: new Map(),
@@ -224,7 +224,7 @@ describe("Snapshot", () => {
 
     // All keys should be findable
     for (let i = 1; i <= 100; i++) {
-      expect(lookupByKey(snapshot, `key${i}`)).toBe(BigInt(i));
+      expect(lookupByKey(snapshot, `key${i}`)).toBe(i);
     }
 
     const result = checkSnapshot(snapshot);
@@ -235,8 +235,8 @@ describe("Snapshot", () => {
     const input: SnapshotBuildInput = {
       generation: 1n,
       nodes: [
-        { nodeId: 1n, key: "shared_key", labels: [], props: new Map() },
-        { nodeId: 2n, key: "shared_key2", labels: [], props: new Map() },
+        { nodeId: 1, key: "shared_key", labels: [], props: new Map() },
+        { nodeId: 2, key: "shared_key2", labels: [], props: new Map() },
       ],
       edges: [],
       labels: new Map([
@@ -254,7 +254,7 @@ describe("Snapshot", () => {
     const snapshot = await loadSnapshot(testDir, 1n);
 
     // Verify string table works
-    const phys1 = getPhysNode(snapshot, 1n);
+    const phys1 = getPhysNode(snapshot, 1);
     expect(getNodeKey(snapshot, phys1)).toBe("shared_key");
 
     const result = checkSnapshot(snapshot);
@@ -269,7 +269,7 @@ describe("Snapshot", () => {
       generation: 1n,
       nodes: [
         {
-          nodeId: 1n,
+          nodeId: 1,
           labels: [],
           props: new Map([
             [nameId, { tag: PropValueTag.STRING, value: "Alice" }],
@@ -277,14 +277,14 @@ describe("Snapshot", () => {
           ]),
         },
         {
-          nodeId: 2n,
+          nodeId: 2,
           labels: [],
           props: new Map([
             [nameId, { tag: PropValueTag.STRING, value: "Bob" }],
           ]),
         },
         {
-          nodeId: 3n,
+          nodeId: 3,
           labels: [],
           props: new Map(), // no props
         },
@@ -307,7 +307,7 @@ describe("Snapshot", () => {
     );
 
     // Check node 1 properties
-    const phys1 = getPhysNode(snapshot, 1n);
+    const phys1 = getPhysNode(snapshot, 1);
     const node1Props = getNodeProps(snapshot, phys1);
     expect(node1Props).not.toBeNull();
     expect(node1Props?.size).toBe(2);
@@ -317,12 +317,12 @@ describe("Snapshot", () => {
     expect((nameProp as { tag: 4; value: string }).value).toBe("Alice");
 
     // Check node 2 properties
-    const phys2 = getPhysNode(snapshot, 2n);
+    const phys2 = getPhysNode(snapshot, 2);
     const node2Props = getNodeProps(snapshot, phys2);
     expect(node2Props?.size).toBe(1);
 
     // Check node 3 has no properties
-    const phys3 = getPhysNode(snapshot, 3n);
+    const phys3 = getPhysNode(snapshot, 3);
     const node3Props = getNodeProps(snapshot, phys3);
     expect(node3Props?.size).toBe(0);
 
@@ -335,7 +335,7 @@ describe("Snapshot", () => {
     const nodes = [];
     for (let i = 1; i <= 50; i++) {
       nodes.push({
-        nodeId: BigInt(i),
+        nodeId: i,
         key: `node-${i}`,
         labels: [],
         props: new Map(),
@@ -360,7 +360,7 @@ describe("Snapshot", () => {
 
     // Verify all lookups work
     for (let i = 1; i <= 50; i++) {
-      expect(lookupByKey(snapshot, `node-${i}`)).toBe(BigInt(i));
+      expect(lookupByKey(snapshot, `node-${i}`)).toBe(i);
     }
 
     const result = checkSnapshot(snapshot);

@@ -216,7 +216,7 @@ export function buildCreateNodePayload(
   const buffer = new Uint8Array(8 + 4 + keyBytes.length);
   const view = viewOf(buffer);
 
-  writeU64(view, 0, nodeId);
+  writeU64(view, 0, BigInt(nodeId));
   writeU32(view, 8, keyBytes.length);
   buffer.set(keyBytes, 12);
 
@@ -226,7 +226,7 @@ export function buildCreateNodePayload(
 export function buildDeleteNodePayload(nodeId: NodeID): Uint8Array {
   const buffer = new Uint8Array(8);
   const view = viewOf(buffer);
-  writeU64(view, 0, nodeId);
+  writeU64(view, 0, BigInt(nodeId));
   return buffer;
 }
 
@@ -237,9 +237,9 @@ export function buildAddEdgePayload(
 ): Uint8Array {
   const buffer = new Uint8Array(8 + 4 + 8);
   const view = viewOf(buffer);
-  writeU64(view, 0, src);
+  writeU64(view, 0, BigInt(src));
   writeU32(view, 8, etype);
-  writeU64(view, 12, dst);
+  writeU64(view, 12, BigInt(dst));
   return buffer;
 }
 
@@ -250,9 +250,9 @@ export function buildDeleteEdgePayload(
 ): Uint8Array {
   const buffer = new Uint8Array(8 + 4 + 8);
   const view = viewOf(buffer);
-  writeU64(view, 0, src);
+  writeU64(view, 0, BigInt(src));
   writeU32(view, 8, etype);
-  writeU64(view, 12, dst);
+  writeU64(view, 12, BigInt(dst));
   return buffer;
 }
 
@@ -339,7 +339,7 @@ export function buildSetNodePropPayload(
   const valueBytes = serializePropValue(value);
   const buffer = new Uint8Array(8 + 4 + valueBytes.length);
   const view = viewOf(buffer);
-  writeU64(view, 0, nodeId);
+  writeU64(view, 0, BigInt(nodeId));
   writeU32(view, 8, keyId);
   buffer.set(valueBytes, 12);
   return buffer;
@@ -351,7 +351,7 @@ export function buildDelNodePropPayload(
 ): Uint8Array {
   const buffer = new Uint8Array(8 + 4);
   const view = viewOf(buffer);
-  writeU64(view, 0, nodeId);
+  writeU64(view, 0, BigInt(nodeId));
   writeU32(view, 8, keyId);
   return buffer;
 }
@@ -366,9 +366,9 @@ export function buildSetEdgePropPayload(
   const valueBytes = serializePropValue(value);
   const buffer = new Uint8Array(8 + 4 + 8 + 4 + valueBytes.length);
   const view = viewOf(buffer);
-  writeU64(view, 0, src);
+  writeU64(view, 0, BigInt(src));
   writeU32(view, 8, etype);
-  writeU64(view, 12, dst);
+  writeU64(view, 12, BigInt(dst));
   writeU32(view, 20, keyId);
   buffer.set(valueBytes, 24);
   return buffer;
@@ -382,9 +382,9 @@ export function buildDelEdgePropPayload(
 ): Uint8Array {
   const buffer = new Uint8Array(8 + 4 + 8 + 4);
   const view = viewOf(buffer);
-  writeU64(view, 0, src);
+  writeU64(view, 0, BigInt(src));
   writeU32(view, 8, etype);
-  writeU64(view, 12, dst);
+  writeU64(view, 12, BigInt(dst));
   writeU32(view, 20, keyId);
   return buffer;
 }
@@ -530,7 +530,7 @@ export interface CreateNodeData {
 
 export function parseCreateNodePayload(payload: Uint8Array): CreateNodeData {
   const view = viewOf(payload);
-  const nodeId = readU64(view, 0);
+  const nodeId = Number(readU64(view, 0));
   const keyLen = readU32(view, 8);
   const key =
     keyLen > 0 ? decodeString(payload.subarray(12, 12 + keyLen)) : undefined;
@@ -543,7 +543,7 @@ export interface DeleteNodeData {
 
 export function parseDeleteNodePayload(payload: Uint8Array): DeleteNodeData {
   const view = viewOf(payload);
-  return { nodeId: readU64(view, 0) };
+  return { nodeId: Number(readU64(view, 0)) };
 }
 
 export interface AddEdgeData {
@@ -555,9 +555,9 @@ export interface AddEdgeData {
 export function parseAddEdgePayload(payload: Uint8Array): AddEdgeData {
   const view = viewOf(payload);
   return {
-    src: readU64(view, 0),
+    src: Number(readU64(view, 0)),
     etype: readU32(view, 8),
-    dst: readU64(view, 12),
+    dst: Number(readU64(view, 12)),
   };
 }
 
@@ -570,9 +570,9 @@ export interface DeleteEdgeData {
 export function parseDeleteEdgePayload(payload: Uint8Array): DeleteEdgeData {
   const view = viewOf(payload);
   return {
-    src: readU64(view, 0),
+    src: Number(readU64(view, 0)),
     etype: readU32(view, 8),
-    dst: readU64(view, 12),
+    dst: Number(readU64(view, 12)),
   };
 }
 
@@ -669,7 +669,7 @@ export interface SetNodePropData {
 
 export function parseSetNodePropPayload(payload: Uint8Array): SetNodePropData {
   const view = viewOf(payload);
-  const nodeId = readU64(view, 0);
+  const nodeId = Number(readU64(view, 0));
   const keyId = readU32(view, 8);
   const { value } = parsePropValue(payload, 12);
   return { nodeId, keyId, value };
@@ -683,7 +683,7 @@ export interface DelNodePropData {
 export function parseDelNodePropPayload(payload: Uint8Array): DelNodePropData {
   const view = viewOf(payload);
   return {
-    nodeId: readU64(view, 0),
+    nodeId: Number(readU64(view, 0)),
     keyId: readU32(view, 8),
   };
 }
@@ -698,9 +698,9 @@ export interface SetEdgePropData {
 
 export function parseSetEdgePropPayload(payload: Uint8Array): SetEdgePropData {
   const view = viewOf(payload);
-  const src = readU64(view, 0);
+  const src = Number(readU64(view, 0));
   const etype = readU32(view, 8);
-  const dst = readU64(view, 12);
+  const dst = Number(readU64(view, 12));
   const keyId = readU32(view, 20);
   const { value } = parsePropValue(payload, 24);
   return { src, etype, dst, keyId, value };
@@ -716,9 +716,9 @@ export interface DelEdgePropData {
 export function parseDelEdgePropPayload(payload: Uint8Array): DelEdgePropData {
   const view = viewOf(payload);
   return {
-    src: readU64(view, 0),
+    src: Number(readU64(view, 0)),
     etype: readU32(view, 8),
-    dst: readU64(view, 12),
+    dst: Number(readU64(view, 12)),
     keyId: readU32(view, 20),
   };
 }

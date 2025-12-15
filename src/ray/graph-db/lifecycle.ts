@@ -131,7 +131,7 @@ export async function openGraphDB(
   let nextPropkeyId = INITIAL_PROPKEY_ID;
 
   if (snapshot) {
-    nextNodeId = snapshot.header.maxNodeId + 1n;
+    nextNodeId = snapshot.header.maxNodeId + 1;
     nextLabelId = Number(snapshot.header.numLabels) + 1;
     nextEtypeId = Number(snapshot.header.numEtypes) + 1;
     nextPropkeyId = Number(snapshot.header.numPropkeys) + 1;
@@ -181,7 +181,7 @@ export async function openGraphDB(
         if (record.type === WalRecordType.CREATE_NODE) {
           const data = parseCreateNodePayload(record.payload);
           if (data.nodeId >= nextNodeId) {
-            nextNodeId = data.nodeId + 1n;
+            nextNodeId = data.nodeId + 1;
           }
         } else if (record.type === WalRecordType.DEFINE_LABEL) {
           const data = parseDefineLabelPayload(record.payload);
@@ -213,7 +213,8 @@ export async function openGraphDB(
   if (options.mvcc) {
     const gcIntervalMs = options.mvccGcInterval ?? 5000;
     const retentionMs = options.mvccRetentionMs ?? 60000;
-    mvcc = new MvccManager(nextTxId, nextCommitTs, gcIntervalMs, retentionMs);
+    const maxChainDepth = options.mvccMaxChainDepth ?? 10;
+    mvcc = new MvccManager(nextTxId, nextCommitTs, gcIntervalMs, retentionMs, maxChainDepth);
     
     // Rebuild version chains from WAL if MVCC is enabled
     if (walData) {

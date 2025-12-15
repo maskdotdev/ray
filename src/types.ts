@@ -7,8 +7,8 @@
 // Public (stable) IDs - never reused in v1
 // ============================================================================
 
-/** Monotonic node ID, never reused. u64 */
-export type NodeID = bigint;
+/** Monotonic node ID, never reused. Safe integer (up to 2^53-1) */
+export type NodeID = number;
 
 /** Label ID. u32 */
 export type LabelID = number;
@@ -227,9 +227,9 @@ export interface EdgeKey {
 
 export interface NodeDelta {
   key?: string;
-  labels: Set<LabelID>;
-  labelsDeleted: Set<LabelID>;
-  props: Map<PropKeyID, PropValue | null>; // null = deleted
+  labels?: Set<LabelID>;           // Lazy: only allocated when labels are added
+  labelsDeleted?: Set<LabelID>;    // Lazy: only allocated when labels are deleted
+  props?: Map<PropKeyID, PropValue | null>; // Lazy: only allocated when props are set/deleted
 }
 
 export interface EdgePatch {
@@ -274,6 +274,7 @@ export interface OpenOptions {
   mvcc?: boolean; // Enable MVCC mode (default: false for backward compatibility)
   mvccGcInterval?: number; // GC interval in ms (default: 5000)
   mvccRetentionMs?: number; // Minimum version retention time in ms (default: 60000)
+  mvccMaxChainDepth?: number; // Maximum version chain depth before truncation (default: 10)
 }
 
 // ============================================================================
@@ -327,11 +328,11 @@ export interface DbStats {
   snapshotGen: bigint;
   snapshotNodes: bigint;
   snapshotEdges: bigint;
-  snapshotMaxNodeId: bigint;
-  deltaNodesCreated: bigint;
-  deltaNodesDeleted: bigint;
-  deltaEdgesAdded: bigint;
-  deltaEdgesDeleted: bigint;
+  snapshotMaxNodeId: number;
+  deltaNodesCreated: number;
+  deltaNodesDeleted: number;
+  deltaEdgesAdded: number;
+  deltaEdgesDeleted: number;
   walSegment: bigint;
   walBytes: bigint;
   recommendCompact: boolean;
@@ -410,8 +411,8 @@ export interface EdgeVersionData {
 export interface VersionChainStore {
   nodeVersions: Map<NodeID, VersionedRecord<NodeVersionData>>;
   edgeVersions: Map<bigint, VersionedRecord<EdgeVersionData>>; // key: numeric composite (src << 40 | etype << 20 | dst)
-  nodePropVersions: Map<string, VersionedRecord<PropValue | null>>; // key: "nodeId:propKeyId"
-  edgePropVersions: Map<string, VersionedRecord<PropValue | null>>; // key: "src:etype:dst:propKeyId"
+  nodePropVersions: Map<bigint, VersionedRecord<PropValue | null>>; // key: numeric composite (nodeId << 24 | propKeyId)
+  edgePropVersions: Map<bigint, VersionedRecord<PropValue | null>>; // key: numeric composite (src << 44 | etype << 24 | dst >> 16 | propKeyId) - see nodePropKey/edgePropKey
 }
 
 export class ConflictError extends Error {
@@ -475,7 +476,7 @@ export interface GraphDB {
   _delta: DeltaState;
   _walFd: number | null;
   _walOffset: number;
-  _nextNodeId: bigint;
+  _nextNodeId: number;
   _nextLabelId: number;
   _nextEtypeId: number;
   _nextPropkeyId: number;

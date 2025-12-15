@@ -46,7 +46,7 @@ export const DELTA_SET_UPGRADE_THRESHOLD = 64;
 export const COMPRESSION_MIN_SIZE = 64;
 
 // Initial IDs (start from 1, 0 is reserved/null)
-export const INITIAL_NODE_ID = 1n;
+export const INITIAL_NODE_ID = 1;
 export const INITIAL_LABEL_ID = 1;
 export const INITIAL_ETYPE_ID = 1;
 export const INITIAL_PROPKEY_ID = 1;

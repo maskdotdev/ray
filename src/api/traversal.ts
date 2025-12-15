@@ -241,7 +241,7 @@ export function createTraversalBuilder<N extends NodeDef>(
     const maxDepth = options.maxDepth;
     const unique = options.unique ?? true;
 
-    const visited = new Set<bigint>();
+    const visited = new Set<NodeID>();
     if (unique) {
       visited.add(startNode.$id);
     }

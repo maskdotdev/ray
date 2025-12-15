@@ -394,15 +394,15 @@ export type InferEdgeProps<E extends EdgeDef> =
  * });
  *
  * type Edge = InferEdge<typeof knows>;
- * // { $src: bigint; $dst: bigint; since: bigint; }
+ * // { $src: number; $dst: number; since: bigint; }
  *
  * const edges = await db.from(alice).out(knows).edges().toArray();
- * // Each edge: { $src: 1n, $dst: 2n, since: 2020n }
+ * // Each edge: { $src: 1, $dst: 2, since: 2020n }
  * ```
  */
 export type InferEdge<E extends EdgeDef> =
   E extends EdgeDef<string, infer P>
-    ? { $src: bigint; $dst: bigint } & InferPropsType<P>
+    ? { $src: number; $dst: number } & InferPropsType<P>
     : never;
 
 // ============================================================================
@@ -437,7 +437,7 @@ export type InferEdge<E extends EdgeDef> =
  *
  * // Type inference:
  * // InferNodeInsert<typeof user> = { key: string; name: string; email: string; age?: bigint; }
- * // InferNode<typeof user> = { $id: bigint; $key: string; name: string; email: string; age?: bigint; }
+ * // InferNode<typeof user> = { $id: number; $key: string; name: string; email: string; age?: bigint; }
  * ```
  */
 export function defineNode<
@@ -479,7 +479,7 @@ export function defineNode<
  *
  * // Type inference:
  * // InferEdgeProps<typeof knows> = { since: bigint; weight?: number; }
- * // InferEdge<typeof knows> = { $src: bigint; $dst: bigint; since: bigint; weight?: number; }
+ * // InferEdge<typeof knows> = { $src: number; $dst: number; since: bigint; weight?: number; }
  * ```
  */
 export function defineEdge<Name extends string, P extends EdgePropsSchema>(

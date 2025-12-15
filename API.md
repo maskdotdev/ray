@@ -104,7 +104,7 @@ Provides:
 - **MVCC transaction support**
 
 **Key types:**
-- `NodeID` - Numeric node identifier (bigint)
+- `NodeID` - Numeric node identifier (number)
 - `ETypeID` - Edge type identifier
 - `PropKeyID` - Property key identifier
 - `TxHandle` - Transaction handle

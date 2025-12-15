@@ -56,7 +56,7 @@ describe("WAL Records", () => {
     const record: WalRecord = {
       type: WalRecordType.CREATE_NODE,
       txid: 1n,
-      payload: buildCreateNodePayload(100n, "test-key"),
+      payload: buildCreateNodePayload(100, "test-key"),
     };
 
     const bytes = buildWalRecord(record);
@@ -67,7 +67,7 @@ describe("WAL Records", () => {
     expect(parsed!.txid).toBe(1n);
 
     const data = parseCreateNodePayload(parsed!.payload);
-    expect(data.nodeId).toBe(100n);
+    expect(data.nodeId).toBe(100);
     expect(data.key).toBe("test-key");
   });
 
@@ -86,7 +86,7 @@ describe("WAL Records", () => {
     const record: WalRecord = {
       type: WalRecordType.CREATE_NODE,
       txid: 1n,
-      payload: buildCreateNodePayload(100n),
+      payload: buildCreateNodePayload(100),
     };
 
     const bytes = buildWalRecord(record);
@@ -102,7 +102,7 @@ describe("WAL Records", () => {
     const record: WalRecord = {
       type: WalRecordType.CREATE_NODE,
       txid: 1n,
-      payload: buildCreateNodePayload(100n),
+      payload: buildCreateNodePayload(100),
     };
 
     const bytes = buildWalRecord(record);
@@ -120,12 +120,12 @@ describe("WAL Scanning", () => {
       {
         type: WalRecordType.CREATE_NODE,
         txid: 1n,
-        payload: buildCreateNodePayload(1n),
+        payload: buildCreateNodePayload(1),
       },
       {
         type: WalRecordType.ADD_EDGE,
         txid: 1n,
-        payload: buildAddEdgePayload(1n, 1, 2n),
+        payload: buildAddEdgePayload(1, 1, 2),
       },
       { type: WalRecordType.COMMIT, txid: 1n, payload: buildCommitPayload() },
     ];
@@ -159,7 +159,7 @@ describe("WAL Scanning", () => {
       {
         type: WalRecordType.CREATE_NODE,
         txid: 1n,
-        payload: buildCreateNodePayload(1n),
+        payload: buildCreateNodePayload(1),
       },
       { type: WalRecordType.COMMIT, txid: 1n, payload: buildCommitPayload() },
 
@@ -168,7 +168,7 @@ describe("WAL Scanning", () => {
       {
         type: WalRecordType.CREATE_NODE,
         txid: 2n,
-        payload: buildCreateNodePayload(2n),
+        payload: buildCreateNodePayload(2),
       },
 
       // Transaction 3 - committed
@@ -176,7 +176,7 @@ describe("WAL Scanning", () => {
       {
         type: WalRecordType.ADD_EDGE,
         txid: 3n,
-        payload: buildAddEdgePayload(1n, 1, 2n),
+        payload: buildAddEdgePayload(1, 1, 2),
       },
       { type: WalRecordType.COMMIT, txid: 3n, payload: buildCommitPayload() },
     ];
@@ -237,7 +237,7 @@ describe("WAL File Operations", () => {
       {
         type: WalRecordType.CREATE_NODE,
         txid: 1n,
-        payload: buildCreateNodePayload(1n, "test"),
+        payload: buildCreateNodePayload(1, "test"),
       },
       { type: WalRecordType.COMMIT, txid: 1n, payload: buildCommitPayload() },
     ];
