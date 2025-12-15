@@ -1,19 +1,19 @@
-# Nero API - Quick Start Guide
+# Ray API - Quick Start Guide
 
-Get up and running with Nero in 5 minutes.
+Get up and running with Ray in 5 minutes.
 
 ## Installation
 
 ```bash
-bun add @nerodb/nero
+bun add @ray-db/ray
 # or
-npm add @nerodb/nero
+npm add @ray-db/ray
 ```
 
 ## Basic Setup
 
 ```typescript
-import { nero, defineNode, defineEdge, prop, optional } from '@nerodb/nero';
+import { ray, defineNode, defineEdge, prop, optional } from '@ray-db/ray';
 
 // 1. Define your schema
 const user = defineNode('user', {
@@ -39,7 +39,7 @@ const knows = defineEdge('knows', {
 const worksAt = defineEdge('worksAt');
 
 // 2. Open database
-const db = await nero('./my-database', {
+const db = await ray('./my-database', {
   nodes: [user, company],
   edges: [knows, worksAt],
 });
@@ -475,7 +475,7 @@ type KnowsProps = InferEdgeProps<typeof knows>;
 ## Troubleshooting
 
 **Q: "Unknown edge type" error**
-A: Make sure you passed all edge definitions to `nero()` options
+A: Make sure you passed all edge definitions to `ray()` options
 
 **Q: Node not found in updates**
 A: WHERE clause throws if node doesn't exist. Use `get()` first if unsure

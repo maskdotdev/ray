@@ -1,4 +1,4 @@
-# Nero - Embedded Graph Database
+# Ray - Embedded Graph Database
 
 A high-performance embedded graph database for Bun/TypeScript with:
 
@@ -21,14 +21,14 @@ A high-performance embedded graph database for Bun/TypeScript with:
 ## Installation
 
 ```bash
-bun add @nerodb/nero
+bun add @ray-db/ray
 ```
 
 Or for development:
 
 ```bash
 git clone <repo>
-cd nero
+cd ray
 bun install
 ```
 

@@ -1,8 +1,8 @@
-# Nero API Documentation Index
+# Ray API Documentation Index
 
-Welcome to the Nero High-Level API documentation! This index will help you find what you need.
+Welcome to the Ray High-Level API documentation! This index will help you find what you need.
 
-## 📚 Documentation Files
+## Documentation Files
 
 ### [QUICK_START.md](./QUICK_START.md) - **Start Here! (5 minutes)**
 Perfect for getting your first database running.
@@ -34,7 +34,7 @@ The most comprehensive documentation of the API.
 
 **Sections:**
 - **Module Reference** - Detailed docs for each module
-  - `nero.ts` - Database and operations
+  - `ray.ts` - Database and operations
   - `schema.ts` - Schema definition
   - `builders.ts` - Query builders
   - `traversal.ts` - Graph traversal
@@ -66,7 +66,7 @@ For understanding how the API is built and why.
 ---
 
 ### [../API.md](../API.md) - **Project Architecture**
-High-level overview of the entire Nero project.
+High-level overview of the entire Ray project.
 
 **Contents:**
 - Full system architecture
@@ -80,7 +80,7 @@ High-level overview of the entire Nero project.
 
 ---
 
-## 🎯 How to Navigate
+## How to Navigate
 
 ### I want to...
 
@@ -118,7 +118,7 @@ High-level overview of the entire Nero project.
 
 ---
 
-## 📖 Reading Order
+## Reading Order
 
 ### Path 1: Get Started Immediately
 1. [QUICK_START.md](./QUICK_START.md) - Set up and run basic example
@@ -139,7 +139,7 @@ High-level overview of the entire Nero project.
 
 ---
 
-## 🔍 Quick Reference
+## Quick Reference
 
 ### Schema Definition
 - Property types: `prop.string()`, `prop.int()`, `prop.float()`, `prop.bool()`
@@ -176,7 +176,7 @@ High-level overview of the entire Nero project.
 
 ---
 
-## 💡 Tips
+## Tips
 
 **For Large Documents:**
 - Use your editor's search (Ctrl/Cmd+F) to find sections
@@ -201,7 +201,7 @@ High-level overview of the entire Nero project.
 
 ---
 
-## 📝 Documentation Highlights
+## Documentation Highlights
 
 ### Comprehensive Examples
 Every major feature has copy-paste ready examples:
@@ -234,10 +234,10 @@ Examples for:
 
 ---
 
-## 🔗 Related Files
+## Related Files
 
 **Source Code:**
-- `nero.ts` - Main database class
+- `ray.ts` - Main database class
 - `schema.ts` - Schema builders
 - `builders.ts` - Query builders
 - `traversal.ts` - Traversal implementation
@@ -254,7 +254,7 @@ Examples for:
 
 ---
 
-## 📞 Questions?
+## Questions?
 
 If documentation doesn't answer your question:
 
@@ -269,14 +269,14 @@ If documentation doesn't answer your question:
 **Last Updated:** December 14, 2025
 
 **Documentation Includes:**
-- ✅ Complete API reference
-- ✅ Getting started guide
-- ✅ 50+ code examples
-- ✅ Architecture explanation
-- ✅ Type inference guide
-- ✅ Performance tips
-- ✅ Error handling
-- ✅ Common patterns
-- ✅ Troubleshooting
+- Complete API reference
+- Getting started guide
+- 50+ code examples
+- Architecture explanation
+- Type inference guide
+- Performance tips
+- Error handling
+- Common patterns
+- Troubleshooting
 
 **Version:** 1.0

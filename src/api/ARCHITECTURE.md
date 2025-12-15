@@ -1,10 +1,10 @@
-# Nero API - Architecture & Design
+# Ray API - Architecture & Design
 
-This document describes the architecture and design decisions of the Nero high-level API.
+This document describes the architecture and design decisions of the Ray high-level API.
 
 ## Overview
 
-The Nero API is a **type-safe, schema-first wrapper** around a low-level embedded graph database. It provides a Drizzle-like developer experience with full TypeScript type inference.
+The Ray API is a **type-safe, schema-first wrapper** around a low-level embedded graph database. It provides a Drizzle-like developer experience with full TypeScript type inference.
 
 ## Design Philosophy
 
@@ -67,13 +67,13 @@ type User = InferNode<typeof user>;
 // Result: { $id: bigint; $key: string; name: string; email: string; age?: bigint; }
 ```
 
-### 2. Database Context (`nero.ts`)
+### 2. Database Context (`ray.ts`)
 
-The `Nero` class is the main interface for all operations:
+The `Ray` class is the main interface for all operations:
 
 **Initialization:**
 ```typescript
-const db = await nero('./my-db', {
+const db = await ray('./my-db', {
   nodes: [user, company],
   edges: [knows, worksAt],
 });
@@ -115,7 +115,7 @@ Delete → where() → DeleteExecutor → execute()
 
 **Link/Unlink:**
 ```
-Direct methods on Nero (no builder needed)
+Direct methods on Ray (no builder needed)
 ```
 
 **Design Notes:**
@@ -201,7 +201,7 @@ createTraversalBuilder() sets up execution state
 ## Property Type System
 
 ```
-Nero Type          TypeScript Type    Storage        Tag
+Ray Type           TypeScript Type    Storage        Tag
 ─────────────────────────────────────────────────────────
 prop.string()      string             String         4
 prop.int()         bigint             i64            2
@@ -342,7 +342,7 @@ try {
 
 ### vs. Raw GraphDB (`src/db/`)
 
-| Feature | Nero API | Raw GraphDB |
+| Feature | Ray API | Raw GraphDB |
 |---------|-------------|-----------|
 | Type safety | Full | Manual |
 | Schema | Defined | Implicit |
@@ -351,7 +351,7 @@ try {
 | Builders | Yes | No |
 | Ergonomics | High | Low |
 
-**When to use Nero API:**
+**When to use Ray API:**
 - Building applications
 - Need type safety
 - Want ergonomic API
@@ -363,7 +363,7 @@ try {
 
 ### vs. Other Databases
 
-| Aspect | Nero | SQL | NoSQL | Neo4j |
+| Aspect | Ray | SQL | NoSQL | Neo4j |
 |--------|----------|-----|-------|-------|
 | Embedded | Yes | No | Sometimes | No |
 | Graph-first | Yes | No | No | Yes |

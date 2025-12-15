@@ -1,12 +1,12 @@
-# Nero High-Level API
+# Ray High-Level API
 
-The `api` module provides a **Drizzle-style, type-safe API** for Nero, a high-performance embedded graph database. It wraps the lower-level database primitives with a fluent, ergonomic interface featuring full TypeScript type inference.
+The `api` module provides a **Drizzle-style, type-safe API** for Ray, a high-performance embedded graph database. It wraps the lower-level database primitives with a fluent, ergonomic interface featuring full TypeScript type inference.
 
 ## Overview
 
 The API consists of five main modules:
 
-- **`nero.ts`** - Main entry point and database context
+- **`ray.ts`** - Main entry point and database context
 - **`schema.ts`** - Schema definition with property and relation types
 - **`builders.ts`** - Query builders for insert, update, delete operations
 - **`traversal.ts`** - Graph traversal with filtering and aggregation
@@ -19,7 +19,7 @@ The API consists of five main modules:
 Define your graph structure upfront using `defineNode()` and `defineEdge()`:
 
 ```typescript
-import { defineNode, defineEdge, prop, optional } from '@nero/api';
+import { defineNode, defineEdge, prop, optional } from '@ray-db/ray';
 
 // Define node types
 const user = defineNode('user', {
@@ -67,15 +67,15 @@ type ReturnedUser = InferNode<typeof user>;
 
 ## Module Reference
 
-### `nero.ts` - Main Database API
+### `ray.ts` - Main Database API
 
-#### `nero(path, options): Promise<Nero>`
+#### `ray(path, options): Promise<Ray>`
 
 Opens or creates a database with the given schema.
 
 **Parameters:**
 - `path: string` - Directory path for database files
-- `options: NeroOptions` - Schema and database options
+- `options: RayOptions` - Schema and database options
   - `nodes: NodeDef[]` - Node type definitions
   - `edges: EdgeDef[]` - Edge type definitions
   - `readOnly?: boolean` - Open in read-only mode
@@ -84,13 +84,13 @@ Opens or creates a database with the given schema.
 
 **Example:**
 ```typescript
-const db = await nero('./my-graph', {
+const db = await ray('./my-graph', {
   nodes: [user, company],
   edges: [knows, worksAt],
 });
 ```
 
-#### `Nero` Class
+#### `Ray` Class
 
 The main database context with methods for CRUD operations, transactions, and maintenance.
 

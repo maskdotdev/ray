@@ -1,10 +1,10 @@
-# Nero API Documentation
+# Ray API Documentation
 
-This document provides a high-level overview of Nero's architecture and API layers.
+This document provides a high-level overview of Ray's architecture and API layers.
 
 ## Architecture Overview
 
-Nero is organized into several key layers:
+Ray is organized into several key layers:
 
 ```
 ┌─────────────────────────────────────────┐
@@ -56,7 +56,7 @@ Features:
 - Property type validation
 
 **Modules:**
-- `nero.ts` - Main database context
+- `ray.ts` - Main database context
 - `schema.ts` - Schema builders
 - `builders.ts` - Query builders
 - `traversal.ts` - Graph traversal
@@ -69,7 +69,7 @@ const user = defineNode('user', {
   props: { name: prop.string('name') },
 });
 
-const db = await nero('./db', { nodes: [user], edges: [] });
+const db = await ray('./db', { nodes: [user], edges: [] });
 const alice = await db.insert(user).values({ key: 'alice', name: 'Alice' }).returning();
 ```
 
@@ -122,7 +122,7 @@ Components:
 src/
 ├── api/                    # High-level API
 │   ├── README.md          # API documentation
-│   ├── nero.ts            # Main database context
+│   ├── ray.ts             # Main database context
 │   ├── schema.ts          # Schema definitions
 │   ├── builders.ts        # Query builders
 │   ├── traversal.ts       # Graph traversal
@@ -157,7 +157,7 @@ src/
 │   └── constants.ts       # Error codes
 │
 ├── api.ts                 # (Legacy?) API exports
-├── nero.ts                # (Legacy?) Main export
+├── ray.ts                 # (Legacy?) Main export
 ├── index.ts               # Main entry point
 ├── schema.ts              # (Legacy?) Schema
 ├── types.ts               # Type definitions
@@ -175,7 +175,7 @@ src/
 ✅ You want comfortable error handling
 
 ```typescript
-import { nero, defineNode, defineEdge, prop } from './src/api';
+import { ray, defineNode, defineEdge, prop } from './src/api';
 ```
 
 ### Use Low-Level API (`src/db/`)
@@ -363,6 +363,6 @@ See `src/api/README.md` for detailed API documentation and examples.
 
 ## References
 
-- [Nero Main README](./README.md)
+- [Ray Main README](./README.md)
 - [High-Level API Docs](./src/api/README.md)
 - [TypeScript Docs](./tsconfig.json)
