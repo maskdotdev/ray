@@ -85,10 +85,10 @@ describe("TxManager", () => {
 
     expect(commitTs).toBe(1n);
 
+    // Note: With eager cleanup, single transactions are removed immediately after commit
+    // when no other active transactions exist
     const tx = txManager.getTx(txid);
-    expect(tx).toBeDefined();
-    expect(tx?.commitTs).toBe(1n);
-    expect(tx?.status).toBe("committed");
+    expect(tx).toBeUndefined(); // Eagerly cleaned up
   });
 
   test("abort transaction removes it immediately", () => {
@@ -142,7 +142,8 @@ describe("TxManager", () => {
   test("commit already committed transaction throws", () => {
     const { txid } = txManager.beginTx();
     txManager.commitTx(txid);
-    expect(() => txManager.commitTx(txid)).toThrow("is not active");
+    // With eager cleanup, the transaction is removed immediately
+    expect(() => txManager.commitTx(txid)).toThrow("not found");
   });
 
   test("concurrent transactions supported", () => {
@@ -636,7 +637,8 @@ describe("MvccManager", () => {
     const commitTs = mvcc.txManager.commitTx(txid);
 
     expect(commitTs).toBe(1n);
-    expect(mvcc.txManager.getTx(txid)?.status).toBe("committed");
+    // With eager cleanup, single transactions are removed immediately
+    expect(mvcc.txManager.getTx(txid)).toBeUndefined();
   });
 
   test("conflict detection through coordinator", () => {
