@@ -11,6 +11,8 @@ import type {
 } from "../../types.ts";
 import { hasEdgeMerged, neighborsIn, neighborsOut } from "../iterators.ts";
 import { getCache } from "./cache-helper.ts";
+import { getMvccManager, isMvccEnabled } from "../../mvcc/index.ts";
+import { getVisibleVersion, edgeExists as mvccEdgeExists } from "../../mvcc/visibility.ts";
 
 /**
  * Add an edge
@@ -203,6 +205,35 @@ export function edgeExists(
   etype: ETypeID,
   dst: NodeID,
 ): boolean {
+  const mvcc = getMvccManager(db);
+  
+  // MVCC mode: use version chains for visibility
+  if (mvcc && isMvccEnabled(db)) {
+    // Get current transaction snapshot
+    let txSnapshotTs = mvcc.txManager.getNextCommitTs();
+    let txid = 0n;
+    
+    if (db._currentTx) {
+      const mvccTx = mvcc.txManager.getTx(db._currentTx.txid);
+      if (mvccTx) {
+        txSnapshotTs = mvccTx.startTs;
+        txid = mvccTx.txid;
+        // Track read for conflict detection
+        mvcc.txManager.recordRead(txid, `edge:${src}:${etype}:${dst}`);
+      }
+    }
+    
+    // Check version chain
+    const edgeVersion = mvcc.versionChain.getEdgeVersion(src, etype, dst);
+    if (mvccEdgeExists(edgeVersion, txSnapshotTs, txid)) {
+      return true;
+    }
+    
+    // Fall back to snapshot/delta check
+    return hasEdgeMerged(db._snapshot, db._delta, src, etype, dst);
+  }
+  
+  // Non-MVCC mode: original logic
   return hasEdgeMerged(db._snapshot, db._delta, src, etype, dst);
 }
 
@@ -272,8 +303,90 @@ export function getEdgeProp(
   dst: NodeID,
   keyId: PropKeyID,
 ): PropValue | null {
-  // Check cache first
+  const mvcc = getMvccManager(db);
   const cache = getCache(db);
+  
+  // MVCC mode: use version chains for visibility
+  if (mvcc && isMvccEnabled(db)) {
+    // Get current transaction snapshot
+    let txSnapshotTs = mvcc.txManager.getNextCommitTs();
+    let txid = 0n;
+    
+    if (db._currentTx) {
+      const mvccTx = mvcc.txManager.getTx(db._currentTx.txid);
+      if (mvccTx) {
+        txSnapshotTs = mvccTx.startTs;
+        txid = mvccTx.txid;
+        // Track read for conflict detection
+        mvcc.txManager.recordRead(txid, `edgeprop:${src}:${etype}:${dst}:${keyId}`);
+      }
+    }
+    
+    // Check cache first
+    if (cache) {
+      const cached = cache.getEdgeProp(src, etype, dst, keyId);
+      if (cached !== undefined) {
+        return cached;
+      }
+    }
+    
+    // Get visible version from version chain
+    const propVersion = mvcc.versionChain.getEdgePropVersion(src, etype, dst, keyId);
+    const visibleVersion = getVisibleVersion(propVersion, txSnapshotTs, txid);
+    
+    if (visibleVersion) {
+      const value = visibleVersion.data;
+      if (cache) {
+        cache.setEdgeProp(src, etype, dst, keyId, value);
+      }
+      return value;
+    }
+    
+    // Fall back to snapshot/delta check
+    // Check if endpoints are deleted
+    if (isNodeDeleted(db._delta, src) || isNodeDeleted(db._delta, dst)) {
+      if (cache) {
+        cache.setEdgeProp(src, etype, dst, keyId, null);
+      }
+      return null;
+    }
+
+    // Check delta first
+    const key = edgePropKey(src, etype, dst);
+    const deltaProps = db._delta.edgeProps.get(key);
+    if (deltaProps) {
+      const deltaValue = deltaProps.get(keyId);
+      if (deltaValue !== undefined) {
+        if (cache) {
+          cache.setEdgeProp(src, etype, dst, keyId, deltaValue);
+        }
+        return deltaValue;
+      }
+    }
+
+    // Fall back to snapshot
+    if (db._snapshot) {
+      const srcPhys = getPhysNode(db._snapshot, src);
+      const dstPhys = getPhysNode(db._snapshot, dst);
+      if (srcPhys >= 0 && dstPhys >= 0) {
+        const edgeIdx = findEdgeIndex(db._snapshot, srcPhys, etype, dstPhys);
+        if (edgeIdx >= 0) {
+          const value = snapshotGetEdgeProp(db._snapshot, edgeIdx, keyId);
+          if (cache) {
+            cache.setEdgeProp(src, etype, dst, keyId, value);
+          }
+          return value;
+        }
+      }
+    }
+
+    if (cache) {
+      cache.setEdgeProp(src, etype, dst, keyId, null);
+    }
+    return null;
+  }
+  
+  // Non-MVCC mode: original logic
   if (cache) {
     const cached = cache.getEdgeProp(src, etype, dst, keyId);
     if (cached !== undefined) {

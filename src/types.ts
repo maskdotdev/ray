@@ -271,6 +271,9 @@ export interface OpenOptions {
   createIfMissing?: boolean;
   lockFile?: boolean;
   cache?: CacheOptions;
+  mvcc?: boolean; // Enable MVCC mode (default: false for backward compatibility)
+  mvccGcInterval?: number; // GC interval in ms (default: 5000)
+  mvccRetentionMs?: number; // Minimum version retention time in ms (default: 60000)
 }
 
 // ============================================================================
@@ -332,6 +335,15 @@ export interface DbStats {
   walSegment: bigint;
   walBytes: bigint;
   recommendCompact: boolean;
+  mvccStats?: MvccStats;
+}
+
+export interface MvccStats {
+  activeTransactions: number;
+  minActiveTs: bigint;
+  versionsPruned: bigint;
+  gcRuns: number;
+  lastGcTime: bigint;
 }
 
 export interface CheckResult {
@@ -360,6 +372,57 @@ export interface TxState {
   pendingNewPropkeys: Map<PropKeyID, string>;
   pendingKeyUpdates: Map<string, NodeID>;
   pendingKeyDeletes: Set<string>;
+}
+
+// ============================================================================
+// MVCC Types
+// ============================================================================
+
+export interface MvccTransaction {
+  txid: bigint;              // Unique transaction ID
+  startTs: bigint;           // Snapshot timestamp (for visibility)
+  commitTs: bigint | null;   // Set on commit, null while active
+  status: 'active' | 'committed' | 'aborted';
+  readSet: Set<string>;      // Keys read (for conflict detection)
+  writeSet: Set<string>;     // Keys written
+}
+
+export interface VersionedRecord<T> {
+  data: T;
+  txid: bigint;              // Transaction that created this version
+  commitTs: bigint;          // Commit timestamp
+  prev: VersionedRecord<T> | null;  // Previous version (undo chain)
+  deleted: boolean;          // Tombstone marker
+}
+
+export interface NodeVersionData {
+  nodeId: NodeID;
+  delta: NodeDelta;
+}
+
+export interface EdgeVersionData {
+  src: NodeID;
+  etype: ETypeID;
+  dst: NodeID;
+  added: boolean;  // true if added, false if deleted
+}
+
+export interface VersionChainStore {
+  nodeVersions: Map<NodeID, VersionedRecord<NodeVersionData>>;
+  edgeVersions: Map<string, VersionedRecord<EdgeVersionData>>;
+  nodePropVersions: Map<string, VersionedRecord<PropValue | null>>; // key: "nodeId:propKeyId"
+  edgePropVersions: Map<string, VersionedRecord<PropValue | null>>; // key: "src:etype:dst:propKeyId"
+}
+
+export class ConflictError extends Error {
+  constructor(
+    message: string,
+    public readonly txid: bigint,
+    public readonly conflictingKeys: string[],
+  ) {
+    super(message);
+    this.name = 'ConflictError';
+  }
 }
 
 // ============================================================================
@@ -420,6 +483,7 @@ export interface GraphDB {
   _currentTx: TxState | null;
   _lockFd: unknown; // LockHandle from util/lock.ts or null
   _cache?: unknown; // CacheManager instance (opaque to users)
+  _mvcc?: unknown; // MVCC manager instance (opaque to users)
 }
 
 export interface TxHandle {

@@ -2,6 +2,7 @@ import { COMPACT_WAL_SIZE } from "../../constants.ts";
 import { getDeltaStats } from "../../core/delta.ts";
 import { checkSnapshot as checkSnapshotFn } from "../../check/checker.ts";
 import type { CheckResult, DbStats, GraphDB } from "../../types.ts";
+import { getMvccManager, isMvccEnabled } from "../../mvcc/index.ts";
 
 /**
  * Get database statistics
@@ -20,7 +21,7 @@ export function stats(db: GraphDB): DbStats {
       snapshotNodes / 10n ||
     db._walOffset > COMPACT_WAL_SIZE;
 
-  return {
+  const result: DbStats = {
     snapshotGen: db._manifest.activeSnapshotGen,
     snapshotNodes,
     snapshotEdges,
@@ -33,6 +34,23 @@ export function stats(db: GraphDB): DbStats {
     walBytes: BigInt(db._walOffset),
     recommendCompact,
   };
+
+  // Add MVCC stats if enabled
+  if (isMvccEnabled(db)) {
+    const mvcc = getMvccManager(db);
+    if (mvcc) {
+      const gcStats = mvcc.gc.getStats();
+      result.mvccStats = {
+        activeTransactions: mvcc.txManager.getActiveCount(),
+        minActiveTs: mvcc.txManager.minActiveTs,
+        versionsPruned: gcStats.versionsPruned,
+        gcRuns: gcStats.gcRuns,
+        lastGcTime: gcStats.lastGcTime,
+      };
+    }
+  }
+
+  return result;
 }
 
 /**

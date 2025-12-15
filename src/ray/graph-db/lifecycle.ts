@@ -30,6 +30,13 @@ import {
   parseDefineEtypePayload,
   parseDefineLabelPayload,
   parseDefinePropkeyPayload,
+  parseAddEdgePayload,
+  parseDeleteEdgePayload,
+  parseDeleteNodePayload,
+  parseSetNodePropPayload,
+  parseDelNodePropPayload,
+  parseSetEdgePropPayload,
+  parseDelEdgePropPayload,
 } from "../../core/wal.ts";
 import type {
   GraphDB,
@@ -44,6 +51,7 @@ import {
 } from "../../util/lock.ts";
 import { CacheManager } from "../../cache/index.ts";
 import { replayWalRecord } from "./wal-replay.ts";
+import { MvccManager } from "../../mvcc/index.ts";
 
 /**
  * Open a graph database
@@ -152,6 +160,7 @@ export async function openGraphDB(
   // Replay WAL for recovery
   const walData = await loadWalSegment(path, manifest.activeWalSeg);
   let nextTxId = INITIAL_TX_ID;
+  let nextCommitTs = 1n;
 
   if (walData) {
     const committed = extractCommittedTransactions(walData.records);
@@ -160,6 +169,9 @@ export async function openGraphDB(
       if (txid >= nextTxId) {
         nextTxId = txid + 1n;
       }
+
+      // Assign commit timestamp for MVCC (sequential order in WAL = commit order)
+      const commitTs = nextCommitTs++;
 
       // Replay each record
       for (const record of records) {
@@ -196,6 +208,125 @@ export async function openGraphDB(
         : walOffset;
   }
 
+  // Initialize MVCC if enabled (after WAL replay to get correct nextTxId/nextCommitTs)
+  let mvcc: MvccManager | null = null;
+  if (options.mvcc) {
+    const gcIntervalMs = options.mvccGcInterval ?? 5000;
+    const retentionMs = options.mvccRetentionMs ?? 60000;
+    mvcc = new MvccManager(nextTxId, nextCommitTs, gcIntervalMs, retentionMs);
+    
+    // Rebuild version chains from WAL if MVCC is enabled
+    if (walData) {
+      const committed = extractCommittedTransactions(walData.records);
+      let rebuildCommitTs = 1n;
+      
+      for (const [txid, records] of committed) {
+        const commitTs = rebuildCommitTs++;
+        
+        // Rebuild version chains
+        for (const record of records) {
+          switch (record.type) {
+            case WalRecordType.CREATE_NODE: {
+              const data = parseCreateNodePayload(record.payload);
+              const nodeDelta = delta.createdNodes.get(data.nodeId);
+              if (nodeDelta) {
+                mvcc.versionChain.appendNodeVersion(
+                  data.nodeId,
+                  { nodeId: data.nodeId, delta: nodeDelta },
+                  txid,
+                  commitTs,
+                );
+              }
+              break;
+            }
+            case WalRecordType.DELETE_NODE: {
+              const data = parseDeleteNodePayload(record.payload);
+              mvcc.versionChain.deleteNodeVersion(data.nodeId, txid, commitTs);
+              break;
+            }
+            case WalRecordType.ADD_EDGE: {
+              const data = parseAddEdgePayload(record.payload);
+              mvcc.versionChain.appendEdgeVersion(
+                data.src,
+                data.etype,
+                data.dst,
+                true,
+                txid,
+                commitTs,
+              );
+              break;
+            }
+            case WalRecordType.DELETE_EDGE: {
+              const data = parseDeleteEdgePayload(record.payload);
+              mvcc.versionChain.appendEdgeVersion(
+                data.src,
+                data.etype,
+                data.dst,
+                false,
+                txid,
+                commitTs,
+              );
+              break;
+            }
+            case WalRecordType.SET_NODE_PROP: {
+              const data = parseSetNodePropPayload(record.payload);
+              mvcc.versionChain.appendNodePropVersion(
+                data.nodeId,
+                data.keyId,
+                data.value,
+                txid,
+                commitTs,
+              );
+              break;
+            }
+            case WalRecordType.DEL_NODE_PROP: {
+              const data = parseDelNodePropPayload(record.payload);
+              mvcc.versionChain.appendNodePropVersion(
+                data.nodeId,
+                data.keyId,
+                null,
+                txid,
+                commitTs,
+              );
+              break;
+            }
+            case WalRecordType.SET_EDGE_PROP: {
+              const data = parseSetEdgePropPayload(record.payload);
+              mvcc.versionChain.appendEdgePropVersion(
+                data.src,
+                data.etype,
+                data.dst,
+                data.keyId,
+                data.value,
+                txid,
+                commitTs,
+              );
+              break;
+            }
+            case WalRecordType.DEL_EDGE_PROP: {
+              const data = parseDelEdgePropPayload(record.payload);
+              mvcc.versionChain.appendEdgePropVersion(
+                data.src,
+                data.etype,
+                data.dst,
+                data.keyId,
+                null,
+                txid,
+                commitTs,
+              );
+              break;
+            }
+          }
+        }
+      }
+    }
+    
+    // Start GC thread (only for writable databases)
+    if (!readOnly) {
+      mvcc.start();
+    }
+  }
+
   // Initialize cache
   const cache = new CacheManager(options.cache);
 
@@ -215,6 +346,7 @@ export async function openGraphDB(
     _currentTx: null,
     _lockFd: lockFd,
     _cache: cache,
+    _mvcc: mvcc,
   };
 }
 
@@ -222,6 +354,12 @@ export async function openGraphDB(
  * Close the database
  */
 export async function closeGraphDB(db: GraphDB): Promise<void> {
+  // Stop MVCC GC thread
+  if (db._mvcc) {
+    const mvcc = db._mvcc as MvccManager;
+    mvcc.stop();
+  }
+
   // Close snapshot
   if (db._snapshot) {
     closeSnapshot(db._snapshot);

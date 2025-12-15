@@ -15,6 +15,8 @@ import type {
 } from "../../types.ts";
 import { lookupByKey } from "../key-index.ts";
 import { getCache } from "./cache-helper.ts";
+import { getMvccManager, isMvccEnabled } from "../../mvcc/index.ts";
+import { getVisibleVersion, nodeExists as mvccNodeExists } from "../../mvcc/visibility.ts";
 
 /**
  * Create a new node
@@ -122,6 +124,42 @@ export function getNodeByKey(db: GraphDB, key: string): NodeID | null {
  * Check if a node exists
  */
 export function nodeExists(db: GraphDB, nodeId: NodeID): boolean {
+  const mvcc = getMvccManager(db);
+  
+  // MVCC mode: use version chains for visibility
+  if (mvcc && isMvccEnabled(db)) {
+    // Get current transaction snapshot
+    let txSnapshotTs = mvcc.txManager.nextCommitTs;
+    let txid = 0n;
+    
+    if (db._currentTx) {
+      const mvccTx = mvcc.txManager.getTx(db._currentTx.txid);
+      if (mvccTx) {
+        txSnapshotTs = mvccTx.startTs;
+        txid = mvccTx.txid;
+        // Track read for conflict detection
+        mvcc.txManager.recordRead(txid, `node:${nodeId}`);
+      }
+    }
+    
+    // Check version chain
+    const nodeVersion = mvcc.versionChain.getNodeVersion(nodeId);
+    if (mvccNodeExists(nodeVersion, txSnapshotTs, txid)) {
+      return true;
+    }
+    
+    // Fall back to snapshot/delta check
+    if (db._snapshot) {
+      const phys = getPhysNode(db._snapshot, nodeId);
+      if (phys >= 0) {
+        return true;
+      }
+    }
+    
+    return isNodeCreated(db._delta, nodeId);
+  }
+  
+  // Non-MVCC mode: original logic
   // Check current transaction
   if (db._currentTx) {
     if (db._currentTx.pendingCreatedNodes.has(nodeId)) return true;
@@ -198,8 +236,88 @@ export function getNodeProp(
   nodeId: NodeID,
   keyId: PropKeyID,
 ): PropValue | null {
-  // Check cache first
+  const mvcc = getMvccManager(db);
   const cache = getCache(db);
+  
+  // MVCC mode: use version chains for visibility
+  if (mvcc && isMvccEnabled(db)) {
+    // Get current transaction snapshot (if in a transaction)
+    // For reads outside transactions, use latest committed state
+    let txSnapshotTs = mvcc.txManager.getNextCommitTs();
+    let txid = 0n;
+    
+    // Check if we're in a transaction
+    if (db._currentTx) {
+      const mvccTx = mvcc.txManager.getTx(db._currentTx.txid);
+      if (mvccTx) {
+        txSnapshotTs = mvccTx.startTs;
+        txid = mvccTx.txid;
+        // Track read for conflict detection
+        mvcc.txManager.recordRead(txid, `nodeprop:${nodeId}:${keyId}`);
+      }
+    }
+    
+    // Check cache first
+    if (cache) {
+      const cached = cache.getNodeProp(nodeId, keyId);
+      if (cached !== undefined) {
+        return cached;
+      }
+    }
+    
+    // Get visible version from version chain
+    const propVersion = mvcc.versionChain.getNodePropVersion(nodeId, keyId);
+    const visibleVersion = getVisibleVersion(propVersion, txSnapshotTs, txid);
+    
+    if (visibleVersion) {
+      const value = visibleVersion.data;
+      if (cache) {
+        cache.setNodeProp(nodeId, keyId, value);
+      }
+      return value;
+    }
+    
+    // Fall back to snapshot/delta (for backward compatibility during migration)
+    // Check if node exists
+    const nodeVersion = mvcc.versionChain.getNodeVersion(nodeId);
+    if (!mvccNodeExists(nodeVersion, txSnapshotTs, txid)) {
+      if (cache) {
+        cache.setNodeProp(nodeId, keyId, null);
+      }
+      return null;
+    }
+    
+    // Check delta first (modifications take precedence)
+    const nodeDelta = getNodeDelta(db._delta, nodeId);
+    if (nodeDelta) {
+      const deltaValue = nodeDelta.props.get(keyId);
+      if (deltaValue !== undefined) {
+        if (cache) {
+          cache.setNodeProp(nodeId, keyId, deltaValue);
+        }
+        return deltaValue;
+      }
+    }
+    
+    // Fall back to snapshot
+    if (db._snapshot) {
+      const phys = getPhysNode(db._snapshot, nodeId);
+      if (phys >= 0) {
+        const value = snapshotGetNodeProp(db._snapshot, phys, keyId);
+        if (cache) {
+          cache.setNodeProp(nodeId, keyId, value);
+        }
+        return value;
+      }
+    }
+    
+    if (cache) {
+      cache.setNodeProp(nodeId, keyId, null);
+    }
+    return null;
+  }
+  
+  // Non-MVCC mode: original logic
   if (cache) {
     const cached = cache.getNodeProp(nodeId, keyId);
     if (cached !== undefined) {

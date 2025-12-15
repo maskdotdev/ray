@@ -38,6 +38,7 @@ import type {
 import { WalRecordType } from "../../types.ts";
 import { WAL_DIR, walFilename } from "../../constants.ts";
 import { getCache } from "./cache-helper.ts";
+import { getMvccManager, isMvccEnabled } from "../../mvcc/index.ts";
 
 function createTxState(txid: bigint): TxState {
   return {
@@ -66,13 +67,26 @@ export function beginTx(db: GraphDB): TxHandle {
     throw new Error("Cannot begin transaction on read-only database");
   }
 
-  if (db._currentTx) {
+  // MVCC mode: allow concurrent transactions
+  // Non-MVCC mode: single transaction at a time (backward compatibility)
+  if (!isMvccEnabled(db) && db._currentTx) {
     throw new Error("Transaction already in progress");
   }
 
   const txid = db._nextTxId++;
   const tx = createTxState(txid);
-  db._currentTx = tx;
+  
+  // In MVCC mode, don't set _currentTx (allow concurrent transactions)
+  // In non-MVCC mode, maintain backward compatibility
+  if (!isMvccEnabled(db)) {
+    db._currentTx = tx;
+  }
+
+  // Register with MVCC manager if enabled
+  const mvcc = getMvccManager(db);
+  if (mvcc) {
+    mvcc.txManager.beginTx();
+  }
 
   return { _db: db, _tx: tx };
 }
@@ -83,8 +97,104 @@ export function beginTx(db: GraphDB): TxHandle {
 export async function commit(handle: TxHandle): Promise<void> {
   const { _db: db, _tx: tx } = handle;
 
-  if (db._currentTx !== tx) {
-    throw new Error("Transaction is not current");
+  // MVCC mode: check transaction validity differently
+  // Non-MVCC mode: ensure it's the current transaction
+  if (!isMvccEnabled(db)) {
+    if (db._currentTx !== tx) {
+      throw new Error("Transaction is not current");
+    }
+  }
+
+  const mvcc = getMvccManager(db);
+  
+  // MVCC: Check for conflicts before committing
+  if (mvcc) {
+    mvcc.conflictDetector.validateCommit(tx.txid);
+    
+    // Commit in MVCC manager (assigns commit timestamp)
+    const commitTs = mvcc.txManager.commitTx(tx.txid);
+    
+    // Create version chains for all modifications
+    // Node creations
+    for (const [nodeId, nodeDelta] of tx.pendingCreatedNodes) {
+      mvcc.versionChain.appendNodeVersion(
+        nodeId,
+        { nodeId, delta: nodeDelta },
+        tx.txid,
+        commitTs,
+      );
+      mvcc.txManager.recordWrite(tx.txid, `node:${nodeId}`);
+    }
+    
+    // Node deletions
+    for (const nodeId of tx.pendingDeletedNodes) {
+      mvcc.versionChain.deleteNodeVersion(nodeId, tx.txid, commitTs);
+      mvcc.txManager.recordWrite(tx.txid, `node:${nodeId}`);
+    }
+    
+    // Edge additions/deletions
+    for (const [src, patches] of tx.pendingOutAdd) {
+      for (const patch of patches) {
+        mvcc.versionChain.appendEdgeVersion(
+          src,
+          patch.etype,
+          patch.other,
+          true,
+          tx.txid,
+          commitTs,
+        );
+        mvcc.txManager.recordWrite(tx.txid, `edge:${src}:${patch.etype}:${patch.other}`);
+      }
+    }
+    
+    for (const [src, patches] of tx.pendingOutDel) {
+      for (const patch of patches) {
+        mvcc.versionChain.appendEdgeVersion(
+          src,
+          patch.etype,
+          patch.other,
+          false,
+          tx.txid,
+          commitTs,
+        );
+        mvcc.txManager.recordWrite(tx.txid, `edge:${src}:${patch.etype}:${patch.other}`);
+      }
+    }
+    
+    // Node property changes
+    for (const [nodeId, props] of tx.pendingNodeProps) {
+      for (const [keyId, value] of props) {
+        mvcc.versionChain.appendNodePropVersion(
+          nodeId,
+          keyId,
+          value,
+          tx.txid,
+          commitTs,
+        );
+        mvcc.txManager.recordWrite(tx.txid, `nodeprop:${nodeId}:${keyId}`);
+      }
+    }
+    
+    // Edge property changes
+    for (const [edgeKey, props] of tx.pendingEdgeProps) {
+      const [srcStr, etypeStr, dstStr] = edgeKey.split(":");
+      const src = BigInt(srcStr!);
+      const etype = Number.parseInt(etypeStr!, 10);
+      const dst = BigInt(dstStr!);
+      
+      for (const [keyId, value] of props) {
+        mvcc.versionChain.appendEdgePropVersion(
+          src,
+          etype,
+          dst,
+          keyId,
+          value,
+          tx.txid,
+          commitTs,
+        );
+        mvcc.txManager.recordWrite(tx.txid, `edgeprop:${edgeKey}:${keyId}`);
+      }
+    }
   }
 
   // Build WAL records
@@ -338,7 +448,10 @@ export async function commit(handle: TxHandle): Promise<void> {
     }
   }
 
-  db._currentTx = null;
+  // Clear current transaction only in non-MVCC mode
+  if (!isMvccEnabled(db)) {
+    db._currentTx = null;
+  }
 }
 
 /**
@@ -347,11 +460,23 @@ export async function commit(handle: TxHandle): Promise<void> {
 export function rollback(handle: TxHandle): void {
   const { _db: db, _tx: tx } = handle;
 
-  if (db._currentTx !== tx) {
-    throw new Error("Transaction is not current");
+  // MVCC mode: check transaction validity differently
+  // Non-MVCC mode: ensure it's the current transaction
+  if (!isMvccEnabled(db)) {
+    if (db._currentTx !== tx) {
+      throw new Error("Transaction is not current");
+    }
   }
 
-  // Simply discard pending state
-  db._currentTx = null;
+  // Abort in MVCC manager if enabled
+  const mvcc = getMvccManager(db);
+  if (mvcc) {
+    mvcc.txManager.abortTx(tx.txid);
+  }
+
+  // Clear current transaction only in non-MVCC mode
+  if (!isMvccEnabled(db)) {
+    db._currentTx = null;
+  }
 }
 
