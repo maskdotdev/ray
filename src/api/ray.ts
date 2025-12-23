@@ -9,11 +9,16 @@ import {
   beginTx,
   closeGraphDB,
   commit,
+  countEdges,
+  countNodes,
   defineEtype,
   definePropkey,
   edgeExists,
+  getEdgeProp,
   getNodeByKey,
   getNodeProp,
+  listEdges,
+  listNodes,
   nodeExists,
   openGraphDB,
   check as rawCheck,
@@ -24,6 +29,7 @@ import { getNodeKey } from "../ray/key-index.ts";
 import type {
   CheckResult,
   DbStats,
+  Edge,
   ETypeID,
   GraphDB,
   NodeID,
@@ -401,6 +407,189 @@ export class Ray {
       this.getNodeDef.bind(this),
       source.$def,
     );
+  }
+
+  // ==========================================================================
+  // Listing and Counting
+  // ==========================================================================
+
+  /**
+   * List all nodes of a specific type
+   * 
+   * Returns an async generator that yields nodes lazily for memory efficiency.
+   * Filters nodes by matching their key prefix against the node definition's key function.
+   * 
+   * @param nodeDef - The node definition to filter by
+   * @returns Async generator yielding node references with their properties
+   * 
+   * @example
+   * ```ts
+   * // Iterate all users
+   * for await (const user of db.all(User)) {
+   *   console.log(user.name, user.$key);
+   * }
+   * 
+   * // Collect to array (careful with large datasets)
+   * const users = [];
+   * for await (const user of db.all(User)) {
+   *   users.push(user);
+   * }
+   * ```
+   */
+  async *all<N extends NodeDef>(
+    nodeDef: N,
+  ): AsyncGenerator<NodeRef<N> & InferNode<N>> {
+    // Get the key prefix for this node type by calling keyFn with a test value
+    // and extracting the prefix (everything before the last segment)
+    const testKey = nodeDef.keyFn("__test__" as never);
+    const keyPrefix = testKey.replace(/__test__$/, "");
+    
+    for (const nodeId of listNodes(this._db)) {
+      // Get the node's key
+      const key = getNodeKey(this._db._snapshot, this._db._delta, nodeId);
+      
+      // Skip nodes that don't match this type's key prefix
+      if (!key || !key.startsWith(keyPrefix)) {
+        continue;
+      }
+      
+      // Load properties
+      const props: Record<string, unknown> = {};
+      for (const [propName, propDef] of Object.entries(nodeDef.props)) {
+        const propKeyId = this.resolvePropKeyId(nodeDef, propName);
+        const propValue = getNodeProp(this._db, nodeId, propKeyId);
+        if (propValue) {
+          props[propName] = this.fromPropValue(propValue);
+        }
+      }
+      
+      yield createNodeRef(nodeDef, nodeId, key, props);
+    }
+  }
+
+  /**
+   * Count nodes, optionally filtered by type
+   * 
+   * When called without arguments, returns total node count (O(1) when possible).
+   * When called with a node definition, filters by type (requires iteration).
+   * 
+   * @param nodeDef - Optional node definition to filter by
+   * @returns Total count of matching nodes
+   * 
+   * @example
+   * ```ts
+   * // Count all nodes in database (fast)
+   * const total = await db.count();
+   * 
+   * // Count users only (requires iteration)
+   * const userCount = await db.count(User);
+   * ```
+   */
+  async count<N extends NodeDef>(nodeDef?: N): Promise<number> {
+    // If no filter, use optimized count
+    if (!nodeDef) {
+      return countNodes(this._db);
+    }
+    
+    // Otherwise, iterate and count matching nodes
+    // Get the key prefix for this node type
+    const testKey = nodeDef.keyFn("__test__" as never);
+    const keyPrefix = testKey.replace(/__test__$/, "");
+    
+    let count = 0;
+    for (const nodeId of listNodes(this._db)) {
+      const key = getNodeKey(this._db._snapshot, this._db._delta, nodeId);
+      if (key && key.startsWith(keyPrefix)) {
+        count++;
+      }
+    }
+    
+    return count;
+  }
+
+  /**
+   * List all edges, optionally filtered by edge type
+   * 
+   * Returns an async generator that yields edges lazily for memory efficiency.
+   * Each yielded edge includes source/destination node references and edge properties.
+   * 
+   * @param edgeDef - Optional edge definition to filter by
+   * @returns Async generator yielding edge data with node references and properties
+   * 
+   * @example
+   * ```ts
+   * // Iterate all edges
+   * for await (const edge of db.allEdges()) {
+   *   console.log(`${edge.src.$id} -> ${edge.dst.$id}`);
+   * }
+   * 
+   * // Iterate only "follows" edges
+   * for await (const edge of db.allEdges(follows)) {
+   *   console.log(`${edge.src.$key} follows ${edge.dst.$key}`);
+   * }
+   * ```
+   */
+  async *allEdges<E extends EdgeDef>(
+    edgeDef?: E,
+  ): AsyncGenerator<{
+    src: NodeRef;
+    dst: NodeRef;
+    edge: Edge;
+    props: E extends EdgeDef ? InferEdgeProps<E> : Record<string, unknown>;
+  }> {
+    const etypeId = edgeDef ? this.resolveEtypeId(edgeDef) : undefined;
+    
+    for (const edge of listEdges(this._db, { etype: etypeId })) {
+      // Get source node info
+      const srcKey = getNodeKey(this._db._snapshot, this._db._delta, edge.src);
+      const srcDef = this.getNodeDef(edge.src);
+      
+      // Get destination node info
+      const dstKey = getNodeKey(this._db._snapshot, this._db._delta, edge.dst);
+      const dstDef = this.getNodeDef(edge.dst);
+      
+      // Load edge properties if edge definition provided
+      const props: Record<string, unknown> = {};
+      if (edgeDef) {
+        for (const [propName, propDef] of Object.entries(edgeDef.props)) {
+          const propKeyId = this.resolvePropKeyId(edgeDef, propName);
+          const propValue = getEdgeProp(this._db, edge.src, edge.etype, edge.dst, propKeyId);
+          if (propValue) {
+            props[propName] = this.fromPropValue(propValue);
+          }
+        }
+      }
+      
+      yield {
+        src: createNodeRef(srcDef!, edge.src, srcKey ?? `node:${edge.src}`, {}),
+        dst: createNodeRef(dstDef!, edge.dst, dstKey ?? `node:${edge.dst}`, {}),
+        edge,
+        props: props as E extends EdgeDef ? InferEdgeProps<E> : Record<string, unknown>,
+      };
+    }
+  }
+
+  /**
+   * Count edges, optionally filtered by edge type
+   * 
+   * When called without arguments, returns total edge count (O(1) when possible).
+   * When called with an edge definition, filters by type (requires iteration).
+   * 
+   * @param edgeDef - Optional edge definition to filter by
+   * @returns Total count of matching edges
+   * 
+   * @example
+   * ```ts
+   * // Count all edges (fast)
+   * const totalEdges = await db.countEdges();
+   * 
+   * // Count "follows" edges only
+   * const followCount = await db.countEdges(follows);
+   * ```
+   */
+  async countEdges<E extends EdgeDef>(edgeDef?: E): Promise<number> {
+    const etypeId = edgeDef ? this.resolveEtypeId(edgeDef) : undefined;
+    return countEdges(this._db, { etype: etypeId });
   }
 
   // ==========================================================================
