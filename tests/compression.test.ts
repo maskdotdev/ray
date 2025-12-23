@@ -171,7 +171,7 @@ describe("Compressed Snapshots", () => {
     const snapshot = await loadSnapshot(testDir, 1n);
 
     expect(snapshot.header.numNodes).toBe(3n);
-    expect(snapshot.header.maxNodeId).toBe(5);
+    expect(snapshot.header.maxNodeId).toBe(5n);
 
     // Check mappings
     expect(hasNode(snapshot, 1)).toBe(true);

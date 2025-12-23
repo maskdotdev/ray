@@ -473,7 +473,7 @@ describe("High-Level API", () => {
         .returning();
 
       const stats = await db.stats();
-      expect(stats.deltaNodesCreated).toBe(1n);
+      expect(stats.deltaNodesCreated).toBe(1);
 
       await db.close();
     });
@@ -494,7 +494,7 @@ describe("High-Level API", () => {
       const stats = await db.stats();
       expect(stats.snapshotGen).toBe(1n);
       expect(stats.snapshotNodes).toBe(1n);
-      expect(stats.deltaNodesCreated).toBe(0n);
+      expect(stats.deltaNodesCreated).toBe(0);
 
       await db.close();
     });

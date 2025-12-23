@@ -442,7 +442,7 @@ describe("Compaction", () => {
 
     let s = stats(db);
     expect(s.snapshotGen).toBe(0n);
-    expect(s.deltaNodesCreated).toBe(10n);
+    expect(s.deltaNodesCreated).toBe(10);
 
     // Compact
     await optimize(db);
@@ -451,8 +451,8 @@ describe("Compaction", () => {
     expect(s.snapshotGen).toBe(1n);
     expect(s.snapshotNodes).toBe(10n);
     expect(s.snapshotEdges).toBe(9n);
-    expect(s.deltaNodesCreated).toBe(0n);
-    expect(s.deltaEdgesAdded).toBe(0n);
+    expect(s.deltaNodesCreated).toBe(0);
+    expect(s.deltaEdgesAdded).toBe(0);
 
     // Data should still be accessible
     expect(getNodeByKey(db, "node0")).not.toBeNull();
