@@ -65,8 +65,8 @@ pub const TRASH_DIR: &str = "trash";
 
 /// Magic bytes for single-file format: "RayDB format 1\0" (16 bytes)
 pub const MAGIC_RAYDB: [u8; 16] = [
-    0x52, 0x61, 0x79, 0x44, 0x42, 0x20, 0x66, 0x6f, // "RayDB fo"
-    0x72, 0x6d, 0x61, 0x74, 0x20, 0x31, 0x00, 0x00, // "rmat 1\0\0"
+  0x52, 0x61, 0x79, 0x44, 0x42, 0x20, 0x66, 0x6f, // "RayDB fo"
+  0x72, 0x6d, 0x61, 0x74, 0x20, 0x31, 0x00, 0x00, // "rmat 1\0\0"
 ];
 
 /// Single-file format version
@@ -163,77 +163,77 @@ pub const INITIAL_WAL_SEG: u64 = 1;
 /// Format snapshot filename from generation
 #[inline]
 pub fn snapshot_filename(gen: u64) -> String {
-    format!("snap_{:016}{}", gen, EXT_SNAPSHOT)
+  format!("snap_{:016}{}", gen, EXT_SNAPSHOT)
 }
 
 /// Format WAL filename from segment ID
 #[inline]
 pub fn wal_filename(seg: u64) -> String {
-    format!("wal_{:016}{}", seg, EXT_WAL)
+  format!("wal_{:016}{}", seg, EXT_WAL)
 }
 
 /// Parse generation from snapshot filename
 pub fn parse_snapshot_gen(filename: &str) -> Option<u64> {
-    let prefix = "snap_";
-    let suffix = EXT_SNAPSHOT;
-    
-    if !filename.starts_with(prefix) || !filename.ends_with(suffix) {
-        return None;
-    }
-    
-    let num_str = &filename[prefix.len()..filename.len() - suffix.len()];
-    if num_str.len() != 16 {
-        return None;
-    }
-    
-    num_str.parse().ok()
+  let prefix = "snap_";
+  let suffix = EXT_SNAPSHOT;
+
+  if !filename.starts_with(prefix) || !filename.ends_with(suffix) {
+    return None;
+  }
+
+  let num_str = &filename[prefix.len()..filename.len() - suffix.len()];
+  if num_str.len() != 16 {
+    return None;
+  }
+
+  num_str.parse().ok()
 }
 
 /// Parse segment ID from WAL filename
 pub fn parse_wal_seg(filename: &str) -> Option<u64> {
-    let prefix = "wal_";
-    let suffix = EXT_WAL;
-    
-    if !filename.starts_with(prefix) || !filename.ends_with(suffix) {
-        return None;
-    }
-    
-    let num_str = &filename[prefix.len()..filename.len() - suffix.len()];
-    if num_str.len() != 16 {
-        return None;
-    }
-    
-    num_str.parse().ok()
+  let prefix = "wal_";
+  let suffix = EXT_WAL;
+
+  if !filename.starts_with(prefix) || !filename.ends_with(suffix) {
+    return None;
+  }
+
+  let num_str = &filename[prefix.len()..filename.len() - suffix.len()];
+  if num_str.len() != 16 {
+    return None;
+  }
+
+  num_str.parse().ok()
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+  use super::*;
 
-    #[test]
-    fn test_snapshot_filename() {
-        assert_eq!(snapshot_filename(1), "snap_0000000000000001.gds");
-        assert_eq!(snapshot_filename(12345), "snap_0000000000012345.gds");
-    }
+  #[test]
+  fn test_snapshot_filename() {
+    assert_eq!(snapshot_filename(1), "snap_0000000000000001.gds");
+    assert_eq!(snapshot_filename(12345), "snap_0000000000012345.gds");
+  }
 
-    #[test]
-    fn test_wal_filename() {
-        assert_eq!(wal_filename(1), "wal_0000000000000001.gdw");
-        assert_eq!(wal_filename(99999), "wal_0000000000099999.gdw");
-    }
+  #[test]
+  fn test_wal_filename() {
+    assert_eq!(wal_filename(1), "wal_0000000000000001.gdw");
+    assert_eq!(wal_filename(99999), "wal_0000000000099999.gdw");
+  }
 
-    #[test]
-    fn test_parse_snapshot_gen() {
-        assert_eq!(parse_snapshot_gen("snap_0000000000000001.gds"), Some(1));
-        assert_eq!(parse_snapshot_gen("snap_0000000000012345.gds"), Some(12345));
-        assert_eq!(parse_snapshot_gen("invalid.gds"), None);
-        assert_eq!(parse_snapshot_gen("snap_123.gds"), None);
-    }
+  #[test]
+  fn test_parse_snapshot_gen() {
+    assert_eq!(parse_snapshot_gen("snap_0000000000000001.gds"), Some(1));
+    assert_eq!(parse_snapshot_gen("snap_0000000000012345.gds"), Some(12345));
+    assert_eq!(parse_snapshot_gen("invalid.gds"), None);
+    assert_eq!(parse_snapshot_gen("snap_123.gds"), None);
+  }
 
-    #[test]
-    fn test_parse_wal_seg() {
-        assert_eq!(parse_wal_seg("wal_0000000000000001.gdw"), Some(1));
-        assert_eq!(parse_wal_seg("wal_0000000000099999.gdw"), Some(99999));
-        assert_eq!(parse_wal_seg("invalid.gdw"), None);
-    }
+  #[test]
+  fn test_parse_wal_seg() {
+    assert_eq!(parse_wal_seg("wal_0000000000000001.gdw"), Some(1));
+    assert_eq!(parse_wal_seg("wal_0000000000099999.gdw"), Some(99999));
+    assert_eq!(parse_wal_seg("invalid.gdw"), None);
+  }
 }

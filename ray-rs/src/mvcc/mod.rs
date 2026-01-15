@@ -21,8 +21,10 @@ pub mod visibility;
 pub use conflict::{ConflictDetector, ConflictError, ConflictInfo, ConflictType};
 pub use gc::{GarbageCollector, GcConfig, GcResult, GcStats, SharedGcState};
 pub use tx_manager::{TxManager, TxManagerError};
-pub use version_chain::{PooledVersion, SoaPropertyVersions, VersionChainCounts, VersionChainManager};
+pub use version_chain::{
+  PooledVersion, SoaPropertyVersions, VersionChainCounts, VersionChainManager,
+};
 pub use visibility::{
-    edge_exists, get_visible_version, get_visible_version_mut, is_visible, node_exists,
-    EdgeLike, VersionedRecord,
+  edge_exists, get_visible_version, get_visible_version_mut, is_visible, node_exists, EdgeLike,
+  VersionedRecord,
 };
