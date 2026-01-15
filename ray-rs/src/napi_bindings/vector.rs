@@ -10,7 +10,6 @@ use crate::vector::{
   DistanceMetric as RustDistanceMetric, IvfConfig as RustIvfConfig, IvfIndex as RustIvfIndex,
   IvfPqConfig as RustIvfPqConfig, IvfPqIndex as RustIvfPqIndex, MultiQueryAggregation,
   PqConfig as RustPqConfig, SearchOptions as RustSearchOptions, VectorManifest, VectorSearchResult,
-  VectorStoreConfig,
 };
 
 // ============================================================================
@@ -250,7 +249,7 @@ impl JsIvfIndex {
     let vectors_f32: Vec<f32> = vectors.iter().map(|&v| v as f32).collect();
     index
       .add_training_vectors(&vectors_f32, num_vectors as usize)
-      .map_err(|e| Error::from_reason(format!("Failed to add training vectors: {}", e)))
+      .map_err(|e| Error::from_reason(format!("Failed to add training vectors: {e}")))
   }
 
   /// Train the index on added training vectors
@@ -261,7 +260,7 @@ impl JsIvfIndex {
     let mut index = self.inner.write().map_err(|e| Error::from_reason(e.to_string()))?;
     index
       .train()
-      .map_err(|e| Error::from_reason(format!("Failed to train index: {}", e)))
+      .map_err(|e| Error::from_reason(format!("Failed to train index: {e}")))
   }
 
   /// Insert a vector into the index
@@ -273,7 +272,7 @@ impl JsIvfIndex {
     let vector_f32: Vec<f32> = vector.iter().map(|&v| v as f32).collect();
     index
       .insert(vector_id as u64, &vector_f32)
-      .map_err(|e| Error::from_reason(format!("Failed to insert vector: {}", e)))
+      .map_err(|e| Error::from_reason(format!("Failed to insert vector: {e}")))
   }
 
   /// Delete a vector from the index
@@ -309,7 +308,7 @@ impl JsIvfIndex {
 
     // Parse manifest from JSON
     let manifest: VectorManifest = serde_json::from_str(&manifest_json)
-      .map_err(|e| Error::from_reason(format!("Failed to parse manifest: {}", e)))?;
+      .map_err(|e| Error::from_reason(format!("Failed to parse manifest: {e}")))?;
 
     let query_f32: Vec<f32> = query.iter().map(|&v| v as f32).collect();
 
@@ -339,7 +338,7 @@ impl JsIvfIndex {
 
     // Parse manifest from JSON
     let manifest: VectorManifest = serde_json::from_str(&manifest_json)
-      .map_err(|e| Error::from_reason(format!("Failed to parse manifest: {}", e)))?;
+      .map_err(|e| Error::from_reason(format!("Failed to parse manifest: {e}")))?;
 
     let queries_f32: Vec<Vec<f32>> = queries
       .iter()
@@ -386,7 +385,7 @@ impl JsIvfIndex {
   #[napi(factory)]
   pub fn deserialize(data: Buffer) -> Result<JsIvfIndex> {
     let index = crate::vector::ivf::serialize::deserialize_ivf(&data)
-      .map_err(|e| Error::from_reason(format!("Failed to deserialize: {}", e)))?;
+      .map_err(|e| Error::from_reason(format!("Failed to deserialize: {e}")))?;
     Ok(JsIvfIndex {
       inner: RwLock::new(index),
     })
@@ -420,7 +419,7 @@ impl JsIvfPqIndex {
     };
 
     let index = RustIvfPqIndex::new(dimensions as usize, config)
-      .map_err(|e| Error::from_reason(format!("Failed to create index: {}", e)))?;
+      .map_err(|e| Error::from_reason(format!("Failed to create index: {e}")))?;
 
     Ok(JsIvfPqIndex {
       inner: RwLock::new(index),
@@ -448,7 +447,7 @@ impl JsIvfPqIndex {
     let vectors_f32: Vec<f32> = vectors.iter().map(|&v| v as f32).collect();
     index
       .add_training_vectors(&vectors_f32, num_vectors as usize)
-      .map_err(|e| Error::from_reason(format!("Failed to add training vectors: {}", e)))
+      .map_err(|e| Error::from_reason(format!("Failed to add training vectors: {e}")))
   }
 
   /// Train the index
@@ -457,7 +456,7 @@ impl JsIvfPqIndex {
     let mut index = self.inner.write().map_err(|e| Error::from_reason(e.to_string()))?;
     index
       .train()
-      .map_err(|e| Error::from_reason(format!("Failed to train index: {}", e)))
+      .map_err(|e| Error::from_reason(format!("Failed to train index: {e}")))
   }
 
   /// Insert a vector
@@ -467,7 +466,7 @@ impl JsIvfPqIndex {
     let vector_f32: Vec<f32> = vector.iter().map(|&v| v as f32).collect();
     index
       .insert(vector_id as u64, &vector_f32)
-      .map_err(|e| Error::from_reason(format!("Failed to insert vector: {}", e)))
+      .map_err(|e| Error::from_reason(format!("Failed to insert vector: {e}")))
   }
 
   /// Delete a vector
@@ -501,7 +500,7 @@ impl JsIvfPqIndex {
 
     // Parse manifest from JSON
     let manifest: VectorManifest = serde_json::from_str(&manifest_json)
-      .map_err(|e| Error::from_reason(format!("Failed to parse manifest: {}", e)))?;
+      .map_err(|e| Error::from_reason(format!("Failed to parse manifest: {e}")))?;
 
     let query_f32: Vec<f32> = query.iter().map(|&v| v as f32).collect();
 
@@ -529,7 +528,7 @@ impl JsIvfPqIndex {
 
     // Parse manifest from JSON
     let manifest: VectorManifest = serde_json::from_str(&manifest_json)
-      .map_err(|e| Error::from_reason(format!("Failed to parse manifest: {}", e)))?;
+      .map_err(|e| Error::from_reason(format!("Failed to parse manifest: {e}")))?;
 
     let queries_f32: Vec<Vec<f32>> = queries
       .iter()
@@ -576,7 +575,7 @@ impl JsIvfPqIndex {
   #[napi(factory)]
   pub fn deserialize(data: Buffer) -> Result<JsIvfPqIndex> {
     let index = crate::vector::ivf_pq::deserialize_ivf_pq(&data)
-      .map_err(|e| Error::from_reason(format!("Failed to deserialize: {}", e)))?;
+      .map_err(|e| Error::from_reason(format!("Failed to deserialize: {e}")))?;
     Ok(JsIvfPqIndex {
       inner: RwLock::new(index),
     })

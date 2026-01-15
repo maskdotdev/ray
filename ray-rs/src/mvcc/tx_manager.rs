@@ -292,12 +292,11 @@ pub enum TxManagerError {
 impl std::fmt::Display for TxManagerError {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
-      TxManagerError::TxNotFound(txid) => write!(f, "Transaction {} not found", txid),
+      TxManagerError::TxNotFound(txid) => write!(f, "Transaction {txid} not found"),
       TxManagerError::TxNotActive(txid, status) => {
         write!(
           f,
-          "Transaction {} is not active (status: {:?})",
-          txid, status
+          "Transaction {txid} is not active (status: {status:?})"
         )
       }
     }

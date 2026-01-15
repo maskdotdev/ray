@@ -906,6 +906,7 @@ impl IvfPqIndex {
 // ============================================================================
 
 /// Options for IVF-PQ search
+#[derive(Default)]
 pub struct IvfPqSearchOptions {
   /// Number of clusters to probe (overrides config)
   pub n_probe: Option<usize>,
@@ -915,15 +916,6 @@ pub struct IvfPqSearchOptions {
   pub threshold: Option<f32>,
 }
 
-impl Default for IvfPqSearchOptions {
-  fn default() -> Self {
-    Self {
-      n_probe: None,
-      filter: None,
-      threshold: None,
-    }
-  }
-}
 
 impl std::fmt::Debug for IvfPqSearchOptions {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -1202,19 +1194,18 @@ impl std::fmt::Display for IvfPqError {
         num_subspaces,
       } => write!(
         f,
-        "Dimensions ({}) must be divisible by num_subspaces ({})",
-        dimensions, num_subspaces
+        "Dimensions ({dimensions}) must be divisible by num_subspaces ({num_subspaces})"
       ),
       IvfPqError::DimensionMismatch { expected, got } => {
-        write!(f, "Dimension mismatch: expected {}, got {}", expected, got)
+        write!(f, "Dimension mismatch: expected {expected}, got {got}")
       }
       IvfPqError::AlreadyTrained => write!(f, "Index already trained"),
       IvfPqError::NotTrained => write!(f, "Index not trained"),
       IvfPqError::NoTrainingVectors => write!(f, "No training vectors provided"),
       IvfPqError::NotEnoughTrainingVectors { n, k } => {
-        write!(f, "Not enough training vectors: {} < {} required", n, k)
+        write!(f, "Not enough training vectors: {n} < {k} required")
       }
-      IvfPqError::TrainingFailed(msg) => write!(f, "Training failed: {}", msg),
+      IvfPqError::TrainingFailed(msg) => write!(f, "Training failed: {msg}"),
     }
   }
 }
@@ -1252,8 +1243,7 @@ impl std::fmt::Display for SerializeError {
       SerializeError::InvalidMagic { expected, got } => {
         write!(
           f,
-          "Invalid magic: expected 0x{:08X}, got 0x{:08X}",
-          expected, got
+          "Invalid magic: expected 0x{expected:08X}, got 0x{got:08X}"
         )
       }
       SerializeError::BufferUnderflow {
@@ -1264,15 +1254,13 @@ impl std::fmt::Display for SerializeError {
       } => {
         write!(
           f,
-          "Buffer underflow in {}: need {} bytes at offset {}, but only {} available",
-          context, needed, offset, available
+          "Buffer underflow in {context}: need {needed} bytes at offset {offset}, but only {available} available"
         )
       }
       SerializeError::InvalidMetric(n) => {
         write!(
           f,
-          "Invalid metric value: {}. Expected 0 (cosine), 1 (euclidean), or 2 (dot)",
-          n
+          "Invalid metric value: {n}. Expected 0 (cosine), 1 (euclidean), or 2 (dot)"
         )
       }
     }
@@ -1341,7 +1329,7 @@ pub fn ivf_pq_serialized_size(index: &IvfPqIndex) -> usize {
 
   // PQ codes
   size += 4; // count
-  for (_, codes) in &index.pq_codes {
+  for codes in index.pq_codes.values() {
     size += 8 + 4 + codes.len(); // vector_id (u64) + code_len (u32) + codes
   }
 
@@ -1534,7 +1522,7 @@ pub fn deserialize_ivf_pq(buffer: &[u8]) -> Result<IvfPqIndex, SerializeError> {
       buf_len,
       offset,
       8,
-      &format!("IVF-PQ inverted list {} header", i),
+      &format!("IVF-PQ inverted list {i} header"),
     )?;
     let cluster = u32::from_le_bytes(buffer[offset..offset + 4].try_into().unwrap()) as usize;
     offset += 4;
@@ -1545,7 +1533,7 @@ pub fn deserialize_ivf_pq(buffer: &[u8]) -> Result<IvfPqIndex, SerializeError> {
       buf_len,
       offset,
       list_length * 8,
-      &format!("IVF-PQ inverted list {} data", i),
+      &format!("IVF-PQ inverted list {i} data"),
     )?;
     let mut list = Vec::with_capacity(list_length);
     for _ in 0..list_length {
@@ -1568,7 +1556,7 @@ pub fn deserialize_ivf_pq(buffer: &[u8]) -> Result<IvfPqIndex, SerializeError> {
       buf_len,
       offset,
       4,
-      &format!("IVF-PQ PQ subspace {} centroid count", i),
+      &format!("IVF-PQ PQ subspace {i} centroid count"),
     )?;
     let centroid_count =
       u32::from_le_bytes(buffer[offset..offset + 4].try_into().unwrap()) as usize;
@@ -1578,7 +1566,7 @@ pub fn deserialize_ivf_pq(buffer: &[u8]) -> Result<IvfPqIndex, SerializeError> {
       buf_len,
       offset,
       centroid_count * 4,
-      &format!("IVF-PQ PQ subspace {} centroids", i),
+      &format!("IVF-PQ PQ subspace {i} centroids"),
     )?;
     let mut centroids = Vec::with_capacity(centroid_count);
     for _ in 0..centroid_count {
@@ -1596,13 +1584,13 @@ pub fn deserialize_ivf_pq(buffer: &[u8]) -> Result<IvfPqIndex, SerializeError> {
 
   let mut pq_codes: HashMap<u64, Vec<u8>> = HashMap::new();
   for i in 0..num_pq_codes {
-    ensure_bytes(buf_len, offset, 12, &format!("IVF-PQ PQ code {} header", i))?;
+    ensure_bytes(buf_len, offset, 12, &format!("IVF-PQ PQ code {i} header"))?;
     let vector_id = u64::from_le_bytes(buffer[offset..offset + 8].try_into().unwrap());
     offset += 8;
     let code_len = u32::from_le_bytes(buffer[offset..offset + 4].try_into().unwrap()) as usize;
     offset += 4;
 
-    ensure_bytes(buf_len, offset, code_len, &format!("IVF-PQ PQ code {} data", i))?;
+    ensure_bytes(buf_len, offset, code_len, &format!("IVF-PQ PQ code {i} data"))?;
     let codes = buffer[offset..offset + code_len].to_vec();
     offset += code_len;
     pq_codes.insert(vector_id, codes);
@@ -1642,7 +1630,7 @@ pub fn deserialize_ivf_pq(buffer: &[u8]) -> Result<IvfPqIndex, SerializeError> {
     trained,
   )
   .map_err(|e| SerializeError::BufferUnderflow {
-    context: format!("IVF-PQ index construction: {}", e),
+    context: format!("IVF-PQ index construction: {e}"),
     offset: 0,
     needed: 0,
     available: 0,
@@ -1660,7 +1648,7 @@ pub fn write_ivf_pq<W: std::io::Write>(index: &IvfPqIndex, writer: &mut W) -> st
 pub fn read_ivf_pq<R: std::io::Read>(reader: &mut R) -> Result<IvfPqIndex, SerializeError> {
   let mut buffer = Vec::new();
   reader.read_to_end(&mut buffer).map_err(|e| SerializeError::BufferUnderflow {
-    context: format!("IO error: {}", e),
+    context: format!("IO error: {e}"),
     offset: 0,
     needed: 0,
     available: 0,

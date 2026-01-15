@@ -41,9 +41,9 @@ fn bench_create_node(c: &mut Criterion) {
         |(_temp_dir, mut ray)| {
           for i in 0..count {
             let mut props = HashMap::new();
-            props.insert("name".to_string(), PropValue::String(format!("User{}", i)));
+            props.insert("name".to_string(), PropValue::String(format!("User{i}")));
             props.insert("age".to_string(), PropValue::I64(i as i64));
-            let _ = black_box(ray.create_node("User", &format!("user{}", i), props));
+            let _ = black_box(ray.create_node("User", &format!("user{i}"), props));
           }
         },
       );
@@ -63,8 +63,8 @@ fn bench_get_node_by_key(c: &mut Criterion) {
   // Create 1000 nodes (smaller for faster setup)
   for i in 0..1000 {
     let mut props = HashMap::new();
-    props.insert("name".to_string(), PropValue::String(format!("User{}", i)));
-    ray.create_node("User", &format!("user{}", i), props).unwrap();
+    props.insert("name".to_string(), PropValue::String(format!("User{i}")));
+    ray.create_node("User", &format!("user{i}"), props).unwrap();
   }
 
   group.bench_function("get_existing", |bencher| {
@@ -96,7 +96,7 @@ fn bench_node_exists(c: &mut Criterion) {
   let mut node_ids = Vec::new();
   for i in 0..1000 {
     let node = ray
-      .create_node("User", &format!("user{}", i), HashMap::new())
+      .create_node("User", &format!("user{i}"), HashMap::new())
       .unwrap();
     node_ids.push(node.id);
   }
@@ -145,7 +145,7 @@ fn bench_link(c: &mut Criterion) {
             let mut node_ids = Vec::new();
             for i in 0..node_count {
               let node = ray
-                .create_node("User", &format!("user{}", i), HashMap::new())
+                .create_node("User", &format!("user{i}"), HashMap::new())
                 .unwrap();
               node_ids.push(node.id);
             }
@@ -180,7 +180,7 @@ fn bench_has_edge(c: &mut Criterion) {
   let mut node_ids = Vec::new();
   for i in 0..100 {
     let node = ray
-      .create_node("User", &format!("user{}", i), HashMap::new())
+      .create_node("User", &format!("user{i}"), HashMap::new())
       .unwrap();
     node_ids.push(node.id);
   }
@@ -229,7 +229,7 @@ fn bench_neighbors_out(c: &mut Criterion) {
   let mut node_ids = Vec::new();
   for i in 0..100 {
     let node = ray
-      .create_node("User", &format!("user{}", i), HashMap::new())
+      .create_node("User", &format!("user{i}"), HashMap::new())
       .unwrap();
     node_ids.push(node.id);
   }
@@ -264,7 +264,7 @@ fn bench_multi_hop_traversal(c: &mut Criterion) {
   let mut node_ids = Vec::new();
   for i in 0..100 {
     let node = ray
-      .create_node("User", &format!("user{}", i), HashMap::new())
+      .create_node("User", &format!("user{i}"), HashMap::new())
       .unwrap();
     node_ids.push(node.id);
   }
@@ -334,9 +334,9 @@ fn bench_get_prop(c: &mut Criterion) {
   let mut node_ids = Vec::new();
   for i in 0..100 {
     let mut props = HashMap::new();
-    props.insert("name".to_string(), PropValue::String(format!("User{}", i)));
+    props.insert("name".to_string(), PropValue::String(format!("User{i}")));
     props.insert("age".to_string(), PropValue::I64(i as i64));
-    let node = ray.create_node("User", &format!("user{}", i), props).unwrap();
+    let node = ray.create_node("User", &format!("user{i}"), props).unwrap();
     node_ids.push(node.id);
   }
 
@@ -380,7 +380,7 @@ fn bench_set_prop(c: &mut Criterion) {
           let _ = black_box(ray.set_prop(
             node_id,
             "name",
-            PropValue::String(format!("Name{}", i)),
+            PropValue::String(format!("Name{i}")),
           ));
         }
       },
@@ -405,7 +405,7 @@ fn bench_shortest_path(c: &mut Criterion) {
   let mut node_ids = Vec::new();
   for i in 0..(grid_size * grid_size) {
     let node = ray
-      .create_node("User", &format!("user{}", i), HashMap::new())
+      .create_node("User", &format!("user{i}"), HashMap::new())
       .unwrap();
     node_ids.push(node.id);
   }
@@ -459,7 +459,7 @@ fn bench_count(c: &mut Criterion) {
   let mut node_ids = Vec::new();
   for i in 0..1000 {
     let node = ray
-      .create_node("User", &format!("user{}", i), HashMap::new())
+      .create_node("User", &format!("user{i}"), HashMap::new())
       .unwrap();
     node_ids.push(node.id);
   }
@@ -498,7 +498,7 @@ fn bench_batch_create_node(c: &mut Criterion) {
         let ops: Vec<BatchOp> = (0..count)
           .map(|i| BatchOp::CreateNode {
             node_type: "User".to_string(),
-            key_suffix: format!("batch{}_{}", batch_num, i),
+            key_suffix: format!("batch{batch_num}_{i}"),
             props: HashMap::new(),
           })
           .collect();

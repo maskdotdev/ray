@@ -309,7 +309,7 @@ impl TraversalCache {
     self
       .node_key_index
       .entry(node_id)
-      .or_insert_with(HashSet::new)
+      .or_default()
       .insert(key);
   }
 

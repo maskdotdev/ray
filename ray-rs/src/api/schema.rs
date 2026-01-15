@@ -333,7 +333,7 @@ impl NodeSchemaBuilder {
         Self {
             name: name.to_string(),
             key_fn: None,
-            key_prefix: format!("{}:", name),
+            key_prefix: format!("{name}:"),
             props: HashMap::new(),
         }
     }
@@ -388,7 +388,7 @@ impl NodeSchemaBuilder {
         let name = self.name.clone();
         let key_fn = self.key_fn.unwrap_or_else(|| {
             let name_clone = name.clone();
-            Arc::new(move |id: &str| format!("{}:{}", name_clone, id))
+            Arc::new(move |id: &str| format!("{name_clone}:{id}"))
         });
 
         NodeSchema {
@@ -586,7 +586,7 @@ impl fmt::Display for ValidationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ValidationError::MissingRequired(prop) => {
-                write!(f, "Missing required property: {}", prop)
+                write!(f, "Missing required property: {prop}")
             }
             ValidationError::TypeMismatch {
                 prop,
@@ -595,15 +595,14 @@ impl fmt::Display for ValidationError {
             } => {
                 write!(
                     f,
-                    "Type mismatch for '{}': expected {}, got {:?}",
-                    prop, expected, got
+                    "Type mismatch for '{prop}': expected {expected}, got {got:?}"
                 )
             }
             ValidationError::UnknownNodeType(name) => {
-                write!(f, "Unknown node type: {}", name)
+                write!(f, "Unknown node type: {name}")
             }
             ValidationError::UnknownEdgeType(name) => {
-                write!(f, "Unknown edge type: {}", name)
+                write!(f, "Unknown edge type: {name}")
             }
         }
     }

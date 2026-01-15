@@ -60,9 +60,7 @@ impl SingleFileDB {
 
     if !node_exists_in_delta {
       if let Some(ref snap) = *snapshot {
-        if snap.get_phys_node(node_id).is_none() {
-          return None;
-        }
+        snap.get_phys_node(node_id)?;
       } else {
         // No snapshot and node not in delta
         return None;

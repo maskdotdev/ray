@@ -95,7 +95,7 @@ pub const DB_HEADER_SIZE: usize = 4096;
 pub const DB_HEADER_RESERVED_SIZE: usize = 14;
 
 /// Default WAL buffer size (1MB - grows dynamically as needed)
-pub const WAL_DEFAULT_SIZE: usize = 1 * 1024 * 1024;
+pub const WAL_DEFAULT_SIZE: usize = 1024 * 1024;
 
 /// Minimum WAL to snapshot ratio (10%)
 pub const WAL_MIN_SNAPSHOT_RATIO: f64 = 0.1;
@@ -163,13 +163,13 @@ pub const INITIAL_WAL_SEG: u64 = 1;
 /// Format snapshot filename from generation
 #[inline]
 pub fn snapshot_filename(gen: u64) -> String {
-  format!("snap_{:016}{}", gen, EXT_SNAPSHOT)
+  format!("snap_{gen:016}{EXT_SNAPSHOT}")
 }
 
 /// Format WAL filename from segment ID
 #[inline]
 pub fn wal_filename(seg: u64) -> String {
-  format!("wal_{:016}{}", seg, EXT_WAL)
+  format!("wal_{seg:016}{EXT_WAL}")
 }
 
 /// Parse generation from snapshot filename

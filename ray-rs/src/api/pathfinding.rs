@@ -771,7 +771,7 @@ where
           s
         },
         allowed_etypes: config.allowed_etypes.clone(),
-        direction: config.direction.clone(),
+        direction: config.direction,
         max_depth: config.max_depth.saturating_sub(spur_idx),
       };
 

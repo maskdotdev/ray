@@ -3,7 +3,7 @@
 //! Provides functions for creating, deleting, and querying nodes.
 
 use crate::core::wal::record::*;
-use crate::error::{RayError, Result};
+use crate::error::Result;
 use crate::types::*;
 
 use super::tx::TxHandle;

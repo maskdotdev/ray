@@ -3,7 +3,6 @@
 //! Provides iterators for traversing nodes and edges in the graph.
 //! These iterators merge snapshot and delta state.
 
-use crate::core::snapshot::reader::SnapshotData;
 use crate::types::*;
 
 use super::db::GraphDB;
@@ -81,7 +80,7 @@ impl<'a> Iterator for NodeIter<'a> {
             let delta = self.db.delta.read();
 
             // Return created nodes one at a time
-            for (&node_id, _) in &delta.created_nodes {
+            for &node_id in delta.created_nodes.keys() {
               if !self.yielded_from_snapshot.contains(&node_id)
                 && !delta.deleted_nodes.contains(&node_id)
               {
@@ -203,7 +202,7 @@ impl<'a> Iterator for OutEdgeIter<'a> {
         OutEdgeIterPhase::DeltaAdded => {
           // Iterate delta added edges
           if let Some(add_set) = delta.out_add.get(&self.src) {
-            for patch in add_set {
+            if let Some(patch) = add_set.iter().next() {
               // Return each added edge
               return Some(Edge {
                 etype: patch.etype,
@@ -435,7 +434,7 @@ pub fn list_edges(db: &GraphDB, options: ListEdgesOptions) -> Vec<FullEdge> {
   }
 
   // From delta created nodes and added edges
-  for (&src, _) in &delta.created_nodes {
+  for &src in delta.created_nodes.keys() {
     if delta.deleted_nodes.contains(&src) {
       continue;
     }

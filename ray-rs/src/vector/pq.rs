@@ -571,16 +571,15 @@ impl std::fmt::Display for PqError {
         num_subspaces,
       } => write!(
         f,
-        "Dimensions ({}) must be divisible by num_subspaces ({})",
-        dimensions, num_subspaces
+        "Dimensions ({dimensions}) must be divisible by num_subspaces ({num_subspaces})"
       ),
       PqError::DimensionMismatch { expected, got } => {
-        write!(f, "Dimension mismatch: expected {}, got {}", expected, got)
+        write!(f, "Dimension mismatch: expected {expected}, got {got}")
       }
       PqError::AlreadyTrained => write!(f, "Index already trained"),
       PqError::NotTrained => write!(f, "Index must be trained before use"),
       PqError::NotEnoughTrainingVectors { n, k } => {
-        write!(f, "Need at least {} training vectors, got {}", k, n)
+        write!(f, "Need at least {k} training vectors, got {n}")
       }
     }
   }

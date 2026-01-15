@@ -9,7 +9,7 @@ use crate::types::NodeId;
 
 use super::distance::normalize_in_place;
 use super::types::{
-  Fragment, FragmentState, RowGroup, VectorLocation, VectorManifest, VectorSearchResult,
+  Fragment, FragmentState, RowGroup, VectorLocation, VectorManifest,
   VectorStoreConfig,
 };
 
@@ -173,16 +173,16 @@ fn vector_store_delete_by_vector_id(manifest: &mut VectorManifest, vector_id: u6
 /// Get a vector by node ID
 ///
 /// Returns the vector data as a slice, or None if not found
-pub fn vector_store_get<'a>(manifest: &'a VectorManifest, node_id: NodeId) -> Option<&'a [f32]> {
+pub fn vector_store_get(manifest: &VectorManifest, node_id: NodeId) -> Option<&[f32]> {
   let vector_id = manifest.node_to_vector.get(&node_id)?;
   vector_store_get_by_id(manifest, *vector_id)
 }
 
 /// Get a vector by vector ID
-pub fn vector_store_get_by_id<'a>(
-  manifest: &'a VectorManifest,
+pub fn vector_store_get_by_id(
+  manifest: &VectorManifest,
   vector_id: u64,
-) -> Option<&'a [f32]> {
+) -> Option<&[f32]> {
   let location = manifest.vector_locations.get(&vector_id)?;
   let fragment = manifest
     .fragments
@@ -466,12 +466,11 @@ impl std::fmt::Display for VectorStoreError {
       VectorStoreError::DimensionMismatch { expected, got } => {
         write!(
           f,
-          "Vector dimension mismatch: expected {}, got {}",
-          expected, got
+          "Vector dimension mismatch: expected {expected}, got {got}"
         )
       }
-      VectorStoreError::InvalidVector(msg) => write!(f, "Invalid vector: {}", msg),
-      VectorStoreError::NotFound(id) => write!(f, "Vector not found: {}", id),
+      VectorStoreError::InvalidVector(msg) => write!(f, "Invalid vector: {msg}"),
+      VectorStoreError::NotFound(id) => write!(f, "Vector not found: {id}"),
     }
   }
 }

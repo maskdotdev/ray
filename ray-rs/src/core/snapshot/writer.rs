@@ -4,7 +4,7 @@
 //! Ported from src/core/snapshot-writer.ts
 
 use crate::constants::*;
-use crate::error::{RayError, Result};
+use crate::error::Result;
 use crate::types::*;
 use crate::util::binary::*;
 use crate::util::compression::{maybe_compress, CompressionOptions, CompressionType};

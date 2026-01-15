@@ -58,11 +58,11 @@ impl LockHandle {
       .create(true)
       .truncate(false)
       .open(path.as_ref())
-      .map_err(|e| RayError::LockFailed(format!("Failed to open lock file: {}", e)))?;
+      .map_err(|e| RayError::LockFailed(format!("Failed to open lock file: {e}")))?;
 
     file
       .lock_exclusive()
-      .map_err(|e| RayError::LockFailed(format!("Failed to acquire exclusive lock: {}", e)))?;
+      .map_err(|e| RayError::LockFailed(format!("Failed to acquire exclusive lock: {e}")))?;
 
     Ok(Self {
       file,
@@ -78,11 +78,11 @@ impl LockHandle {
       .create(true)
       .truncate(false)
       .open(path.as_ref())
-      .map_err(|e| RayError::LockFailed(format!("Failed to open lock file: {}", e)))?;
+      .map_err(|e| RayError::LockFailed(format!("Failed to open lock file: {e}")))?;
 
     file
       .lock_shared()
-      .map_err(|e| RayError::LockFailed(format!("Failed to acquire shared lock: {}", e)))?;
+      .map_err(|e| RayError::LockFailed(format!("Failed to acquire shared lock: {e}")))?;
 
     Ok(Self {
       file,
@@ -98,7 +98,7 @@ impl LockHandle {
       .create(true)
       .truncate(false)
       .open(path.as_ref())
-      .map_err(|e| RayError::LockFailed(format!("Failed to open lock file: {}", e)))?;
+      .map_err(|e| RayError::LockFailed(format!("Failed to open lock file: {e}")))?;
 
     match file.try_lock_exclusive() {
       Ok(()) => Ok(Some(Self {
@@ -107,8 +107,7 @@ impl LockHandle {
       })),
       Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Ok(None),
       Err(e) => Err(RayError::LockFailed(format!(
-        "Failed to try exclusive lock: {}",
-        e
+        "Failed to try exclusive lock: {e}"
       ))),
     }
   }
@@ -121,7 +120,7 @@ impl LockHandle {
       .create(true)
       .truncate(false)
       .open(path.as_ref())
-      .map_err(|e| RayError::LockFailed(format!("Failed to open lock file: {}", e)))?;
+      .map_err(|e| RayError::LockFailed(format!("Failed to open lock file: {e}")))?;
 
     match file.try_lock_shared() {
       Ok(()) => Ok(Some(Self {
@@ -130,8 +129,7 @@ impl LockHandle {
       })),
       Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Ok(None),
       Err(e) => Err(RayError::LockFailed(format!(
-        "Failed to try shared lock: {}",
-        e
+        "Failed to try shared lock: {e}"
       ))),
     }
   }
@@ -146,7 +144,7 @@ impl LockHandle {
     self
       .file
       .unlock()
-      .map_err(|e| RayError::LockFailed(format!("Failed to release lock: {}", e)))
+      .map_err(|e| RayError::LockFailed(format!("Failed to release lock: {e}")))
   }
 }
 

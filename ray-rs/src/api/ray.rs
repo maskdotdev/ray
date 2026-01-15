@@ -14,17 +14,14 @@
 use crate::error::{RayError, Result};
 use crate::graph::db::{close_graph_db, open_graph_db, GraphDB, OpenOptions};
 use crate::graph::edges::{
-  add_edge, del_edge_prop, delete_edge, edge_exists, get_edge_prop, get_edge_props,
-  get_neighbors_in, get_neighbors_out, set_edge_prop,
+  add_edge, del_edge_prop, delete_edge, edge_exists, set_edge_prop,
   // Direct read functions (no transaction)
   edge_exists_db, get_edge_prop_db, get_edge_props_db, get_neighbors_in_db, get_neighbors_out_db,
 };
 use crate::graph::iterators::{count_edges, count_nodes, list_edges, list_nodes, FullEdge, ListEdgesOptions};
 use crate::graph::nodes::{
   create_node, del_node_prop, delete_node, get_node_by_key, get_node_prop, node_exists,
-  set_node_prop, NodeOpts,
-  // Direct read functions (no transaction)
-  count_nodes_db, get_node_by_key_db, get_node_prop_db, node_exists_db,
+  set_node_prop, NodeOpts, get_node_by_key_db, get_node_prop_db, node_exists_db,
 };
 use crate::graph::tx::{begin_tx, commit, rollback, TxHandle};
 use crate::types::*;
@@ -284,7 +281,7 @@ impl Ray {
       node_def.label_id = Some(label_id);
 
       // Define property keys
-      for (prop_name, _prop_def) in &node_def.props {
+      for prop_name in node_def.props.keys() {
         let prop_key_id = db.get_or_create_propkey(prop_name);
         node_def.prop_key_ids.insert(prop_name.clone(), prop_key_id);
       }
@@ -300,7 +297,7 @@ impl Ray {
       edge_def.etype_id = Some(etype_id);
 
       // Define property keys
-      for (prop_name, _prop_def) in &edge_def.props {
+      for prop_name in edge_def.props.keys() {
         let prop_key_id = db.get_or_create_propkey(prop_name);
         edge_def.prop_key_ids.insert(prop_name.clone(), prop_key_id);
       }
@@ -330,7 +327,7 @@ impl Ray {
     let node_def = self
       .nodes
       .get(node_type)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown node type: {}", node_type)))?
+      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown node type: {node_type}")))?
       .clone();
 
     let full_key = node_def.key(key_suffix);
@@ -382,7 +379,7 @@ impl Ray {
     let key_prefix = self
       .nodes
       .get(node_type)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown node type: {}", node_type)))?
+      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown node type: {node_type}")))?
       .key_prefix
       .clone();
 
@@ -398,7 +395,7 @@ impl Ray {
     let node_def = self
       .nodes
       .get(node_type)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown node type: {}", node_type)))?;
+      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown node type: {node_type}")))?;
 
     let full_key = node_def.key(key_suffix);
 
@@ -524,7 +521,7 @@ impl Ray {
     let full_key = self
       .nodes
       .get(node_type)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown node type: {}", node_type)))?
+      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown node type: {node_type}")))?
       .key(key_suffix);
 
     let mut handle = begin_tx(&self.db)?;
@@ -548,7 +545,7 @@ impl Ray {
     let edge_def = self
       .edges
       .get(edge_type)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {}", edge_type)))?;
+      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {edge_type}")))?;
 
     let etype_id = edge_def
       .etype_id
@@ -579,7 +576,7 @@ impl Ray {
     let edge_def = self
       .edges
       .get(edge_type)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {}", edge_type)))?
+      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {edge_type}")))?
       .clone();
 
     let etype_id = edge_def
@@ -609,7 +606,7 @@ impl Ray {
     let edge_def = self
       .edges
       .get(edge_type)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {}", edge_type)))?;
+      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {edge_type}")))?;
 
     let etype_id = edge_def
       .etype_id
@@ -626,7 +623,7 @@ impl Ray {
     let edge_def = self
       .edges
       .get(edge_type)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {}", edge_type)))?;
+      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {edge_type}")))?;
 
     let etype_id = edge_def
       .etype_id
@@ -643,7 +640,7 @@ impl Ray {
         let edge_def = self
           .edges
           .get(name)
-          .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {}", name)))?;
+          .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {name}")))?;
         edge_def.etype_id
       }
       None => None,
@@ -660,7 +657,7 @@ impl Ray {
         let edge_def = self
           .edges
           .get(name)
-          .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {}", name)))?;
+          .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {name}")))?;
         edge_def.etype_id
       }
       None => None,
@@ -688,7 +685,7 @@ impl Ray {
     let edge_def = self
       .edges
       .get(edge_type)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {}", edge_type)))?;
+      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {edge_type}")))?;
 
     let etype_id = edge_def
       .etype_id
@@ -715,7 +712,7 @@ impl Ray {
     let edge_def = self
       .edges
       .get(edge_type)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {}", edge_type)))?;
+      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {edge_type}")))?;
 
     let etype_id = edge_def
       .etype_id
@@ -751,7 +748,7 @@ impl Ray {
     let edge_def = self
       .edges
       .get(edge_type)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {}", edge_type)))?;
+      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {edge_type}")))?;
 
     let etype_id = edge_def
       .etype_id
@@ -776,7 +773,7 @@ impl Ray {
     let edge_def = self
       .edges
       .get(edge_type)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {}", edge_type)))?;
+      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {edge_type}")))?;
 
     let etype_id = edge_def
       .etype_id
@@ -785,7 +782,7 @@ impl Ray {
     let prop_key_id = self
       .db
       .get_propkey_id(prop_name)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown property: {}", prop_name)))?;
+      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown property: {prop_name}")))?;
 
     let mut handle = begin_tx(&self.db)?;
     del_edge_prop(&mut handle, src, etype_id, dst, prop_key_id)?;
@@ -814,7 +811,7 @@ impl Ray {
     let edge_def = self
       .edges
       .get(edge_type)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {}", edge_type)))?;
+      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {edge_type}")))?;
 
     let etype_id = edge_def
       .etype_id
@@ -847,7 +844,7 @@ impl Ray {
     let node_def = self
       .nodes
       .get(node_type)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown node type: {}", node_type)))?;
+      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown node type: {node_type}")))?;
 
     let prefix = &node_def.key_prefix;
     let mut count = 0u64;
@@ -873,7 +870,7 @@ impl Ray {
     let edge_def = self
       .edges
       .get(edge_type)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {}", edge_type)))?;
+      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {edge_type}")))?;
 
     let etype_id = edge_def
       .etype_id
@@ -902,7 +899,7 @@ impl Ray {
     let node_def = self
       .nodes
       .get(node_type)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown node type: {}", node_type)))?
+      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown node type: {node_type}")))?
       .clone();
 
     let prefix = node_def.key_prefix.clone();
@@ -939,7 +936,7 @@ impl Ray {
         let edge_def = self
           .edges
           .get(name)
-          .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {}", name)))?;
+          .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {name}")))?;
         edge_def.etype_id
       }
       None => None,
@@ -978,7 +975,7 @@ impl Ray {
     let node_def = self
       .nodes
       .get(node_type)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown node type: {}", node_type)))?;
+      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown node type: {node_type}")))?;
 
     let full_key = node_def.key(key_suffix);
 
@@ -1122,7 +1119,7 @@ impl Ray {
         let edge_def = self
           .edges
           .get(name)
-          .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {}", name)))?;
+          .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {name}")))?;
         edge_def.etype_id
       }
       None => None,
@@ -1302,8 +1299,8 @@ impl Ray {
 
     DbStats {
       snapshot_gen: 0,
-      snapshot_nodes: node_count as u64,
-      snapshot_edges: edge_count as u64,
+      snapshot_nodes: node_count,
+      snapshot_edges: edge_count,
       snapshot_max_node_id: 0,
       delta_nodes_created: 0,
       delta_nodes_deleted: 0,
@@ -1399,22 +1396,20 @@ impl Ray {
 
     if counted_nodes as usize != node_count {
       warnings.push(format!(
-        "Node count mismatch: list_nodes returned {} but count_nodes returned {}",
-        node_count, counted_nodes
+        "Node count mismatch: list_nodes returned {node_count} but count_nodes returned {counted_nodes}"
       ));
     }
 
     if counted_edges as usize != edge_count {
       warnings.push(format!(
-        "Edge count mismatch: list_edges returned {} but count_edges returned {}",
-        edge_count, counted_edges
+        "Edge count mismatch: list_edges returned {edge_count} but count_edges returned {counted_edges}"
       ));
     }
 
     // Check 4: Schema consistency - verify all registered edge types have valid IDs
     for (edge_name, edge_def) in &self.edges {
       if edge_def.etype_id.is_none() {
-        warnings.push(format!("Edge type '{}' has no assigned etype_id", edge_name));
+        warnings.push(format!("Edge type '{edge_name}' has no assigned etype_id"));
       }
     }
 
@@ -1615,7 +1610,7 @@ impl<'a> RayTraversalBuilder<'a> {
           .ray
           .edges
           .get(name)
-          .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {}", name)))?;
+          .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {name}")))?;
         Ok(edge_def.etype_id)
       }
       None => Ok(None),
@@ -1678,7 +1673,7 @@ impl<'a> RayPathBuilder<'a> {
       .ray
       .edges
       .get(edge_type)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {}", edge_type)))?;
+      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {edge_type}")))?;
 
     if let Some(etype_id) = edge_def.etype_id {
       self.allowed_etypes.insert(etype_id);
@@ -1851,7 +1846,7 @@ impl Ray {
           props,
         } => {
           let node_def = self.nodes.get(&node_type).ok_or_else(|| {
-            RayError::InvalidSchema(format!("Unknown node type: {}", node_type))
+            RayError::InvalidSchema(format!("Unknown node type: {node_type}"))
           })?;
 
           let full_key = node_def.key(&key_suffix);
@@ -1884,7 +1879,7 @@ impl Ray {
           dst,
         } => {
           let edge_def = self.edges.get(&edge_type).ok_or_else(|| {
-            RayError::InvalidSchema(format!("Unknown edge type: {}", edge_type))
+            RayError::InvalidSchema(format!("Unknown edge type: {edge_type}"))
           })?;
 
           let etype_id = edge_def
@@ -1901,7 +1896,7 @@ impl Ray {
           dst,
         } => {
           let edge_def = self.edges.get(&edge_type).ok_or_else(|| {
-            RayError::InvalidSchema(format!("Unknown edge type: {}", edge_type))
+            RayError::InvalidSchema(format!("Unknown edge type: {edge_type}"))
           })?;
 
           let etype_id = edge_def
@@ -1925,7 +1920,7 @@ impl Ray {
 
         BatchOp::DelProp { node_id, prop_name } => {
           let prop_key_id = handle.db.get_propkey_id(&prop_name).ok_or_else(|| {
-            RayError::InvalidSchema(format!("Unknown property: {}", prop_name))
+            RayError::InvalidSchema(format!("Unknown property: {prop_name}"))
           })?;
           del_node_prop(&mut handle, node_id, prop_key_id)?;
           BatchResult::PropDeleted
@@ -1971,7 +1966,7 @@ impl<'a> TxContext<'a> {
     let node_def = self
       .nodes
       .get(node_type)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown node type: {}", node_type)))?
+      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown node type: {node_type}")))?
       .clone();
 
     let full_key = node_def.key(key_suffix);
@@ -2003,7 +1998,7 @@ impl<'a> TxContext<'a> {
     let edge_def = self
       .edges
       .get(edge_type)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {}", edge_type)))?;
+      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {edge_type}")))?;
 
     let etype_id = edge_def
       .etype_id
@@ -2018,7 +2013,7 @@ impl<'a> TxContext<'a> {
     let edge_def = self
       .edges
       .get(edge_type)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {}", edge_type)))?;
+      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {edge_type}")))?;
 
     let etype_id = edge_def
       .etype_id
@@ -2040,7 +2035,7 @@ impl<'a> TxContext<'a> {
       .handle
       .db
       .get_propkey_id(prop_name)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown property: {}", prop_name)))?;
+      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown property: {prop_name}")))?;
     del_node_prop(&mut self.handle, node_id, prop_key_id)?;
     Ok(())
   }
@@ -2055,7 +2050,7 @@ impl<'a> TxContext<'a> {
     let edge_def = self
       .edges
       .get(edge_type)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {}", edge_type)))?;
+      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {edge_type}")))?;
 
     let etype_id = edge_def
       .etype_id
@@ -2070,7 +2065,7 @@ impl<'a> TxContext<'a> {
       .handle
       .db
       .get_propkey_id(prop_name)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown property: {}", prop_name)))?;
+      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown property: {prop_name}")))?;
 
     Ok(get_node_prop(&self.handle, node_id, prop_key_id))
   }
@@ -2080,7 +2075,7 @@ impl<'a> TxContext<'a> {
     let node_def = self
       .nodes
       .get(node_type)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown node type: {}", node_type)))?;
+      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown node type: {node_type}")))?;
 
     let full_key = node_def.key(key_suffix);
     let node_id = get_node_by_key(&self.handle, &full_key);

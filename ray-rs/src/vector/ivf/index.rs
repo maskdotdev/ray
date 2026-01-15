@@ -12,7 +12,7 @@
 use std::collections::HashMap;
 
 use crate::types::NodeId;
-use crate::vector::distance::{normalize, squared_euclidean};
+use crate::vector::distance::normalize;
 use crate::vector::types::{
   DistanceMetric, IvfConfig, MultiQueryAggregation, VectorManifest, VectorSearchResult,
 };
@@ -563,6 +563,7 @@ impl IvfIndex {
 // ============================================================================
 
 /// Options for IVF search
+#[derive(Default)]
 pub struct SearchOptions {
   /// Number of clusters to probe (overrides config)
   pub n_probe: Option<usize>,
@@ -572,15 +573,6 @@ pub struct SearchOptions {
   pub threshold: Option<f32>,
 }
 
-impl Default for SearchOptions {
-  fn default() -> Self {
-    Self {
-      n_probe: None,
-      filter: None,
-      threshold: None,
-    }
-  }
-}
 
 impl std::fmt::Debug for SearchOptions {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -714,12 +706,12 @@ impl std::fmt::Display for IvfError {
       IvfError::NotTrained => write!(f, "Index not trained"),
       IvfError::NoTrainingVectors => write!(f, "No training vectors provided"),
       IvfError::NotEnoughTrainingVectors { n, k } => {
-        write!(f, "Not enough training vectors: {} < {} clusters", n, k)
+        write!(f, "Not enough training vectors: {n} < {k} clusters")
       }
       IvfError::DimensionMismatch { expected, got } => {
-        write!(f, "Dimension mismatch: expected {}, got {}", expected, got)
+        write!(f, "Dimension mismatch: expected {expected}, got {got}")
       }
-      IvfError::TrainingFailed(msg) => write!(f, "Training failed: {}", msg),
+      IvfError::TrainingFailed(msg) => write!(f, "Training failed: {msg}"),
     }
   }
 }

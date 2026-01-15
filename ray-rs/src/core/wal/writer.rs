@@ -229,7 +229,7 @@ pub fn create_wal_segment(db_path: &Path, segment_id: u64) -> Result<String> {
 /// Generate WAL filename from segment ID
 /// Format: "wal_NNNNNNNNNN.gdw"
 pub fn wal_filename(segment_id: u64) -> String {
-  format!("wal_{:010}.gdw", segment_id)
+  format!("wal_{segment_id:010}.gdw")
 }
 
 // ============================================================================

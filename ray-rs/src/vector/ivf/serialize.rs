@@ -58,12 +58,11 @@ pub enum SerializeError {
 impl std::fmt::Display for SerializeError {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
-      SerializeError::Io(e) => write!(f, "IO error: {}", e),
+      SerializeError::Io(e) => write!(f, "IO error: {e}"),
       SerializeError::InvalidMagic { expected, got } => {
         write!(
           f,
-          "Invalid magic: expected 0x{:08X}, got 0x{:08X}",
-          expected, got
+          "Invalid magic: expected 0x{expected:08X}, got 0x{got:08X}"
         )
       }
       SerializeError::BufferUnderflow {
@@ -74,15 +73,13 @@ impl std::fmt::Display for SerializeError {
       } => {
         write!(
           f,
-          "Buffer underflow in {}: need {} bytes at offset {}, but only {} available",
-          context, needed, offset, available
+          "Buffer underflow in {context}: need {needed} bytes at offset {offset}, but only {available} available"
         )
       }
       SerializeError::InvalidMetric(n) => {
         write!(
           f,
-          "Invalid metric value: {}. Expected 0 (cosine), 1 (euclidean), or 2 (dot)",
-          n
+          "Invalid metric value: {n}. Expected 0 (cosine), 1 (euclidean), or 2 (dot)"
         )
       }
     }
@@ -276,7 +273,7 @@ pub fn deserialize_ivf(buffer: &[u8]) -> Result<IvfIndex, SerializeError> {
       buf_len,
       offset,
       8,
-      &format!("IVF inverted list {} header", i),
+      &format!("IVF inverted list {i} header"),
     )?;
     let cluster = u32::from_le_bytes(buffer[offset..offset + 4].try_into().unwrap()) as usize;
     offset += 4;
@@ -287,7 +284,7 @@ pub fn deserialize_ivf(buffer: &[u8]) -> Result<IvfIndex, SerializeError> {
       buf_len,
       offset,
       list_length * 8,
-      &format!("IVF inverted list {} data", i),
+      &format!("IVF inverted list {i} data"),
     )?;
     let mut list = Vec::with_capacity(list_length);
     for _ in 0..list_length {
@@ -362,7 +359,7 @@ pub fn serialize_manifest(manifest: &VectorManifest) -> Vec<u8> {
   buffer.extend_from_slice(&(manifest.active_fragment_id as u32).to_le_bytes());
   buffer.extend_from_slice(&(manifest.total_vectors as u32).to_le_bytes());
   buffer.extend_from_slice(&(manifest.total_deleted as u32).to_le_bytes());
-  buffer.extend_from_slice(&(manifest.next_vector_id as u64).to_le_bytes());
+  buffer.extend_from_slice(&manifest.next_vector_id.to_le_bytes());
   buffer.extend_from_slice(&[0u8; 20]); // reserved
 
   // Fragments
@@ -403,14 +400,14 @@ pub fn serialize_manifest(manifest: &VectorManifest) -> Vec<u8> {
   // Node ID to Vector ID mapping
   buffer.extend_from_slice(&(manifest.node_to_vector.len() as u32).to_le_bytes());
   for (&node_id, &vector_id) in &manifest.node_to_vector {
-    buffer.extend_from_slice(&(node_id as u64).to_le_bytes());
+    buffer.extend_from_slice(&node_id.to_le_bytes());
     buffer.extend_from_slice(&vector_id.to_le_bytes()); // u64
   }
 
   // Vector ID to Location mapping
   buffer.extend_from_slice(&(manifest.vector_locations.len() as u32).to_le_bytes());
   for (&vector_id, location) in &manifest.vector_locations {
-    buffer.extend_from_slice(&(vector_id as u64).to_le_bytes());
+    buffer.extend_from_slice(&vector_id.to_le_bytes());
     buffer.extend_from_slice(&(location.fragment_id as u32).to_le_bytes());
     buffer.extend_from_slice(&(location.local_index as u32).to_le_bytes());
   }
@@ -477,7 +474,7 @@ pub fn deserialize_manifest(buffer: &[u8]) -> Result<VectorManifest, SerializeEr
       buf_len,
       offset,
       FRAGMENT_HEADER_SIZE,
-      &format!("fragment {} header", f),
+      &format!("fragment {f} header"),
     )?;
 
     let id = u32::from_le_bytes(buffer[offset..offset + 4].try_into().unwrap()) as usize;
@@ -510,7 +507,7 @@ pub fn deserialize_manifest(buffer: &[u8]) -> Result<VectorManifest, SerializeEr
         buf_len,
         offset,
         ROW_GROUP_HEADER_SIZE,
-        &format!("fragment {} row group {} header", f, r),
+        &format!("fragment {f} row group {r} header"),
       )?;
 
       let rg_id = u32::from_le_bytes(buffer[offset..offset + 4].try_into().unwrap()) as usize;
@@ -526,7 +523,7 @@ pub fn deserialize_manifest(buffer: &[u8]) -> Result<VectorManifest, SerializeEr
         buf_len,
         offset,
         data_length,
-        &format!("fragment {} row group {} data", f, r),
+        &format!("fragment {f} row group {r} data"),
       )?;
       let mut data = Vec::with_capacity(data_length / 4);
       for _ in 0..(data_length / 4) {
@@ -547,7 +544,7 @@ pub fn deserialize_manifest(buffer: &[u8]) -> Result<VectorManifest, SerializeEr
       buf_len,
       offset,
       deletion_bitmap_length,
-      &format!("fragment {} deletion bitmap", f),
+      &format!("fragment {f} deletion bitmap"),
     )?;
     let mut deletion_bitmap = Vec::with_capacity(deletion_bitmap_length / 4);
     for _ in 0..(deletion_bitmap_length / 4) {

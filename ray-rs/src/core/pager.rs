@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use memmap2::Mmap;
 
 use crate::constants::{
-  DEFAULT_PAGE_SIZE, LOCK_BYTE_OFFSET, LOCK_BYTE_RANGE, MAX_PAGE_SIZE, MIN_PAGE_SIZE, OS_PAGE_SIZE,
+  LOCK_BYTE_OFFSET, LOCK_BYTE_RANGE, MAX_PAGE_SIZE, MIN_PAGE_SIZE, OS_PAGE_SIZE,
 };
 use crate::error::{RayError, Result};
 
@@ -70,8 +70,7 @@ impl FilePager {
   /// Calculate the page number range for the lock byte region
   fn lock_byte_page_range(&self) -> (u32, u32) {
     let start = (LOCK_BYTE_OFFSET / self.page_size as u64) as u32;
-    let end = ((LOCK_BYTE_OFFSET + LOCK_BYTE_RANGE as u64 + self.page_size as u64 - 1)
-      / self.page_size as u64) as u32;
+    let end = (LOCK_BYTE_OFFSET + LOCK_BYTE_RANGE as u64).div_ceil(self.page_size as u64) as u32;
     (start, end)
   }
 
@@ -113,8 +112,7 @@ impl FilePager {
     // Safety check: don't write to lock byte range
     if self.is_lock_byte_page(page_num) {
       return Err(RayError::Internal(format!(
-        "Cannot write to lock byte page range (page {})",
-        page_num
+        "Cannot write to lock byte page range (page {page_num})"
       )));
     }
 
@@ -156,8 +154,7 @@ impl FilePager {
     // Validate mmap alignment
     if start_offset % OS_PAGE_SIZE != 0 {
       return Err(RayError::Internal(format!(
-        "mmap offset {} must be aligned to OS page size {}",
-        start_offset, OS_PAGE_SIZE
+        "mmap offset {start_offset} must be aligned to OS page size {OS_PAGE_SIZE}"
       )));
     }
 
@@ -187,7 +184,7 @@ impl FilePager {
 
     // Calculate current page count
     let current_page_count =
-      ((self.file_size + self.page_size as u64 - 1) / self.page_size as u64) as u32;
+      self.file_size.div_ceil(self.page_size as u64) as u32;
     let mut start_page = current_page_count;
 
     // Check if we need to skip the lock byte range
@@ -349,7 +346,7 @@ pub fn create_pager<P: AsRef<Path>>(file_path: P, page_size: usize) -> Result<Fi
 
 /// Validate that a page size is valid (power of 2, within bounds)
 pub fn is_valid_page_size(page_size: usize) -> bool {
-  if page_size < MIN_PAGE_SIZE || page_size > MAX_PAGE_SIZE {
+  if !(MIN_PAGE_SIZE..=MAX_PAGE_SIZE).contains(&page_size) {
     return false;
   }
   // Check power of 2
@@ -358,7 +355,7 @@ pub fn is_valid_page_size(page_size: usize) -> bool {
 
 /// Calculate the number of pages needed to store a given byte count
 pub fn pages_to_store(byte_count: usize, page_size: usize) -> u32 {
-  ((byte_count + page_size - 1) / page_size) as u32
+  byte_count.div_ceil(page_size) as u32
 }
 
 #[cfg(test)]

@@ -269,7 +269,7 @@ impl Database {
   pub fn open(path: String, options: Option<OpenOptions>) -> Result<Database> {
     let opts: RustOpenOptions = options.unwrap_or_default().into();
     let db = open_single_file(&path, opts)
-      .map_err(|e| Error::from_reason(format!("Failed to open database: {}", e)))?;
+      .map_err(|e| Error::from_reason(format!("Failed to open database: {e}")))?;
     Ok(Database { inner: Some(db) })
   }
 
@@ -278,7 +278,7 @@ impl Database {
   pub fn close(&mut self) -> Result<()> {
     if let Some(db) = self.inner.take() {
       close_single_file(db)
-        .map_err(|e| Error::from_reason(format!("Failed to close database: {}", e)))?;
+        .map_err(|e| Error::from_reason(format!("Failed to close database: {e}")))?;
     }
     Ok(())
   }
@@ -313,7 +313,7 @@ impl Database {
     let db = self.get_db()?;
     let txid = db
       .begin(read_only.unwrap_or(false))
-      .map_err(|e| Error::from_reason(format!("Failed to begin transaction: {}", e)))?;
+      .map_err(|e| Error::from_reason(format!("Failed to begin transaction: {e}")))?;
     Ok(txid as i64)
   }
 
@@ -322,7 +322,7 @@ impl Database {
   pub fn commit(&self) -> Result<()> {
     let db = self.get_db()?;
     db.commit()
-      .map_err(|e| Error::from_reason(format!("Failed to commit: {}", e)))
+      .map_err(|e| Error::from_reason(format!("Failed to commit: {e}")))
   }
 
   /// Rollback the current transaction
@@ -330,7 +330,7 @@ impl Database {
   pub fn rollback(&self) -> Result<()> {
     let db = self.get_db()?;
     db.rollback()
-      .map_err(|e| Error::from_reason(format!("Failed to rollback: {}", e)))
+      .map_err(|e| Error::from_reason(format!("Failed to rollback: {e}")))
   }
 
   /// Check if there's an active transaction
@@ -350,7 +350,7 @@ impl Database {
     let db = self.get_db()?;
     let node_id = db
       .create_node(key.as_deref())
-      .map_err(|e| Error::from_reason(format!("Failed to create node: {}", e)))?;
+      .map_err(|e| Error::from_reason(format!("Failed to create node: {e}")))?;
     Ok(node_id as i64)
   }
 
@@ -359,7 +359,7 @@ impl Database {
   pub fn delete_node(&self, node_id: i64) -> Result<()> {
     let db = self.get_db()?;
     db.delete_node(node_id as NodeId)
-      .map_err(|e| Error::from_reason(format!("Failed to delete node: {}", e)))
+      .map_err(|e| Error::from_reason(format!("Failed to delete node: {e}")))
   }
 
   /// Check if a node exists
@@ -406,7 +406,7 @@ impl Database {
   pub fn add_edge(&self, src: i64, etype: u32, dst: i64) -> Result<()> {
     let db = self.get_db()?;
     db.add_edge(src as NodeId, etype as ETypeId, dst as NodeId)
-      .map_err(|e| Error::from_reason(format!("Failed to add edge: {}", e)))
+      .map_err(|e| Error::from_reason(format!("Failed to add edge: {e}")))
   }
 
   /// Add an edge by type name
@@ -414,7 +414,7 @@ impl Database {
   pub fn add_edge_by_name(&self, src: i64, etype_name: String, dst: i64) -> Result<()> {
     let db = self.get_db()?;
     db.add_edge_by_name(src as NodeId, &etype_name, dst as NodeId)
-      .map_err(|e| Error::from_reason(format!("Failed to add edge: {}", e)))
+      .map_err(|e| Error::from_reason(format!("Failed to add edge: {e}")))
   }
 
   /// Delete an edge
@@ -422,7 +422,7 @@ impl Database {
   pub fn delete_edge(&self, src: i64, etype: u32, dst: i64) -> Result<()> {
     let db = self.get_db()?;
     db.delete_edge(src as NodeId, etype as ETypeId, dst as NodeId)
-      .map_err(|e| Error::from_reason(format!("Failed to delete edge: {}", e)))
+      .map_err(|e| Error::from_reason(format!("Failed to delete edge: {e}")))
   }
 
   /// Check if an edge exists
@@ -510,7 +510,7 @@ impl Database {
     let db = self.get_db()?;
     let etype = db
       .get_etype_id(&etype_name)
-      .ok_or_else(|| Error::from_reason(format!("Unknown edge type: {}", etype_name)))?;
+      .ok_or_else(|| Error::from_reason(format!("Unknown edge type: {etype_name}")))?;
     Ok(
       db.list_edges(Some(etype))
         .into_iter()
@@ -536,7 +536,7 @@ impl Database {
     let db = self.get_db()?;
     let etype = db
       .get_etype_id(&etype_name)
-      .ok_or_else(|| Error::from_reason(format!("Unknown edge type: {}", etype_name)))?;
+      .ok_or_else(|| Error::from_reason(format!("Unknown edge type: {etype_name}")))?;
     Ok(db.count_edges_by_type(etype) as i64)
   }
 
@@ -549,7 +549,7 @@ impl Database {
   pub fn set_node_prop(&self, node_id: i64, key_id: u32, value: JsPropValue) -> Result<()> {
     let db = self.get_db()?;
     db.set_node_prop(node_id as NodeId, key_id as PropKeyId, value.into())
-      .map_err(|e| Error::from_reason(format!("Failed to set property: {}", e)))
+      .map_err(|e| Error::from_reason(format!("Failed to set property: {e}")))
   }
 
   /// Set a node property by key name
@@ -562,7 +562,7 @@ impl Database {
   ) -> Result<()> {
     let db = self.get_db()?;
     db.set_node_prop_by_name(node_id as NodeId, &key_name, value.into())
-      .map_err(|e| Error::from_reason(format!("Failed to set property: {}", e)))
+      .map_err(|e| Error::from_reason(format!("Failed to set property: {e}")))
   }
 
   /// Delete a node property
@@ -570,7 +570,7 @@ impl Database {
   pub fn delete_node_prop(&self, node_id: i64, key_id: u32) -> Result<()> {
     let db = self.get_db()?;
     db.delete_node_prop(node_id as NodeId, key_id as PropKeyId)
-      .map_err(|e| Error::from_reason(format!("Failed to delete property: {}", e)))
+      .map_err(|e| Error::from_reason(format!("Failed to delete property: {e}")))
   }
 
   /// Get a specific node property
@@ -620,7 +620,7 @@ impl Database {
       key_id as PropKeyId,
       value.into(),
     )
-    .map_err(|e| Error::from_reason(format!("Failed to set edge property: {}", e)))
+    .map_err(|e| Error::from_reason(format!("Failed to set edge property: {e}")))
   }
 
   /// Set an edge property by key name
@@ -641,7 +641,7 @@ impl Database {
       &key_name,
       value.into(),
     )
-    .map_err(|e| Error::from_reason(format!("Failed to set edge property: {}", e)))
+    .map_err(|e| Error::from_reason(format!("Failed to set edge property: {e}")))
   }
 
   /// Delete an edge property
@@ -654,7 +654,7 @@ impl Database {
       dst as NodeId,
       key_id as PropKeyId,
     )
-    .map_err(|e| Error::from_reason(format!("Failed to delete edge property: {}", e)))
+    .map_err(|e| Error::from_reason(format!("Failed to delete edge property: {e}")))
   }
 
   /// Get a specific edge property
@@ -707,7 +707,7 @@ impl Database {
     // Convert f64 to f32
     let vector_f32: Vec<f32> = vector.iter().map(|&v| v as f32).collect();
     db.set_node_vector(node_id as NodeId, prop_key_id as PropKeyId, &vector_f32)
-      .map_err(|e| Error::from_reason(format!("Failed to set vector: {}", e)))
+      .map_err(|e| Error::from_reason(format!("Failed to set vector: {e}")))
   }
 
   /// Get a vector embedding for a node
@@ -725,7 +725,7 @@ impl Database {
   pub fn delete_node_vector(&self, node_id: i64, prop_key_id: u32) -> Result<()> {
     let db = self.get_db()?;
     db.delete_node_vector(node_id as NodeId, prop_key_id as PropKeyId)
-      .map_err(|e| Error::from_reason(format!("Failed to delete vector: {}", e)))
+      .map_err(|e| Error::from_reason(format!("Failed to delete vector: {e}")))
   }
 
   /// Check if a node has a vector embedding
@@ -811,7 +811,7 @@ impl Database {
   pub fn define_label(&self, name: String) -> Result<u32> {
     let db = self.get_db()?;
     db.define_label(&name)
-      .map_err(|e| Error::from_reason(format!("Failed to define label: {}", e)))
+      .map_err(|e| Error::from_reason(format!("Failed to define label: {e}")))
   }
 
   /// Add a label to a node
@@ -819,7 +819,7 @@ impl Database {
   pub fn add_node_label(&self, node_id: i64, label_id: u32) -> Result<()> {
     let db = self.get_db()?;
     db.add_node_label(node_id as NodeId, label_id)
-      .map_err(|e| Error::from_reason(format!("Failed to add label: {}", e)))
+      .map_err(|e| Error::from_reason(format!("Failed to add label: {e}")))
   }
 
   /// Add a label to a node by name
@@ -827,7 +827,7 @@ impl Database {
   pub fn add_node_label_by_name(&self, node_id: i64, label_name: String) -> Result<()> {
     let db = self.get_db()?;
     db.add_node_label_by_name(node_id as NodeId, &label_name)
-      .map_err(|e| Error::from_reason(format!("Failed to add label: {}", e)))
+      .map_err(|e| Error::from_reason(format!("Failed to add label: {e}")))
   }
 
   /// Remove a label from a node
@@ -835,7 +835,7 @@ impl Database {
   pub fn remove_node_label(&self, node_id: i64, label_id: u32) -> Result<()> {
     let db = self.get_db()?;
     db.remove_node_label(node_id as NodeId, label_id)
-      .map_err(|e| Error::from_reason(format!("Failed to remove label: {}", e)))
+      .map_err(|e| Error::from_reason(format!("Failed to remove label: {e}")))
   }
 
   /// Check if a node has a label
@@ -861,7 +861,7 @@ impl Database {
   pub fn checkpoint(&self) -> Result<()> {
     let db = self.get_db()?;
     db.checkpoint()
-      .map_err(|e| Error::from_reason(format!("Failed to checkpoint: {}", e)))
+      .map_err(|e| Error::from_reason(format!("Failed to checkpoint: {e}")))
   }
 
   /// Perform a background (non-blocking) checkpoint
@@ -869,7 +869,7 @@ impl Database {
   pub fn background_checkpoint(&self) -> Result<()> {
     let db = self.get_db()?;
     db.background_checkpoint()
-      .map_err(|e| Error::from_reason(format!("Failed to background checkpoint: {}", e)))
+      .map_err(|e| Error::from_reason(format!("Failed to background checkpoint: {e}")))
   }
 
   /// Check if checkpoint is recommended
@@ -888,7 +888,7 @@ impl Database {
   pub fn optimize(&self) -> Result<()> {
     let db = self.get_db()?;
     db.checkpoint()
-      .map_err(|e| Error::from_reason(format!("Failed to optimize: {}", e)))
+      .map_err(|e| Error::from_reason(format!("Failed to optimize: {e}")))
   }
 
   /// Get database statistics

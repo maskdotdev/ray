@@ -362,7 +362,7 @@ impl SingleFileDB {
 
     // Ensure file is large enough
     let required_pages = start_page + num_pages;
-    let current_pages = (pager.file_size() as usize + page_size - 1) / page_size;
+    let current_pages = (pager.file_size() as usize).div_ceil(page_size);
 
     if required_pages as usize > current_pages {
       pager.allocate_pages(required_pages - current_pages as u32)?;

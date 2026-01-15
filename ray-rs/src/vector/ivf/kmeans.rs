@@ -624,10 +624,10 @@ impl std::fmt::Display for KMeansError {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
       KMeansError::NotEnoughVectors { n, k } => {
-        write!(f, "Not enough vectors: {} < {} clusters", n, k)
+        write!(f, "Not enough vectors: {n} < {k} clusters")
       }
       KMeansError::DimensionMismatch { expected, got } => {
-        write!(f, "Dimension mismatch: expected {}, got {}", expected, got)
+        write!(f, "Dimension mismatch: expected {expected}, got {got}")
       }
     }
   }

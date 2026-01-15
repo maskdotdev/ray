@@ -130,7 +130,7 @@ pub fn commit(handle: &mut TxHandle) -> Result<()> {
   // Collect all WAL records
   let mut all_records = Vec::with_capacity(handle.tx.wal_records.len() + 2);
   all_records.push(begin_record);
-  all_records.extend(handle.tx.wal_records.drain(..));
+  all_records.append(&mut handle.tx.wal_records);
   all_records.push(commit_record);
 
   // Flush to WAL

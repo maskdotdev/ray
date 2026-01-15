@@ -3,7 +3,6 @@
 //! Ported from src/core/wal.ts
 
 use crate::constants::*;
-use crate::error::{RayError, Result};
 use crate::types::*;
 use crate::util::binary::*;
 use crate::util::crc::crc32c;

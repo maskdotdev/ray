@@ -307,7 +307,7 @@ impl VectorIndex {
       if let Some(ref mut index) = self.index {
         if index.trained {
           if let Some(existing_vector) = vector_store_get(&self.manifest, node_id) {
-            index.delete(existing_vector_id as u64, &existing_vector);
+            index.delete(existing_vector_id, existing_vector);
           }
         }
       }
@@ -325,7 +325,7 @@ impl VectorIndex {
     if let Some(ref mut index) = self.index {
       if index.trained {
         if let Some(stored_vector) = vector_store_get(&self.manifest, node_id) {
-          let _ = index.insert(vector_id as u64, &stored_vector);
+          let _ = index.insert(vector_id as u64, stored_vector);
         }
       } else {
         self.needs_training = true;
@@ -356,7 +356,7 @@ impl VectorIndex {
       if index.trained {
         if let Some(&vector_id) = self.manifest.node_to_vector.get(&node_id) {
           if let Some(vector) = vector_store_get(&self.manifest, node_id) {
-            index.delete(vector_id as u64, &vector);
+            index.delete(vector_id, vector);
           }
         }
       }
@@ -417,7 +417,7 @@ impl VectorIndex {
 
     for (&node_id, &vector_id) in &self.manifest.node_to_vector {
       if let Some(vector) = vector_store_get(&self.manifest, node_id) {
-        training_data.extend_from_slice(&vector);
+        training_data.extend_from_slice(vector);
         vector_ids.push(vector_id);
       }
     }
@@ -440,7 +440,7 @@ impl VectorIndex {
     for (i, &vector_id) in vector_ids.iter().enumerate() {
       let offset = i * dimensions;
       let vector = &training_data[offset..offset + dimensions];
-      let _ = index.insert(vector_id as u64, vector);
+      let _ = index.insert(vector_id, vector);
     }
 
     self.index = Some(index);
@@ -547,9 +547,9 @@ impl VectorIndex {
     for (&node_id, &vector_id) in &self.manifest.node_to_vector {
       if let Some(vector) = vector_store_get(&self.manifest, node_id) {
         let distance = match metric {
-          DistanceMetric::Cosine => cosine_distance(query_for_search, &vector),
-          DistanceMetric::Euclidean => euclidean_distance(query_for_search, &vector),
-          DistanceMetric::DotProduct => -dot_product(query_for_search, &vector), // Negate for sorting
+          DistanceMetric::Cosine => cosine_distance(query_for_search, vector),
+          DistanceMetric::Euclidean => euclidean_distance(query_for_search, vector),
+          DistanceMetric::DotProduct => -dot_product(query_for_search, vector), // Negate for sorting
         };
 
         let similarity = metric.distance_to_similarity(distance);
@@ -639,18 +639,17 @@ impl std::fmt::Display for VectorIndexError {
       VectorIndexError::DimensionMismatch { expected, got } => {
         write!(
           f,
-          "Vector dimension mismatch: expected {}, got {}",
-          expected, got
+          "Vector dimension mismatch: expected {expected}, got {got}"
         )
       }
       VectorIndexError::InvalidVector => {
         write!(f, "Invalid vector: contains NaN or Inf values")
       }
       VectorIndexError::StoreError(msg) => {
-        write!(f, "Store error: {}", msg)
+        write!(f, "Store error: {msg}")
       }
       VectorIndexError::TrainingError(msg) => {
-        write!(f, "Training error: {}", msg)
+        write!(f, "Training error: {msg}")
       }
     }
   }

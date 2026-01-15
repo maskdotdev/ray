@@ -14,7 +14,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::constants::*;
-use crate::error::{RayError, Result};
+use crate::error::Result;
 use crate::types::*;
 use crate::util::compression::CompressionOptions;
 
@@ -351,7 +351,7 @@ fn gc_snapshots(db_path: &Path, active_gen: u64, prev_gen: u64) -> Result<()> {
 
       // Delete older snapshots
       let filepath = entry.path();
-      if let Err(_) = fs::remove_file(&filepath) {
+      if fs::remove_file(&filepath).is_err() {
         // On Windows, file might be in use - try moving to trash
         let trash_dir = db_path.join(TRASH_DIR);
         let _ = fs::create_dir_all(&trash_dir);

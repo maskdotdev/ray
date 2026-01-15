@@ -82,7 +82,7 @@ impl SingleFileDB {
 
         // Log errors but don't fail the commit
         if let Err(e) = result {
-          eprintln!("Warning: Auto-checkpoint failed: {}", e);
+          eprintln!("Warning: Auto-checkpoint failed: {e}");
         }
       }
     }

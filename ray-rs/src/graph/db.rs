@@ -481,7 +481,7 @@ pub fn open_graph_db<P: AsRef<Path>>(path: P, options: OpenOptions) -> Result<Gr
       Ok(snap) => Some(snap),
       Err(e) => {
         // Log warning but don't fail - database can work without snapshot
-        eprintln!("Warning: Failed to load snapshot {}: {}", snapshot_name, e);
+        eprintln!("Warning: Failed to load snapshot {snapshot_name}: {e}");
         None
       }
     }

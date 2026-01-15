@@ -19,7 +19,7 @@ impl DbHeaderV1 {
     }
 
     // Verify magic
-    if &data[0..16] != MAGIC_RAYDB {
+    if data[0..16] != MAGIC_RAYDB {
       return Err(RayError::InvalidMagic {
         expected: u32::from_le_bytes(MAGIC_RAYDB[0..4].try_into().unwrap()),
         got: read_u32(data, 0),

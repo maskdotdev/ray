@@ -250,7 +250,7 @@ pub fn open_single_file<P: AsRef<Path>>(
         Some(snap)
       }
       Err(e) => {
-        eprintln!("Warning: Failed to parse snapshot: {}", e);
+        eprintln!("Warning: Failed to parse snapshot: {e}");
         None
       }
     }

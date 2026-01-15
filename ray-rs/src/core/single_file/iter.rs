@@ -256,7 +256,7 @@ impl SingleFileDB {
       delta_edges_added: delta.total_edges_added(),
       delta_edges_deleted: delta.total_edges_deleted(),
       wal_segment: 0, // Not applicable for single-file
-      wal_bytes: self.wal_stats().used as u64,
+      wal_bytes: self.wal_stats().used,
       recommend_compact: self.should_checkpoint(0.8),
       mvcc_stats: None,
     }
