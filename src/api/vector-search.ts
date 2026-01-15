@@ -28,6 +28,64 @@ import { normalize, validateVector } from "../vector/normalize.ts";
 import { getDistanceFunction, distanceToSimilarity } from "../vector/distance.ts";
 
 // ============================================================================
+// LRU Cache
+// ============================================================================
+
+const DEFAULT_CACHE_MAX_SIZE = 10_000;
+
+/**
+ * Simple LRU cache with a maximum size limit
+ */
+class LRUCache<K, V> {
+  private readonly _map = new Map<K, V>();
+  private readonly _maxSize: number;
+
+  constructor(maxSize: number = DEFAULT_CACHE_MAX_SIZE) {
+    this._maxSize = maxSize;
+  }
+
+  get(key: K): V | undefined {
+    const value = this._map.get(key);
+    if (value !== undefined) {
+      // Move to end (most recently used)
+      this._map.delete(key);
+      this._map.set(key, value);
+    }
+    return value;
+  }
+
+  set(key: K, value: V): void {
+    // If key exists, delete it first so it goes to end
+    if (this._map.has(key)) {
+      this._map.delete(key);
+    } else if (this._map.size >= this._maxSize) {
+      // Evict oldest entry (first in map)
+      const firstKey = this._map.keys().next().value;
+      if (firstKey !== undefined) {
+        this._map.delete(firstKey);
+      }
+    }
+    this._map.set(key, value);
+  }
+
+  has(key: K): boolean {
+    return this._map.has(key);
+  }
+
+  delete(key: K): boolean {
+    return this._map.delete(key);
+  }
+
+  clear(): void {
+    this._map.clear();
+  }
+
+  get size(): number {
+    return this._map.size;
+  }
+}
+
+// ============================================================================
 // Types
 // ============================================================================
 
@@ -46,6 +104,8 @@ export interface VectorIndexOptions {
   ivf?: Partial<IvfConfig>;
   /** Minimum training vectors before index training (default: 1000) */
   trainingThreshold?: number;
+  /** Maximum node refs to cache for search results (default: 10_000) */
+  cacheMaxSize?: number;
 }
 
 export interface SimilarOptions {
@@ -93,7 +153,7 @@ export interface VectorSearchHit<N extends NodeDef = NodeDef> {
 export class VectorIndex {
   private readonly _manifest: VectorManifest;
   private _index: IvfIndex | null = null;
-  private readonly _nodeRefCache: Map<NodeID, NodeRef> = new Map();
+  private readonly _nodeRefCache: LRUCache<NodeID, NodeRef>;
   private readonly _trainingThreshold: number;
   private readonly _ivfConfig: Partial<IvfConfig>;
   private _needsTraining: boolean = true;
@@ -108,6 +168,7 @@ export class VectorIndex {
       normalize: shouldNormalize = metric === 'cosine',
       ivf = {},
       trainingThreshold = 1000,
+      cacheMaxSize = DEFAULT_CACHE_MAX_SIZE,
     } = options;
 
     this._manifest = createVectorStore(dimensions, {
@@ -119,6 +180,7 @@ export class VectorIndex {
 
     this._ivfConfig = ivf;
     this._trainingThreshold = trainingThreshold;
+    this._nodeRefCache = new LRUCache(cacheMaxSize);
   }
 
   /**
@@ -364,7 +426,14 @@ export class VectorIndex {
     const candidates: VectorSearchResult[] = [];
 
     for (const [nodeId, vectorId] of this._manifest.nodeIdToVectorId) {
-      if (filter && !filter(nodeId)) continue;
+      if (filter) {
+        try {
+          if (!filter(nodeId)) continue;
+        } catch {
+          // Filter threw an error - skip this result
+          continue;
+        }
+      }
 
       const vector = vectorStoreGet(this._manifest, nodeId);
       if (!vector) continue;

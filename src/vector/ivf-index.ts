@@ -500,7 +500,14 @@ export function ivfSearch(
       // Apply filter if provided
       if (options?.filter) {
         const nodeId = vectorStoreGetNodeId(manifest, vectorId);
-        if (nodeId !== undefined && !options.filter(nodeId)) continue;
+        if (nodeId !== undefined) {
+          try {
+            if (!options.filter(nodeId)) continue;
+          } catch {
+            // Filter threw an error - skip this result
+            continue;
+          }
+        }
       }
 
       // Compute distance using the appropriate function

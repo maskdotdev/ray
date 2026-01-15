@@ -5,11 +5,32 @@
 import type { IvfIndex, IvfConfig, VectorManifest, Fragment, RowGroup } from "./types.ts";
 
 // ============================================================================
-// IVF Index Serialization
+// Constants
 // ============================================================================
 
 const IVF_MAGIC = 0x49564631; // "IVF1"
 const IVF_HEADER_SIZE = 32;
+const MANIFEST_MAGIC = 0x56454331; // "VEC1"
+const MANIFEST_HEADER_SIZE = 64;
+
+// ============================================================================
+// Bounds Checking Helper
+// ============================================================================
+
+/**
+ * Ensure buffer has enough bytes remaining for a read operation
+ */
+function ensureBytes(bufferLength: number, offset: number, needed: number, context: string): void {
+  if (offset + needed > bufferLength) {
+    throw new Error(
+      `Buffer underflow in ${context}: need ${needed} bytes at offset ${offset}, but buffer is only ${bufferLength} bytes`
+    );
+  }
+}
+
+// ============================================================================
+// IVF Index Serialization
+// ============================================================================
 
 /**
  * Calculate serialized size of IVF index
@@ -105,6 +126,9 @@ export function deserializeIvf(buffer: Uint8Array): {
   index: IvfIndex;
   dimensions: number;
 } {
+  const bufLen = buffer.byteLength;
+  ensureBytes(bufLen, 0, IVF_HEADER_SIZE, "IVF header");
+  
   const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
   let offset = 0;
 
@@ -137,6 +161,8 @@ export function deserializeIvf(buffer: Uint8Array): {
   };
 
   // Centroids
+  const centroidsSize = nClusters * dimensions * 4;
+  ensureBytes(bufLen, offset, centroidsSize, "IVF centroids");
   const centroids = new Float32Array(nClusters * dimensions);
   for (let i = 0; i < centroids.length; i++) {
     centroids[i] = view.getFloat32(offset, true);
@@ -144,17 +170,20 @@ export function deserializeIvf(buffer: Uint8Array): {
   }
 
   // Inverted lists
+  ensureBytes(bufLen, offset, 4, "IVF inverted list count");
   const numLists = view.getUint32(offset, true);
   offset += 4;
   const invertedLists = new Map<number, number[]>();
 
   for (let i = 0; i < numLists; i++) {
+    ensureBytes(bufLen, offset, 8, `IVF inverted list ${i} header`);
     const cluster = view.getUint32(offset, true);
     offset += 4;
     const listLength = view.getUint32(offset, true);
     offset += 4;
+    
+    ensureBytes(bufLen, offset, listLength * 4, `IVF inverted list ${i} data`);
     const list: number[] = [];
-
     for (let j = 0; j < listLength; j++) {
       list.push(view.getUint32(offset, true));
       offset += 4;
@@ -178,8 +207,6 @@ export function deserializeIvf(buffer: Uint8Array): {
 // Vector Manifest Serialization
 // ============================================================================
 
-const MANIFEST_MAGIC = 0x56454331; // "VEC1"
-const MANIFEST_HEADER_SIZE = 64;
 const FRAGMENT_HEADER_SIZE = 32;
 const ROW_GROUP_HEADER_SIZE = 16;
 
@@ -328,6 +355,9 @@ export function serializeManifest(manifest: VectorManifest): Uint8Array {
  * Deserialize vector manifest from binary
  */
 export function deserializeManifest(buffer: Uint8Array): VectorManifest {
+  const bufLen = buffer.byteLength;
+  ensureBytes(bufLen, 0, MANIFEST_HEADER_SIZE, "manifest header");
+  
   const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
   let offset = 0;
 
@@ -374,6 +404,7 @@ export function deserializeManifest(buffer: Uint8Array): VectorManifest {
 
   for (let f = 0; f < numFragments; f++) {
     // Fragment header
+    ensureBytes(bufLen, offset, FRAGMENT_HEADER_SIZE, `fragment ${f} header`);
     const id = view.getUint32(offset, true);
     offset += 4;
     const state = view.getUint8(offset) === 0 ? "active" : "sealed";
@@ -393,6 +424,7 @@ export function deserializeManifest(buffer: Uint8Array): VectorManifest {
     const rowGroups: RowGroup[] = [];
 
     for (let r = 0; r < numRowGroups; r++) {
+      ensureBytes(bufLen, offset, ROW_GROUP_HEADER_SIZE, `fragment ${f} row group ${r} header`);
       const rgId = view.getUint32(offset, true);
       offset += 4;
       const count = view.getUint32(offset, true);
@@ -402,6 +434,7 @@ export function deserializeManifest(buffer: Uint8Array): VectorManifest {
       offset += 4; // reserved
 
       // Copy row group data
+      ensureBytes(bufLen, offset, dataLength, `fragment ${f} row group ${r} data`);
       const data = new Float32Array(dataLength / 4);
       const srcView = new DataView(buffer.buffer, buffer.byteOffset + offset, dataLength);
       for (let i = 0; i < data.length; i++) {
@@ -413,6 +446,7 @@ export function deserializeManifest(buffer: Uint8Array): VectorManifest {
     }
 
     // Deletion bitmap
+    ensureBytes(bufLen, offset, deletionBitmapLength, `fragment ${f} deletion bitmap`);
     const deletionBitmap = new Uint32Array(deletionBitmapLength / 4);
     const bitmapView = new DataView(buffer.buffer, buffer.byteOffset + offset, deletionBitmapLength);
     for (let i = 0; i < deletionBitmap.length; i++) {
@@ -431,8 +465,11 @@ export function deserializeManifest(buffer: Uint8Array): VectorManifest {
   }
 
   // Node ID to Vector ID mapping
+  ensureBytes(bufLen, offset, 4, "node-to-vector mapping count");
   const nodeIdToVectorIdCount = view.getUint32(offset, true);
   offset += 4;
+  
+  ensureBytes(bufLen, offset, nodeIdToVectorIdCount * 16, "node-to-vector mapping data");
   const nodeIdToVectorId = new Map<number, number>();
   const vectorIdToNodeId = new Map<number, number>();
 
@@ -447,8 +484,11 @@ export function deserializeManifest(buffer: Uint8Array): VectorManifest {
   }
 
   // Vector ID to Location mapping
+  ensureBytes(bufLen, offset, 4, "vector-to-location mapping count");
   const vectorIdToLocationCount = view.getUint32(offset, true);
   offset += 4;
+  
+  ensureBytes(bufLen, offset, vectorIdToLocationCount * 16, "vector-to-location mapping data");
   const vectorIdToLocation = new Map<number, { fragmentId: number; localIndex: number }>();
 
   for (let i = 0; i < vectorIdToLocationCount; i++) {
@@ -499,6 +539,6 @@ function numberToMetric(n: number): "cosine" | "euclidean" | "dot" {
     case 2:
       return "dot";
     default:
-      return "cosine";
+      throw new Error(`Unknown metric value: ${n}. Expected 0 (cosine), 1 (euclidean), or 2 (dot)`);
   }
 }
