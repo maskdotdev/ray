@@ -9,10 +9,10 @@ use super::lru::LruCache;
 use super::property::PropertyCache;
 use super::query::QueryCache;
 use super::traversal::{CachedNeighbors, TraversalCache, TraversalDirection};
-use crate::types::{
-  CacheOptions, CacheStats, ETypeId, Edge, NodeId, PropKeyId, PropValue, PropertyCacheConfig,
-  QueryCacheConfig, TraversalCacheConfig,
-};
+use crate::types::{CacheOptions, CacheStats, ETypeId, Edge, NodeId, PropKeyId, PropValue};
+
+#[cfg(test)]
+use crate::types::{PropertyCacheConfig, QueryCacheConfig, TraversalCacheConfig};
 
 // ============================================================================
 // Default Configuration

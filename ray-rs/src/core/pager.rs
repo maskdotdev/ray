@@ -93,7 +93,7 @@ impl FilePager {
     self.file.seek(SeekFrom::Start(offset))?;
 
     // Read as much as we can (may be less than page_size at end of file)
-    let bytes_read = self.file.read(&mut buffer)?;
+    let _bytes_read = self.file.read(&mut buffer)?;
 
     // Rest is already zeros
     Ok(buffer)

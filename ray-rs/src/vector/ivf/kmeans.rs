@@ -9,6 +9,7 @@ use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use rayon::prelude::*;
 
+#[cfg(test)]
 use crate::vector::distance::squared_euclidean;
 
 // ============================================================================

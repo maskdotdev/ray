@@ -668,7 +668,7 @@ where
     None => return Vec::new(),
   };
 
-  let source = config.source;
+  let _source = config.source;
 
   // Result: the k shortest paths
   let mut result_paths: Vec<PathResult> = Vec::with_capacity(k);

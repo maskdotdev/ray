@@ -2,7 +2,6 @@
 //!
 //! Exposes graph traversal and pathfinding algorithms to JavaScript.
 
-use napi::bindgen_prelude::*;
 use napi_derive::napi;
 use std::collections::HashSet;
 
@@ -368,7 +367,7 @@ impl JsGraphAccessor {
   pub fn traverse_single(
     &self,
     start_nodes: Vec<i64>,
-    direction: JsTraversalDirection,
+    _direction: JsTraversalDirection,
     edge_type: Option<u32>,
   ) -> Vec<JsTraversalResult> {
     let start: Vec<NodeId> = start_nodes.iter().map(|&id| id as NodeId).collect();
