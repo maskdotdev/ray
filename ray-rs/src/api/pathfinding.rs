@@ -421,7 +421,6 @@ fn reconstruct_path(
 ) -> PathResult {
   let mut path = Vec::new();
   let mut edges = Vec::new();
-  let mut total_weight = 0.0;
 
   let mut current_id = Some(target_id);
   let mut path_states = Vec::new();
@@ -457,14 +456,11 @@ fn reconstruct_path(
       if let Some(edge) = state.edge {
         edges.push(edge);
       }
-      // Calculate weight as difference in costs
-      let prev_cost = path_states.get(i - 1).map(|s| s.cost).unwrap_or(0.0);
-      total_weight = state.cost - prev_cost;
     }
   }
 
-  // Fix total_weight to be actual total
-  total_weight = path_states.last().map(|s| s.cost).unwrap_or(0.0);
+  // Total weight is the cost to reach the target
+  let total_weight = path_states.last().map(|s| s.cost).unwrap_or(0.0);
 
   PathResult {
     path,
