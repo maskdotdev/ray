@@ -45,6 +45,43 @@ impl DistanceMetric {
 }
 
 // ============================================================================
+// Multi-Query Aggregation
+// ============================================================================
+
+/// Aggregation method for multi-query vector search
+///
+/// When searching with multiple query vectors, this determines how
+/// distances from different queries are combined for each candidate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum MultiQueryAggregation {
+  /// Use minimum distance (best match across any query)
+  #[default]
+  Min,
+  /// Use maximum distance (worst match across queries)
+  Max,
+  /// Use average distance
+  Avg,
+  /// Use sum of distances
+  Sum,
+}
+
+impl MultiQueryAggregation {
+  /// Aggregate a slice of distances
+  pub fn aggregate(&self, distances: &[f32]) -> f32 {
+    if distances.is_empty() {
+      return f32::INFINITY;
+    }
+
+    match self {
+      MultiQueryAggregation::Min => distances.iter().cloned().fold(f32::INFINITY, f32::min),
+      MultiQueryAggregation::Max => distances.iter().cloned().fold(f32::NEG_INFINITY, f32::max),
+      MultiQueryAggregation::Avg => distances.iter().sum::<f32>() / distances.len() as f32,
+      MultiQueryAggregation::Sum => distances.iter().sum(),
+    }
+  }
+}
+
+// ============================================================================
 // Vector Store Configuration
 // ============================================================================
 

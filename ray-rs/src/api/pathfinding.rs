@@ -574,6 +574,33 @@ where
 
     a_star(config, self.get_neighbors, self.get_weight, heuristic)
   }
+
+  /// Find k shortest paths using Yen's algorithm
+  ///
+  /// Returns up to k different paths sorted by total weight.
+  pub fn k_shortest(self, k: usize) -> Vec<PathResult> {
+    if self.targets.is_empty() || k == 0 {
+      return Vec::new();
+    }
+
+    let config = PathConfig {
+      source: self.source,
+      targets: self.targets,
+      allowed_etypes: self.allowed_etypes,
+      direction: self.direction,
+      max_depth: self.max_depth,
+    };
+
+    yen_k_shortest(config, k, self.get_neighbors, self.get_weight)
+  }
+
+  /// Find all paths (alias for k_shortest with a large k)
+  ///
+  /// Note: This limits to 100 paths by default to prevent excessive computation.
+  /// Use `k_shortest(n)` if you need a specific number.
+  pub fn all_paths(self) -> Vec<PathResult> {
+    self.k_shortest(100)
+  }
 }
 
 // ============================================================================
@@ -588,6 +615,213 @@ where
   F: Fn(NodeId, TraversalDirection, Option<ETypeId>) -> Vec<Edge>,
 {
   dijkstra(config, get_neighbors, |_, _, _| 1.0)
+}
+
+// ============================================================================
+// Yen's K-Shortest Paths Algorithm
+// ============================================================================
+
+/// Find the k shortest paths using Yen's algorithm
+///
+/// Yen's algorithm finds the k shortest loopless paths in a graph.
+/// It works by:
+/// 1. Finding the shortest path using Dijkstra
+/// 2. For each subsequent path, systematically "spur" from nodes of previous paths
+/// 3. Use a priority queue to select the next shortest candidate path
+///
+/// # Arguments
+/// * `config` - Pathfinding configuration (source, target, etc.)
+/// * `k` - Maximum number of paths to find
+/// * `get_neighbors` - Function to get neighbors for a node
+/// * `get_weight` - Function to get edge weight
+///
+/// # Returns
+/// Vector of up to k shortest paths, sorted by total weight
+///
+/// # Example
+/// ```ignore
+/// let config = PathConfig::new(source_id, target_id).max_depth(10);
+///
+/// let paths = yen_k_shortest(
+///     config,
+///     3,  // Find up to 3 shortest paths
+///     |node, dir, etype| get_neighbors(node, dir, etype),
+///     |src, etype, dst| 1.0,  // Unweighted
+/// );
+///
+/// for (i, path) in paths.iter().enumerate() {
+///     println!("Path {}: {:?} (weight: {})", i + 1, path.path, path.total_weight);
+/// }
+/// ```
+pub fn yen_k_shortest<F, W>(config: PathConfig, k: usize, get_neighbors: F, get_weight: W) -> Vec<PathResult>
+where
+  F: Fn(NodeId, TraversalDirection, Option<ETypeId>) -> Vec<Edge>,
+  W: Fn(NodeId, ETypeId, NodeId) -> f64,
+{
+  if k == 0 {
+    return Vec::new();
+  }
+
+  // We need exactly one target for Yen's algorithm
+  let target = match config.targets.iter().next() {
+    Some(&t) => t,
+    None => return Vec::new(),
+  };
+
+  let source = config.source;
+
+  // Result: the k shortest paths
+  let mut result_paths: Vec<PathResult> = Vec::with_capacity(k);
+
+  // Find the first shortest path using Dijkstra
+  let first_path = dijkstra(config.clone(), &get_neighbors, &get_weight);
+  if !first_path.found {
+    return Vec::new();
+  }
+  result_paths.push(first_path);
+
+  if k == 1 {
+    return result_paths;
+  }
+
+  // Candidate paths (potential k-shortest paths) stored as (weight, path)
+  // Using BinaryHeap would be ideal but we need custom ordering
+  let mut candidates: Vec<PathResult> = Vec::new();
+
+  // For each path we've found (except we keep finding more)
+  for path_idx in 0..k - 1 {
+    if path_idx >= result_paths.len() {
+      break;
+    }
+
+    let prev_path = &result_paths[path_idx];
+    let prev_path_nodes = &prev_path.path;
+
+    // For each node in the previous path (except the last), use it as a spur node
+    for spur_idx in 0..prev_path_nodes.len().saturating_sub(1) {
+      let spur_node = prev_path_nodes[spur_idx];
+
+      // Root path: path from source to spur node
+      let root_path: Vec<NodeId> = prev_path_nodes[..=spur_idx].to_vec();
+      let root_edges: Vec<(NodeId, ETypeId, NodeId)> = if spur_idx > 0 {
+        prev_path.edges[..spur_idx].to_vec()
+      } else {
+        Vec::new()
+      };
+
+      // Calculate root path weight
+      let root_weight: f64 = root_edges
+        .iter()
+        .map(|(s, e, d)| get_weight(*s, *e, *d))
+        .sum();
+
+      // Collect edges to exclude (edges used by paths that share this root)
+      let mut excluded_edges: HashSet<(NodeId, ETypeId, NodeId)> = HashSet::new();
+
+      for existing_path in &result_paths {
+        // Check if this path shares the same root
+        if existing_path.path.len() > spur_idx
+          && existing_path.path[..=spur_idx] == root_path[..]
+        {
+          // Exclude the edge that leaves the spur node in this path
+          if let Some(&edge) = existing_path.edges.get(spur_idx) {
+            excluded_edges.insert(edge);
+          }
+        }
+      }
+
+      // Also exclude edges from candidate paths
+      for candidate in &candidates {
+        if candidate.path.len() > spur_idx && candidate.path[..=spur_idx] == root_path[..] {
+          if let Some(&edge) = candidate.edges.get(spur_idx) {
+            excluded_edges.insert(edge);
+          }
+        }
+      }
+
+      // Nodes in root path (except spur node) should be avoided
+      let root_nodes: HashSet<NodeId> = root_path[..spur_idx].iter().copied().collect();
+
+      // Create a modified get_neighbors that excludes forbidden edges and nodes
+      let filtered_neighbors = |node: NodeId, dir: TraversalDirection, etype: Option<ETypeId>| {
+        get_neighbors(node, dir, etype)
+          .into_iter()
+          .filter(|edge| {
+            // Don't use excluded edges from spur node
+            if node == spur_node && excluded_edges.contains(&(edge.src, edge.etype, edge.dst)) {
+              return false;
+            }
+            // Don't go to nodes in the root path
+            let neighbor = if dir == TraversalDirection::In {
+              edge.src
+            } else {
+              edge.dst
+            };
+            !root_nodes.contains(&neighbor)
+          })
+          .collect()
+      };
+
+      // Find spur path from spur_node to target
+      let spur_config = PathConfig {
+        source: spur_node,
+        targets: {
+          let mut s = HashSet::new();
+          s.insert(target);
+          s
+        },
+        allowed_etypes: config.allowed_etypes.clone(),
+        direction: config.direction.clone(),
+        max_depth: config.max_depth.saturating_sub(spur_idx),
+      };
+
+      let spur_path = dijkstra(spur_config, filtered_neighbors, &get_weight);
+
+      if spur_path.found {
+        // Combine root path + spur path (excluding duplicate spur node)
+        let mut combined_path = root_path.clone();
+        combined_path.extend(spur_path.path.into_iter().skip(1));
+
+        let mut combined_edges = root_edges.clone();
+        combined_edges.extend(spur_path.edges);
+
+        let combined_weight = root_weight + spur_path.total_weight;
+
+        let candidate = PathResult {
+          path: combined_path,
+          edges: combined_edges,
+          total_weight: combined_weight,
+          found: true,
+        };
+
+        // Only add if we haven't seen this exact path before
+        let is_duplicate = result_paths.iter().any(|p| p.path == candidate.path)
+          || candidates.iter().any(|p| p.path == candidate.path);
+
+        if !is_duplicate {
+          candidates.push(candidate);
+        }
+      }
+    }
+
+    // If we have candidates, add the shortest one to results
+    if !candidates.is_empty() {
+      // Find the candidate with minimum weight
+      candidates.sort_by(|a, b| {
+        a.total_weight
+          .partial_cmp(&b.total_weight)
+          .unwrap_or(std::cmp::Ordering::Equal)
+      });
+
+      let best = candidates.remove(0);
+      result_paths.push(best);
+    } else {
+      // No more candidates, we've found all possible paths
+      break;
+    }
+  }
+
+  result_paths
 }
 
 // ============================================================================
@@ -829,5 +1063,122 @@ mod tests {
     assert!(result.found);
     assert_eq!(result.path, vec![1]);
     assert_eq!(result.total_weight, 0.0);
+  }
+
+  // ========================================================================
+  // Yen's K-Shortest Paths Tests
+  // ========================================================================
+
+  #[test]
+  fn test_yen_single_path() {
+    let get_neighbors = mock_graph();
+    let config = PathConfig::new(1, 3).via(1);
+
+    let paths = yen_k_shortest(config, 1, get_neighbors, |_, _, _| 1.0);
+
+    assert_eq!(paths.len(), 1);
+    assert!(paths[0].found);
+    assert_eq!(paths[0].path, vec![1, 2, 3]);
+  }
+
+  #[test]
+  fn test_yen_two_paths_to_node_5() {
+    // Graph has two paths to node 5:
+    // 1->2->5 (weight 2) and 1->4->5 (weight 3)
+    let get_neighbors = mock_graph();
+    let config = PathConfig::new(1, 5).via(1);
+
+    let paths = yen_k_shortest(config, 3, get_neighbors, weight_fn);
+
+    assert!(paths.len() >= 2);
+
+    // First path should be the shortest (1->2->5, weight 2)
+    assert_eq!(paths[0].path, vec![1, 2, 5]);
+    assert_eq!(paths[0].total_weight, 2.0);
+
+    // Second path should be (1->4->5, weight 3)
+    assert_eq!(paths[1].path, vec![1, 4, 5]);
+    assert_eq!(paths[1].total_weight, 3.0);
+  }
+
+  #[test]
+  fn test_yen_paths_sorted_by_weight() {
+    let get_neighbors = mock_graph();
+    let config = PathConfig::new(1, 5).via(1);
+
+    let paths = yen_k_shortest(config, 10, get_neighbors, weight_fn);
+
+    // Verify paths are sorted by weight
+    for i in 1..paths.len() {
+      assert!(
+        paths[i].total_weight >= paths[i - 1].total_weight,
+        "Paths should be sorted by weight"
+      );
+    }
+  }
+
+  #[test]
+  fn test_yen_no_path() {
+    let get_neighbors = mock_graph();
+    let config = PathConfig::new(3, 1).via(1); // Can't go backwards
+
+    let paths = yen_k_shortest(config, 3, get_neighbors, |_, _, _| 1.0);
+
+    assert!(paths.is_empty());
+  }
+
+  #[test]
+  fn test_yen_k_zero() {
+    let get_neighbors = mock_graph();
+    let config = PathConfig::new(1, 5).via(1);
+
+    let paths = yen_k_shortest(config, 0, get_neighbors, |_, _, _| 1.0);
+
+    assert!(paths.is_empty());
+  }
+
+  #[test]
+  fn test_yen_no_duplicate_paths() {
+    let get_neighbors = mock_graph();
+    let config = PathConfig::new(1, 5).via(1);
+
+    let paths = yen_k_shortest(config, 10, get_neighbors, |_, _, _| 1.0);
+
+    // Check no duplicate paths
+    for i in 0..paths.len() {
+      for j in i + 1..paths.len() {
+        assert_ne!(
+          paths[i].path, paths[j].path,
+          "Should not have duplicate paths"
+        );
+      }
+    }
+  }
+
+  #[test]
+  fn test_yen_builder() {
+    let get_neighbors = mock_graph();
+
+    let paths = PathFindingBuilder::new(1, get_neighbors, weight_fn)
+      .to(5)
+      .via(1)
+      .k_shortest(3);
+
+    assert!(paths.len() >= 2);
+    assert_eq!(paths[0].path, vec![1, 2, 5]);
+    assert_eq!(paths[1].path, vec![1, 4, 5]);
+  }
+
+  #[test]
+  fn test_yen_all_paths() {
+    let get_neighbors = mock_graph();
+
+    let paths = PathFindingBuilder::new(1, get_neighbors, |_, _, _| 1.0)
+      .to(5)
+      .via(1)
+      .all_paths();
+
+    // Should find at least the two known paths
+    assert!(paths.len() >= 2);
   }
 }

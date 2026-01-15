@@ -33,10 +33,24 @@ pub struct OpenOptions {
   pub checkpoint_threshold: Option<f64>,
   /// Use background (non-blocking) checkpoint
   pub background_checkpoint: Option<bool>,
+  /// Enable caching
+  pub cache_enabled: Option<bool>,
+  /// Max node properties in cache
+  pub cache_max_node_props: Option<i64>,
+  /// Max edge properties in cache
+  pub cache_max_edge_props: Option<i64>,
+  /// Max traversal cache entries
+  pub cache_max_traversal_entries: Option<i64>,
+  /// Max query cache entries
+  pub cache_max_query_entries: Option<i64>,
+  /// Query cache TTL in milliseconds
+  pub cache_query_ttl_ms: Option<i64>,
 }
 
 impl From<OpenOptions> for RustOpenOptions {
   fn from(opts: OpenOptions) -> Self {
+    use crate::types::{CacheOptions, PropertyCacheConfig, QueryCacheConfig, TraversalCacheConfig};
+
     let mut rust_opts = RustOpenOptions::new();
     if let Some(v) = opts.read_only {
       rust_opts = rust_opts.read_only(v);
@@ -59,6 +73,32 @@ impl From<OpenOptions> for RustOpenOptions {
     if let Some(v) = opts.background_checkpoint {
       rust_opts = rust_opts.background_checkpoint(v);
     }
+
+    // Cache options
+    if opts.cache_enabled == Some(true) {
+      let property_cache = Some(PropertyCacheConfig {
+        max_node_props: opts.cache_max_node_props.unwrap_or(10000) as usize,
+        max_edge_props: opts.cache_max_edge_props.unwrap_or(10000) as usize,
+      });
+
+      let traversal_cache = Some(TraversalCacheConfig {
+        max_entries: opts.cache_max_traversal_entries.unwrap_or(5000) as usize,
+        max_neighbors_per_entry: 100,
+      });
+
+      let query_cache = Some(QueryCacheConfig {
+        max_entries: opts.cache_max_query_entries.unwrap_or(1000) as usize,
+        ttl_ms: opts.cache_query_ttl_ms.map(|v| v as u64),
+      });
+
+      rust_opts = rust_opts.cache(Some(CacheOptions {
+        enabled: true,
+        property_cache,
+        traversal_cache,
+        query_cache,
+      }));
+    }
+
     rust_opts
   }
 }
@@ -80,6 +120,20 @@ pub struct DbStats {
   pub delta_edges_deleted: i64,
   pub wal_bytes: i64,
   pub recommend_compact: bool,
+}
+
+/// Cache statistics
+#[napi(object)]
+pub struct JsCacheStats {
+  pub property_cache_hits: i64,
+  pub property_cache_misses: i64,
+  pub property_cache_size: i64,
+  pub traversal_cache_hits: i64,
+  pub traversal_cache_misses: i64,
+  pub traversal_cache_size: i64,
+  pub query_cache_hits: i64,
+  pub query_cache_misses: i64,
+  pub query_cache_size: i64,
 }
 
 // ============================================================================
@@ -777,6 +831,106 @@ impl Database {
       wal_bytes: s.wal_bytes as i64,
       recommend_compact: s.recommend_compact,
     })
+  }
+
+  // ========================================================================
+  // Cache Operations
+  // ========================================================================
+
+  /// Check if caching is enabled
+  #[napi]
+  pub fn cache_is_enabled(&self) -> Result<bool> {
+    let db = self.get_db()?;
+    Ok(db.cache_is_enabled())
+  }
+
+  /// Invalidate all caches for a node
+  #[napi]
+  pub fn cache_invalidate_node(&self, node_id: i64) -> Result<()> {
+    let db = self.get_db()?;
+    db.cache_invalidate_node(node_id as NodeId);
+    Ok(())
+  }
+
+  /// Invalidate caches for a specific edge
+  #[napi]
+  pub fn cache_invalidate_edge(&self, src: i64, etype: u32, dst: i64) -> Result<()> {
+    let db = self.get_db()?;
+    db.cache_invalidate_edge(src as NodeId, etype as ETypeId, dst as NodeId);
+    Ok(())
+  }
+
+  /// Invalidate a cached key lookup
+  #[napi]
+  pub fn cache_invalidate_key(&self, key: String) -> Result<()> {
+    let db = self.get_db()?;
+    db.cache_invalidate_key(&key);
+    Ok(())
+  }
+
+  /// Clear all caches
+  #[napi]
+  pub fn cache_clear(&self) -> Result<()> {
+    let db = self.get_db()?;
+    db.cache_clear();
+    Ok(())
+  }
+
+  /// Clear only the query cache
+  #[napi]
+  pub fn cache_clear_query(&self) -> Result<()> {
+    let db = self.get_db()?;
+    db.cache_clear_query();
+    Ok(())
+  }
+
+  /// Clear only the key cache
+  #[napi]
+  pub fn cache_clear_key(&self) -> Result<()> {
+    let db = self.get_db()?;
+    db.cache_clear_key();
+    Ok(())
+  }
+
+  /// Clear only the property cache
+  #[napi]
+  pub fn cache_clear_property(&self) -> Result<()> {
+    let db = self.get_db()?;
+    db.cache_clear_property();
+    Ok(())
+  }
+
+  /// Clear only the traversal cache
+  #[napi]
+  pub fn cache_clear_traversal(&self) -> Result<()> {
+    let db = self.get_db()?;
+    db.cache_clear_traversal();
+    Ok(())
+  }
+
+  /// Get cache statistics
+  #[napi]
+  pub fn cache_stats(&self) -> Result<Option<JsCacheStats>> {
+    let db = self.get_db()?;
+    Ok(db.cache_stats().map(|s| JsCacheStats {
+      property_cache_hits: s.property_cache_hits as i64,
+      property_cache_misses: s.property_cache_misses as i64,
+      property_cache_size: s.property_cache_size as i64,
+      traversal_cache_hits: s.traversal_cache_hits as i64,
+      traversal_cache_misses: s.traversal_cache_misses as i64,
+      traversal_cache_size: s.traversal_cache_size as i64,
+      query_cache_hits: s.query_cache_hits as i64,
+      query_cache_misses: s.query_cache_misses as i64,
+      query_cache_size: s.query_cache_size as i64,
+    }))
+  }
+
+  /// Reset cache statistics
+  #[napi]
+  pub fn cache_reset_stats(&self) -> Result<()> {
+    let db = self.get_db()?;
+    db.cache_reset_stats();
+    Ok(())
   }
 
   // ========================================================================

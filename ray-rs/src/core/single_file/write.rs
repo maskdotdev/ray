@@ -54,6 +54,9 @@ impl SingleFileDB {
     // Update delta
     self.delta.write().delete_node(node_id);
 
+    // Invalidate cache
+    self.cache_invalidate_node(node_id);
+
     Ok(())
   }
 
@@ -75,6 +78,9 @@ impl SingleFileDB {
 
     // Update delta
     self.delta.write().add_edge(src, etype, dst);
+
+    // Invalidate cache (traversal cache for both src and dst)
+    self.cache_invalidate_edge(src, etype, dst);
 
     Ok(())
   }
@@ -100,6 +106,9 @@ impl SingleFileDB {
     // Update delta
     self.delta.write().delete_edge(src, etype, dst);
 
+    // Invalidate cache
+    self.cache_invalidate_edge(src, etype, dst);
+
     Ok(())
   }
 
@@ -121,6 +130,9 @@ impl SingleFileDB {
 
     // Update delta
     self.delta.write().set_node_prop(node_id, key_id, value);
+
+    // Invalidate cache
+    self.cache_invalidate_node(node_id);
 
     Ok(())
   }
@@ -150,6 +162,9 @@ impl SingleFileDB {
 
     // Update delta
     self.delta.write().delete_node_prop(node_id, key_id);
+
+    // Invalidate cache
+    self.cache_invalidate_node(node_id);
 
     Ok(())
   }
@@ -182,6 +197,9 @@ impl SingleFileDB {
       .delta
       .write()
       .set_edge_prop(src, etype, dst, key_id, value);
+
+    // Invalidate cache
+    self.cache_invalidate_edge(src, etype, dst);
 
     Ok(())
   }
@@ -220,6 +238,9 @@ impl SingleFileDB {
     // Update delta
     self.delta.write().delete_edge_prop(src, etype, dst, key_id);
 
+    // Invalidate cache
+    self.cache_invalidate_edge(src, etype, dst);
+
     Ok(())
   }
 
@@ -241,6 +262,9 @@ impl SingleFileDB {
 
     // Update delta
     self.delta.write().add_node_label(node_id, label_id);
+
+    // Invalidate cache (label changes affect node)
+    self.cache_invalidate_node(node_id);
 
     Ok(())
   }
@@ -265,6 +289,9 @@ impl SingleFileDB {
 
     // Update delta
     self.delta.write().remove_node_label(node_id, label_id);
+
+    // Invalidate cache (label changes affect node)
+    self.cache_invalidate_node(node_id);
 
     Ok(())
   }

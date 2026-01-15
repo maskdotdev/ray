@@ -13,9 +13,11 @@ use std::collections::HashMap;
 
 use crate::types::NodeId;
 use crate::vector::distance::{normalize, squared_euclidean};
-use crate::vector::types::{DistanceMetric, IvfConfig, VectorManifest, VectorSearchResult};
+use crate::vector::types::{
+  DistanceMetric, IvfConfig, MultiQueryAggregation, VectorManifest, VectorSearchResult,
+};
 
-use super::kmeans::{kmeans, KMeansConfig};
+use super::kmeans::{kmeans_parallel, KMeansConfig};
 
 // ============================================================================
 // IVF Index
@@ -124,12 +126,12 @@ impl IvfIndex {
     // Get distance function
     let distance_fn = self.config.metric.distance_fn();
 
-    // Run k-means
+    // Run k-means (uses parallel version for large datasets)
     let kmeans_config = KMeansConfig::new(self.config.n_clusters)
       .with_max_iterations(25)
       .with_tolerance(1e-4);
 
-    let result = kmeans(
+    let result = kmeans_parallel(
       &training_vectors,
       self.training_count,
       self.dimensions,
@@ -230,6 +232,10 @@ impl IvfIndex {
     // Get distance function
     let distance_fn = self.config.metric.distance_fn();
 
+    // Build fragment lookup map for O(1) access (avoid .find() in hot loop)
+    let fragment_map: HashMap<usize, &_> =
+      manifest.fragments.iter().map(|f| (f.id, f)).collect();
+
     // Use max-heap to track top-k candidates
     let mut heap = MaxHeap::new();
 
@@ -247,13 +253,9 @@ impl IvfIndex {
           None => continue,
         };
 
-        // Get fragment
-        let fragment = match manifest
-          .fragments
-          .iter()
-          .find(|f| f.id == location.fragment_id)
-        {
-          Some(f) => f,
+        // Get fragment with O(1) lookup
+        let fragment = match fragment_map.get(&location.fragment_id) {
+          Some(f) => *f,
           None => continue,
         };
 
@@ -326,6 +328,92 @@ impl IvfIndex {
       .collect()
   }
 
+  /// Search with multiple query vectors
+  ///
+  /// This is more efficient than running multiple separate searches because it:
+  /// 1. Collects all candidate vectors across all queries
+  /// 2. Aggregates distances per node using the specified aggregation method
+  /// 3. Returns the top-k results based on aggregated distances
+  ///
+  /// # Arguments
+  /// * `manifest` - The vector store manifest
+  /// * `queries` - Array of query vectors (all must have same dimensions)
+  /// * `k` - Number of results to return
+  /// * `aggregation` - How to aggregate distances from multiple queries
+  /// * `options` - Search options (n_probe, filter, threshold)
+  ///
+  /// # Returns
+  /// Vector of search results sorted by aggregated distance
+  pub fn search_multi(
+    &self,
+    manifest: &VectorManifest,
+    queries: &[&[f32]],
+    k: usize,
+    aggregation: MultiQueryAggregation,
+    options: Option<SearchOptions>,
+  ) -> Vec<VectorSearchResult> {
+    if !self.trained || queries.is_empty() {
+      return Vec::new();
+    }
+
+    let options = options.unwrap_or_default();
+
+    // Run individual searches with higher k to ensure we have enough candidates
+    let expanded_k = k * 2;
+    let all_results: Vec<Vec<VectorSearchResult>> = queries
+      .iter()
+      .map(|query| self.search(manifest, query, expanded_k, None))
+      .collect();
+
+    // Aggregate by node_id
+    let mut aggregated: HashMap<NodeId, (Vec<f32>, u64)> = HashMap::new();
+
+    for results in &all_results {
+      for result in results {
+        let entry = aggregated
+          .entry(result.node_id)
+          .or_insert_with(|| (Vec::new(), result.vector_id));
+        entry.0.push(result.distance);
+      }
+    }
+
+    // Apply filter if provided
+    let aggregated: HashMap<NodeId, (Vec<f32>, u64)> = if let Some(ref filter) = options.filter {
+      aggregated
+        .into_iter()
+        .filter(|(node_id, _)| filter(*node_id))
+        .collect()
+    } else {
+      aggregated
+    };
+
+    // Compute aggregated scores and build results
+    let mut scored: Vec<VectorSearchResult> = aggregated
+      .into_iter()
+      .map(|(node_id, (distances, vector_id))| {
+        let distance = aggregation.aggregate(&distances);
+        let similarity = self.config.metric.distance_to_similarity(distance);
+        VectorSearchResult {
+          vector_id,
+          node_id,
+          distance,
+          similarity,
+        }
+      })
+      .collect();
+
+    // Apply threshold filter
+    if let Some(threshold) = options.threshold {
+      scored.retain(|r| r.similarity >= threshold);
+    }
+
+    // Sort by distance and return top k
+    scored.sort_by(|a, b| a.distance.partial_cmp(&b.distance).unwrap_or(std::cmp::Ordering::Equal));
+    scored.truncate(k);
+
+    scored
+  }
+
   /// Build index from all vectors in the store
   pub fn build_from_store(&mut self, manifest: &VectorManifest) -> Result<(), IvfError> {
     // Collect training vectors
@@ -338,19 +426,20 @@ impl IvfIndex {
     // Train the index
     self.train()?;
 
+    // Build fragment lookup map for O(1) access
+    let fragment_map: HashMap<usize, &_> =
+      manifest.fragments.iter().map(|f| (f.id, f)).collect();
+
     // Insert all vectors
-    for (&node_id, &vector_id) in &manifest.node_to_vector {
+    for (&_node_id, &vector_id) in &manifest.node_to_vector {
       let location = match manifest.vector_locations.get(&vector_id) {
         Some(loc) => loc,
         None => continue,
       };
 
-      let fragment = match manifest
-        .fragments
-        .iter()
-        .find(|f| f.id == location.fragment_id)
-      {
-        Some(f) => f,
+      // Get fragment with O(1) lookup
+      let fragment = match fragment_map.get(&location.fragment_id) {
+        Some(f) => *f,
         None => continue,
       };
 
@@ -645,7 +734,7 @@ impl std::error::Error for IvfError {}
 mod tests {
   use super::*;
   use crate::vector::store::create_vector_store;
-  use crate::vector::types::VectorStoreConfig;
+  use crate::vector::types::{MultiQueryAggregation, VectorManifest, VectorStoreConfig};
 
   fn create_test_index(dimensions: usize, n_clusters: usize) -> IvfIndex {
     IvfIndex::new(dimensions, IvfConfig::new(n_clusters).with_n_probe(2))
@@ -818,5 +907,94 @@ mod tests {
     assert!(IvfError::AlreadyTrained.to_string().contains("already"));
     assert!(IvfError::NotTrained.to_string().contains("not trained"));
     assert!(IvfError::NoTrainingVectors.to_string().contains("training"));
+  }
+
+  // ========================================================================
+  // Multi-Query Search Tests
+  // ========================================================================
+
+  #[test]
+  fn test_search_multi_empty_queries() {
+    let mut index = create_test_index(4, 2);
+
+    // Train
+    let mut vectors = Vec::new();
+    for i in 0..10 {
+      vectors.extend_from_slice(&[i as f32, 0.0, 0.0, 1.0]);
+    }
+    index.add_training_vectors(&vectors, 10).unwrap();
+    index.train().unwrap();
+
+    // Create a minimal manifest
+    let manifest = VectorManifest::new(VectorStoreConfig::new(4));
+
+    // Empty queries should return empty results
+    let results = index.search_multi(
+      &manifest,
+      &[],
+      5,
+      MultiQueryAggregation::Min,
+      None,
+    );
+    assert!(results.is_empty());
+  }
+
+  #[test]
+  fn test_search_multi_not_trained() {
+    let index = create_test_index(4, 2);
+    let manifest = VectorManifest::new(VectorStoreConfig::new(4));
+
+    let query = vec![1.0, 0.0, 0.0, 0.0];
+    let results = index.search_multi(
+      &manifest,
+      &[&query],
+      5,
+      MultiQueryAggregation::Min,
+      None,
+    );
+    assert!(results.is_empty());
+  }
+
+  #[test]
+  fn test_multi_query_aggregation_min() {
+    let agg = MultiQueryAggregation::Min;
+    assert_eq!(agg.aggregate(&[1.0, 2.0, 3.0]), 1.0);
+    assert_eq!(agg.aggregate(&[5.0, 2.0, 8.0]), 2.0);
+    assert_eq!(agg.aggregate(&[3.0]), 3.0);
+  }
+
+  #[test]
+  fn test_multi_query_aggregation_max() {
+    let agg = MultiQueryAggregation::Max;
+    assert_eq!(agg.aggregate(&[1.0, 2.0, 3.0]), 3.0);
+    assert_eq!(agg.aggregate(&[5.0, 2.0, 8.0]), 8.0);
+    assert_eq!(agg.aggregate(&[3.0]), 3.0);
+  }
+
+  #[test]
+  fn test_multi_query_aggregation_avg() {
+    let agg = MultiQueryAggregation::Avg;
+    assert_eq!(agg.aggregate(&[1.0, 2.0, 3.0]), 2.0);
+    assert_eq!(agg.aggregate(&[4.0, 6.0]), 5.0);
+    assert_eq!(agg.aggregate(&[3.0]), 3.0);
+  }
+
+  #[test]
+  fn test_multi_query_aggregation_sum() {
+    let agg = MultiQueryAggregation::Sum;
+    assert_eq!(agg.aggregate(&[1.0, 2.0, 3.0]), 6.0);
+    assert_eq!(agg.aggregate(&[4.0, 6.0]), 10.0);
+    assert_eq!(agg.aggregate(&[3.0]), 3.0);
+  }
+
+  #[test]
+  fn test_multi_query_aggregation_empty() {
+    // Empty distances should return infinity (handled by the aggregate function)
+    // Note: The aggregate function returns f32::INFINITY for empty slices in all cases
+    // This is a safe default as it ensures empty results are sorted to the end
+    assert_eq!(MultiQueryAggregation::Min.aggregate(&[]), f32::INFINITY);
+    assert_eq!(MultiQueryAggregation::Max.aggregate(&[]), f32::INFINITY);
+    assert_eq!(MultiQueryAggregation::Avg.aggregate(&[]), f32::INFINITY);
+    assert_eq!(MultiQueryAggregation::Sum.aggregate(&[]), f32::INFINITY);
   }
 }

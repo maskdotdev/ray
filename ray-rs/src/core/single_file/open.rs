@@ -8,6 +8,7 @@ use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
 use parking_lot::{Mutex, RwLock};
 
+use crate::cache::manager::CacheManager;
 use crate::constants::*;
 use crate::core::pager::{create_pager, is_valid_page_size, open_pager, pages_to_store};
 use crate::core::snapshot::reader::SnapshotData;
@@ -41,6 +42,8 @@ pub struct SingleFileOpenOptions {
   pub checkpoint_threshold: f64,
   /// Use background (non-blocking) checkpoint instead of blocking (default true)
   pub background_checkpoint: bool,
+  /// Cache options (None = disabled)
+  pub cache: Option<CacheOptions>,
 }
 
 impl Default for SingleFileOpenOptions {
@@ -53,6 +56,7 @@ impl Default for SingleFileOpenOptions {
       auto_checkpoint: false,
       checkpoint_threshold: 0.8,
       background_checkpoint: true,
+      cache: None,
     }
   }
 }
@@ -94,6 +98,19 @@ impl SingleFileOpenOptions {
 
   pub fn background_checkpoint(mut self, value: bool) -> Self {
     self.background_checkpoint = value;
+    self
+  }
+
+  pub fn cache(mut self, options: Option<CacheOptions>) -> Self {
+    self.cache = options;
+    self
+  }
+
+  pub fn enable_cache(mut self) -> Self {
+    self.cache = Some(CacheOptions {
+      enabled: true,
+      ..Default::default()
+    });
     self
   }
 }
@@ -289,6 +306,9 @@ pub fn open_single_file<P: AsRef<Path>>(
     }
   }
 
+  // Initialize cache if enabled
+  let cache = options.cache.map(CacheManager::new);
+
   Ok(SingleFileDB {
     path: path.to_path_buf(),
     read_only: options.read_only,
@@ -314,6 +334,7 @@ pub fn open_single_file<P: AsRef<Path>>(
     background_checkpoint: options.background_checkpoint,
     checkpoint_status: Mutex::new(CheckpointStatus::Idle),
     vector_stores: RwLock::new(vector_stores),
+    cache: RwLock::new(cache),
   })
 }
 
