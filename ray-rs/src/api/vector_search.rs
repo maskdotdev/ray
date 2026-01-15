@@ -5,6 +5,7 @@
 //! Ported from src/api/vector-search.ts
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use crate::cache::lru::LruCache;
 use crate::types::NodeId;
@@ -131,7 +132,7 @@ impl VectorIndexOptions {
 }
 
 /// Options for similarity search
-#[derive(Debug, Clone)]
+/// Options for similarity search
 pub struct SimilarOptions {
   /// Number of results to return
   pub k: usize,
@@ -139,6 +140,19 @@ pub struct SimilarOptions {
   pub threshold: Option<f32>,
   /// Number of clusters to probe for IVF (default: 10)
   pub n_probe: Option<usize>,
+  /// Optional filter function to exclude results
+  pub filter: Option<std::sync::Arc<dyn Fn(NodeId) -> bool + Send + Sync>>,
+}
+
+impl std::fmt::Debug for SimilarOptions {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    f.debug_struct("SimilarOptions")
+      .field("k", &self.k)
+      .field("threshold", &self.threshold)
+      .field("n_probe", &self.n_probe)
+      .field("filter", &self.filter.is_some())
+      .finish()
+  }
 }
 
 impl SimilarOptions {
@@ -148,6 +162,7 @@ impl SimilarOptions {
       k,
       threshold: None,
       n_probe: None,
+      filter: None,
     }
   }
 
@@ -160,6 +175,25 @@ impl SimilarOptions {
   /// Set the number of probes
   pub fn with_n_probe(mut self, n_probe: usize) -> Self {
     self.n_probe = Some(n_probe);
+    self
+  }
+
+  /// Set a filter function to exclude certain nodes from results
+  ///
+  /// The filter function receives a node ID and should return `true` to include
+  /// the node in results, or `false` to exclude it.
+  ///
+  /// # Example
+  /// ```ignore
+  /// // Only include nodes with ID > 100
+  /// let options = SimilarOptions::new(10)
+  ///     .with_filter(|node_id| node_id > 100);
+  /// ```
+  pub fn with_filter<F>(mut self, filter: F) -> Self
+  where
+    F: Fn(NodeId) -> bool + Send + Sync + 'static,
+  {
+    self.filter = Some(Arc::new(filter));
     self
   }
 }
@@ -462,9 +496,17 @@ impl VectorIndex {
       self.brute_force_search(query, k * 2)
     };
 
-    // Apply threshold and limit
+    // Apply filter, threshold, and limit
     let mut hits = Vec::with_capacity(k);
     for result in results {
+      // Apply filter if provided
+      if let Some(ref filter) = options.filter {
+        if !filter(result.node_id) {
+          continue;
+        }
+      }
+
+      // Apply threshold
       if let Some(threshold) = options.threshold {
         if result.similarity < threshold {
           continue;
