@@ -268,6 +268,16 @@ export interface DeltaState {
   // Key index delta
   keyIndex: Map<string, NodeID>;
   keyIndexDeleted: Set<string>;
+
+  // Reverse index for efficient edge cleanup on node deletion
+  // Maps destination node -> set of source nodes with edges to it
+  // Only populated lazily when edges are added
+  incomingEdgeSources?: Map<NodeID, Set<NodeID>>;
+
+  // Cached edge Sets for O(1) edge existence checks (lazily populated)
+  // Only populated when patch arrays exceed EDGE_SET_THRESHOLD
+  outAddSets?: Map<NodeID, Set<bigint>>;
+  outDelSets?: Map<NodeID, Set<bigint>>;
 }
 
 // ============================================================================
