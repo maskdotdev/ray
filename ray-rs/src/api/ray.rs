@@ -4187,4 +4187,59 @@ mod tests {
 
     ray.close().unwrap();
   }
+
+  #[test]
+  fn test_describe() {
+    let temp_dir = tempdir().unwrap();
+    let options = create_test_schema();
+
+    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+
+    // Create some data
+    let alice = ray.create_node("User", "alice", HashMap::new()).unwrap();
+    let bob = ray.create_node("User", "bob", HashMap::new()).unwrap();
+    ray.link(alice.id, "FOLLOWS", bob.id).unwrap();
+
+    // Get description
+    let desc = ray.describe();
+    
+    // Should contain path
+    assert!(desc.contains("RayDB at"));
+    // Should mention format
+    assert!(desc.contains("format"));
+    // Should list node types
+    assert!(desc.contains("User"));
+    // Should list edge types  
+    assert!(desc.contains("FOLLOWS"));
+    // Should include stats
+    assert!(desc.contains("Nodes:"));
+    assert!(desc.contains("Edges:"));
+
+    ray.close().unwrap();
+  }
+
+  #[test]
+  fn test_stats() {
+    let temp_dir = tempdir().unwrap();
+    let options = create_test_schema();
+
+    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+
+    // Create some data
+    let alice = ray.create_node("User", "alice", HashMap::new()).unwrap();
+    let bob = ray.create_node("User", "bob", HashMap::new()).unwrap();
+    ray.link(alice.id, "FOLLOWS", bob.id).unwrap();
+
+    // Get stats
+    let stats = ray.stats();
+    
+    // Should report correct counts
+    assert!(stats.snapshot_nodes >= 2);
+    assert!(stats.snapshot_edges >= 1);
+    // Delta should show created nodes
+    assert!(stats.delta_nodes_created >= 2);
+    assert!(stats.delta_edges_added >= 1);
+
+    ray.close().unwrap();
+  }
 }
