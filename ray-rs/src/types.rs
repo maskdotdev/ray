@@ -2,6 +2,7 @@
 //!
 //! Based on spec v1.1 (Mode B) - ported from src/types.ts
 
+#[cfg(feature = "napi")]
 use napi_derive::napi;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -283,7 +284,7 @@ pub const WAL_RECORD_HEADER_SIZE: usize = 4 + 1 + 1 + 2 + 8 + 4; // 20 bytes
 /// Property value tag for binary encoding
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[napi]
+#[cfg_attr(feature = "napi", napi)]
 pub enum PropValueTag {
   Null = 0,
   Bool = 1,

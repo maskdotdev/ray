@@ -10,9 +10,13 @@ license = "MIT"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-# NAPI bindings
-napi = { version = "3.0.0", features = ["napi8", "serde-json"] }
-napi-derive = "3.0.0"
+# NAPI bindings (optional)
+napi = { version = "3.0.0", features = ["napi8", "serde-json"], optional = true }
+napi-derive = { version = "3.0.0", optional = true }
+
+# PyO3 bindings (optional)
+pyo3 = { version = "0.22", features = ["extension-module"], optional = true }
+numpy = { version = "0.22", optional = true }
 
 # Error handling
 thiserror = "2.0"
@@ -65,7 +69,11 @@ nix = { version = "0.29", features = ["fs"] }
 libc = "0.2"
 
 [build-dependencies]
-napi-build = "2"
+napi-build = { version = "2", optional = true }
+
+# For conditional build
+[target.'cfg(feature = "python")'.dependencies]
+pyo3-build-config = { version = "0.22", optional = true }
 
 [dev-dependencies]
 tempfile = "3.20"
@@ -80,7 +88,9 @@ name = "graph"
 harness = false
 
 [features]
-default = []
+default = ["napi"]
+napi = ["dep:napi", "dep:napi-derive", "dep:napi-build"]
+python = ["dep:pyo3", "dep:numpy"]
 async = ["tokio"]
 
 [profile.release]

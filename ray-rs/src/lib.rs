@@ -46,7 +46,12 @@ pub mod cache;
 pub mod api;
 
 // NAPI bindings module
+#[cfg(feature = "napi")]
 pub mod napi_bindings;
+
+// PyO3 Python bindings module
+#[cfg(feature = "python")]
+pub mod pyo3_bindings;
 
 // Re-export commonly used items
 pub use error::{RayError, Result};
@@ -61,15 +66,18 @@ pub use api::schema::{
 // NAPI Exports
 // ============================================================================
 
+#[cfg(feature = "napi")]
 use napi_derive::napi;
 
 /// Test function to verify NAPI bindings work
+#[cfg(feature = "napi")]
 #[napi]
 pub fn plus_100(input: u32) -> u32 {
   input + 100
 }
 
 /// Get RayDB version
+#[cfg(feature = "napi")]
 #[napi]
 pub fn version() -> String {
   env!("CARGO_PKG_VERSION").to_string()
@@ -79,8 +87,16 @@ pub fn version() -> String {
 pub use types::PropValueTag;
 
 // Re-export NAPI database types
+#[cfg(feature = "napi")]
 pub use napi_bindings::{
   open_database, Database, DbStats, JsEdge, JsNodeProp, JsPropValue, OpenOptions, PropType,
 };
+
+// ============================================================================
+// PyO3 Exports
+// ============================================================================
+
+#[cfg(feature = "python")]
+pub use pyo3_bindings::raydb;
 
 // Note: Full NAPI exports will be added as we implement each module
