@@ -76,6 +76,64 @@ export {
 } from "./backup/index.ts";
 
 // ============================================================================
+// Streaming and Pagination
+// ============================================================================
+
+export {
+  streamNodes,
+  streamNodesWithProps,
+  streamEdges,
+  streamEdgesWithProps,
+  getNodesPage,
+  getEdgesPage,
+  collectStream,
+  processStream,
+  mapStream,
+  filterStream,
+  takeStream,
+  skipStream,
+  type StreamOptions,
+  type PaginationOptions,
+  type Page,
+  type NodeWithProps,
+  type EdgeWithProps,
+} from "./streaming/index.ts";
+
+// ============================================================================
+// Export and Import
+// ============================================================================
+
+export {
+  exportToJSON,
+  exportToObject,
+  exportToJSONL,
+  importFromJSON,
+  importFromObject,
+  type ExportOptions,
+  type ImportOptions,
+  type ExportedDatabase,
+  type ExportedNode,
+  type ExportedEdge,
+} from "./export/index.ts";
+
+// ============================================================================
+// Metrics and Observability
+// ============================================================================
+
+export {
+  collectMetrics,
+  formatMetrics,
+  metricsToJSON,
+  healthCheck,
+  type DatabaseMetrics,
+  type DataMetrics,
+  type CacheMetrics,
+  type MvccMetrics,
+  type MemoryMetrics,
+  type HealthCheckResult,
+} from "./metrics/index.ts";
+
+// ============================================================================
 // Transactions
 // ============================================================================
 
