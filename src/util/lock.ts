@@ -9,6 +9,7 @@
 import { closeSync, openSync, unlinkSync, readSync, writeSync, fstatSync } from "node:fs";
 import { join } from "node:path";
 import { LOCK_FILENAME, LOCK_BYTE_OFFSET, LOCK_BYTE_RANGE } from "../constants.ts";
+import { lockLogger } from "./logger.ts";
 
 // Lazy-load fs-ext for proper flock support, fallback to basic fd locking
 let flockSync: ((fd: number, flags: string) => void) | null = null;
@@ -127,7 +128,7 @@ export function releaseLock(lock: LockHandle): void {
     try {
       flockSync(lock.fd, "un");
     } catch (err) {
-      console.warn(`Failed to unlock ${lock.path}: ${err}`);
+      lockLogger.warn(`Failed to unlock`, { path: lock.path, error: String(err) });
     }
   }
 
@@ -136,7 +137,7 @@ export function releaseLock(lock: LockHandle): void {
     try {
       closeSync(lock.fd);
     } catch (err) {
-      console.warn(`Failed to close lock fd for ${lock.path}: ${err}`);
+      lockLogger.warn(`Failed to close lock fd`, { path: lock.path, error: String(err) });
     }
   }
 
@@ -147,7 +148,7 @@ export function releaseLock(lock: LockHandle): void {
     // ENOENT is fine (file already removed), log others
     const errno = err as NodeJS.ErrnoException;
     if (errno.code !== "ENOENT") {
-      console.warn(`Failed to remove lock file ${lock.path}: ${err}`);
+      lockLogger.warn(`Failed to remove lock file`, { path: lock.path, error: String(err) });
     }
   }
 }
@@ -241,7 +242,19 @@ export async function acquireExclusiveFileLock(
     }
   }
 
-  // No locking available, proceed without lock (not ideal but works)
+  // No locking available - log warning about potential concurrent access issues
+  // This can happen if fs-ext is not installed and the platform doesn't support flock
+  // 
+  // SAFETY WARNING: Without locking, concurrent access from multiple processes
+  // can lead to data corruption. Users should either:
+  // 1. Install fs-ext for proper locking support: `bun add fs-ext`
+  // 2. Ensure only one process accesses the database at a time
+  // 3. Use lockFile: false option if they explicitly want to skip locking
+  lockLogger.warn(
+    "No locking mechanism available (fs-ext not installed). " +
+    "Concurrent access from multiple processes may cause data corruption. " +
+    "Install fs-ext for proper locking: bun add fs-ext"
+  );
   return { fd, exclusive: true };
 }
 
@@ -284,7 +297,12 @@ export async function acquireSharedFileLock(
     }
   }
 
-  // No locking available
+  // No locking available - log warning about potential concurrent access issues
+  lockLogger.warn(
+    "No locking mechanism available (fs-ext not installed). " +
+    "Concurrent access from multiple processes may cause data corruption. " +
+    "Install fs-ext for proper locking: bun add fs-ext"
+  );
   return { fd, exclusive: false };
 }
 

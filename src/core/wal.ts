@@ -542,6 +542,38 @@ export interface ParsedWalRecord {
   recordEnd: number; // Offset after this record (including padding)
 }
 
+// Set of valid WAL record type values for O(1) lookup
+const VALID_WAL_RECORD_TYPES = new Set<number>([
+  WalRecordType.BEGIN,
+  WalRecordType.COMMIT,
+  WalRecordType.ROLLBACK,
+  WalRecordType.CREATE_NODE,
+  WalRecordType.DELETE_NODE,
+  WalRecordType.ADD_EDGE,
+  WalRecordType.DELETE_EDGE,
+  WalRecordType.DEFINE_LABEL,
+  WalRecordType.ADD_NODE_LABEL,
+  WalRecordType.REMOVE_NODE_LABEL,
+  WalRecordType.DEFINE_ETYPE,
+  WalRecordType.DEFINE_PROPKEY,
+  WalRecordType.SET_NODE_PROP,
+  WalRecordType.DEL_NODE_PROP,
+  WalRecordType.SET_EDGE_PROP,
+  WalRecordType.DEL_EDGE_PROP,
+  WalRecordType.SET_NODE_VECTOR,
+  WalRecordType.DEL_NODE_VECTOR,
+  WalRecordType.BATCH_VECTORS,
+  WalRecordType.SEAL_FRAGMENT,
+  WalRecordType.COMPACT_FRAGMENTS,
+]);
+
+/**
+ * Check if a WAL record type is valid
+ */
+function isValidWalRecordType(type: number): boolean {
+  return VALID_WAL_RECORD_TYPES.has(type);
+}
+
 /**
  * Parse a single WAL record from buffer at given offset
  * Returns null if record is invalid or truncated
@@ -570,6 +602,9 @@ export function parseWalRecord(
   const reserved = readU16(view, 6);
   const txid = readU64(view, 8);
   const payloadLen = readU32(view, 16);
+
+  // Validate record type against known enum values
+  if (!isValidWalRecordType(type)) return null;
 
   // Validate payload length
   if (WAL_RECORD_HEADER_SIZE + payloadLen + 4 !== recLen) return null;

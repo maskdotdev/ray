@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { join, normalize, isAbsolute, resolve } from "node:path";
 import {
   COMPACT_EDGE_RATIO,
   COMPACT_NODE_RATIO,
@@ -24,6 +24,7 @@ import {
   writeManifest,
 } from "../../core/manifest.ts";
 import { closeSnapshot, loadSnapshot } from "../../core/snapshot-reader.ts";
+import { snapshotLogger } from "../../util/logger.ts";
 import {
   createWalSegment,
   extractCommittedTransactions,
@@ -61,6 +62,44 @@ import { releaseFileLock, type SingleFileLockHandle } from "../../util/lock.ts";
 import type { FilePager } from "../../core/pager.ts";
 
 /**
+ * Validate a database path for security
+ * Prevents path traversal attacks and other unsafe path patterns
+ * 
+ * @param path The path to validate
+ * @throws Error if the path is invalid or potentially dangerous
+ */
+function validateDbPath(path: string): void {
+  if (!path || typeof path !== 'string') {
+    throw new Error("Database path must be a non-empty string");
+  }
+
+  // Normalize the path to resolve . and .. 
+  const normalizedPath = normalize(path);
+  
+  // Check for path traversal attempts (.. sequences that escape)
+  // After normalization, if the path starts with .. it's trying to go above the base
+  if (normalizedPath.startsWith('..') || normalizedPath.includes('/..') || normalizedPath.includes('\\..')) {
+    throw new Error("Database path contains invalid path traversal sequence");
+  }
+
+  // Check for null bytes (path injection attack)
+  if (path.includes('\0')) {
+    throw new Error("Database path contains null bytes");
+  }
+
+  // Check for excessively long paths (platform-specific limits, but 4096 is reasonable)
+  if (path.length > 4096) {
+    throw new Error("Database path is too long");
+  }
+
+  // On non-Windows, check for problematic control characters
+  // eslint-disable-next-line no-control-regex
+  if (/[\x00-\x1f]/.test(path)) {
+    throw new Error("Database path contains control characters");
+  }
+}
+
+/**
  * Open a graph database
  * Automatically detects format based on path:
  * - If path ends with .raydb or is an existing .raydb file: single-file format
@@ -72,6 +111,9 @@ export async function openGraphDB(
   path: string,
   options: OpenOptions = {},
 ): Promise<GraphDB> {
+  // Validate path for security before any filesystem operations
+  validateDbPath(path);
+
   const { readOnly = false, createIfMissing = true, lockFile = true } = options;
 
   // Check if path is an existing directory (multi-file format)
@@ -172,7 +214,7 @@ async function openMultiFileDB(
     try {
       snapshot = await loadSnapshot(path, manifest.activeSnapshotGen);
     } catch (err) {
-      console.warn(`Failed to load snapshot: ${err}`);
+      snapshotLogger.warn(`Failed to load snapshot`, { error: String(err), path });
     }
   }
 

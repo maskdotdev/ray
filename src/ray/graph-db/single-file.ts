@@ -55,6 +55,7 @@ import {
   parseSetEdgePropPayload,
   parseDelEdgePropPayload,
 } from "../../core/wal.ts";
+import { checkpointLogger } from "../../util/logger.ts";
 
 /**
  * Open a single-file database (.raydb format)
@@ -172,7 +173,7 @@ export async function openSingleFileDB(
     // Crash during background checkpoint - replay both regions
     // The primary region has committed data, secondary has writes during checkpoint
     // Both need to be replayed to restore full state
-    console.warn(`[RayDB] Recovering from interrupted background checkpoint at ${path}`);
+    checkpointLogger.warn(`Recovering from interrupted background checkpoint`, { path });
   }
 
   // Replay WAL for recovery (getRecordsForRecovery handles dual-region)

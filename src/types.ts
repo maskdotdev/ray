@@ -539,6 +539,10 @@ export interface GraphDB {
   
   // Background checkpoint state
   _checkpointState?: CheckpointState;
+  
+  // Checkpoint merge lock - prevents concurrent commits during WAL merge
+  // When true, commits must wait for merge to complete
+  _checkpointMergeLock?: boolean;
 }
 
 export interface TxHandle {
@@ -666,7 +670,8 @@ export const DB_HEADER_V2_FIELDS_SIZE = 8 + 8 + 1 + 1; // 18 bytes
 export type CheckpointState = 
   | { status: 'idle' }
   | { status: 'running'; promise: Promise<void> }
-  | { status: 'completing' };
+  | { status: 'completing' }
+  | { status: 'merging' };
 
 /**
  * WAL buffer full error - thrown when circular buffer is exhausted

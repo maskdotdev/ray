@@ -334,7 +334,7 @@ function reconstructPath<N extends NodeDef>(
 export async function dijkstra<N extends NodeDef>(
   db: GraphDB,
   config: PathFindingConfig,
-  nodeDef: NodeDef,
+  nodeDef: N,
   resolveEtypeId: (edgeDef: EdgeDef) => ETypeID,
   resolvePropKeyId: (def: NodeDef | EdgeDef, propName: string) => PropKeyID,
   getNodeDef: (nodeId: NodeID) => NodeDef | null,
@@ -479,7 +479,7 @@ interface AStarNodeState {
 export async function aStar<N extends NodeDef>(
   db: GraphDB,
   config: PathFindingConfig,
-  nodeDef: NodeDef,
+  nodeDef: N,
   heuristic: Heuristic<N>,
   resolveEtypeId: (edgeDef: EdgeDef) => ETypeID,
   resolvePropKeyId: (def: NodeDef | EdgeDef, propName: string) => PropKeyID,
@@ -712,10 +712,10 @@ export function createPathFindingBuilder<N extends NodeDef>(
         );
       },
 
-      async* allPaths(_maxPaths?: number) {
+      async* allPaths(_maxPaths?: number): AsyncGenerator<PathResult<N>, void, unknown> {
         // For now, just return the shortest path
         // Full implementation would require more complex algorithm
-        const result = await dijkstra(
+        const result = await dijkstra<N>(
           db,
           config,
           nodeDef,

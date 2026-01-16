@@ -351,11 +351,19 @@ export function createTraversalBuilder<N extends NodeDef>(
 
     // BFS queue: [nodeRef, depth]
     // Use index-based approach for O(1) dequeue (Array.shift is O(n))
-    const queue: [NodeRef, number][] = [[startNode, 0]];
+    // Compact the queue periodically to prevent unbounded memory growth
+    let queue: [NodeRef, number][] = [[startNode, 0]];
     let queueHead = 0;
+    const COMPACT_THRESHOLD = 1000; // Compact when head exceeds this
 
     while (queueHead < queue.length) {
       const [currentNode, depth] = queue[queueHead++]!;
+
+      // Compact the queue to free memory from processed items
+      if (queueHead >= COMPACT_THRESHOLD && queueHead > queue.length / 2) {
+        queue = queue.slice(queueHead);
+        queueHead = 0;
+      }
 
       if (depth >= maxDepth) continue;
 

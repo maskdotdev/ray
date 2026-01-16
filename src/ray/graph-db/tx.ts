@@ -711,6 +711,16 @@ async function commitSingleFile(db: GraphDB, records: WalRecord[]): Promise<void
   const pager = db._pager as FilePager;
   let walBuffer = createWalBuffer(pager, db._header);
   
+  // Check for merge lock: if checkpoint is merging, must wait
+  // This prevents the race condition where we write to secondary while merge is reading it
+  if (db._checkpointMergeLock) {
+    await waitForCheckpoint(db);
+    if (!db._header) {
+      throw new Error("Header lost after checkpoint");
+    }
+    walBuffer = createWalBuffer(pager, db._header);
+  }
+  
   // Check for backpressure: if checkpoint is running and secondary region is nearly full
   const BACKPRESSURE_THRESHOLD = 0.9;
   if (isCheckpointRunning(db)) {
