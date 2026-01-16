@@ -68,18 +68,32 @@ pub fn is_checkpoint_running(_db: &GraphDB) -> bool {
 /// 2. Write the snapshot to disk
 /// 3. Clear the delta state
 /// 4. Reset the WAL
-pub fn checkpoint(_db: &mut GraphDB) -> Result<CheckpointStats> {
-  // TODO: Implement actual checkpoint logic
-  // This requires:
-  // - Snapshot writer to serialize graph state
-  // - Atomic file operations to swap snapshots
-  // - WAL truncation
+pub fn checkpoint(db: &mut GraphDB) -> Result<CheckpointStats> {
+  use std::time::Instant;
+  
+  let start = Instant::now();
+  
+  // Use the GraphDB::optimize() method which handles all the checkpoint logic
+  db.optimize()?;
+  
+  let duration_ms = start.elapsed().as_millis() as u64;
+  
+  // Get stats from the new snapshot
+  let (num_nodes, num_edges, snapshot_gen) = if let Some(ref snapshot) = db.snapshot {
+    (
+      snapshot.header.num_nodes,
+      snapshot.header.num_edges,
+      snapshot.header.generation,
+    )
+  } else {
+    (0, 0, 0)
+  };
 
   Ok(CheckpointStats {
-    num_nodes: 0,
-    num_edges: 0,
-    snapshot_gen: 0,
-    duration_ms: 0,
+    num_nodes,
+    num_edges,
+    snapshot_gen,
+    duration_ms,
   })
 }
 
@@ -97,14 +111,13 @@ pub fn trigger_background_checkpoint(_db: &mut GraphDB) -> Result<()> {
 /// - Reclaim free space
 /// - Rebuild indexes
 /// - Optimize storage layout
-pub fn compact(_db: &mut GraphDB) -> Result<CheckpointStats> {
-  // TODO: Implement full compaction
-  Ok(CheckpointStats {
-    num_nodes: 0,
-    num_edges: 0,
-    snapshot_gen: 0,
-    duration_ms: 0,
-  })
+pub fn compact(db: &mut GraphDB) -> Result<CheckpointStats> {
+  // For now, compact is the same as checkpoint
+  // In the future, this could do additional optimizations like:
+  // - Defragmenting the snapshot file
+  // - Rebuilding indexes
+  // - Reclaiming deleted node/edge space
+  checkpoint(db)
 }
 
 // ============================================================================
@@ -113,10 +126,10 @@ pub fn compact(_db: &mut GraphDB) -> Result<CheckpointStats> {
 
 /// Create a new snapshot for multi-file format
 /// This writes a new snapshot file and updates the manifest
-pub fn create_snapshot(_db: &mut GraphDB) -> Result<u64> {
-  // TODO: Implement multi-file snapshot creation
-  // Returns the new snapshot generation number
-  Ok(0)
+pub fn create_snapshot(db: &mut GraphDB) -> Result<u64> {
+  // Use checkpoint which handles snapshot creation
+  let stats = checkpoint(db)?;
+  Ok(stats.snapshot_gen)
 }
 
 /// Delete old snapshots (keeping only the N most recent)
