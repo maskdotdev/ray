@@ -1407,6 +1407,61 @@ impl PyDatabase {
     Ok(results)
   }
 
+  /// Traverse outgoing edges and return (node_id, key) pairs
+  ///
+  /// This is optimized for the fluent API - gets both ID and key in one FFI call.
+  ///
+  /// Args:
+  ///   node_id: Starting node ID
+  ///   etype: Edge type ID (optional, None = all types)
+  ///
+  /// Returns:
+  ///   List of (node_id, key) tuples
+  #[pyo3(signature = (node_id, etype=None))]
+  fn traverse_out_with_keys(&self, node_id: i64, etype: Option<u32>) -> PyResult<Vec<(i64, Option<String>)>> {
+    let guard = self.inner.lock().map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+    let db = guard.as_ref().ok_or_else(|| PyRuntimeError::new_err("Database is closed"))?;
+    
+    let edges = db.get_out_edges(node_id as NodeId);
+    let results: Vec<(i64, Option<String>)> = edges
+      .into_iter()
+      .filter(|(e, _)| etype.is_none() || etype == Some(*e))
+      .map(|(_, dst)| {
+        let key = db.get_node_key(dst);
+        (dst as i64, key)
+      })
+      .collect();
+    Ok(results)
+  }
+
+  /// Count outgoing edges from a node
+  ///
+  /// This is optimized for counting - doesn't allocate a list.
+  ///
+  /// Args:
+  ///   node_id: Starting node ID
+  ///   etype: Edge type ID (optional, None = all types)
+  ///
+  /// Returns:
+  ///   Number of outgoing edges
+  #[pyo3(signature = (node_id, etype=None))]
+  fn traverse_out_count(&self, node_id: i64, etype: Option<u32>) -> PyResult<i64> {
+    let guard = self.inner.lock().map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+    let db = guard.as_ref().ok_or_else(|| PyRuntimeError::new_err("Database is closed"))?;
+    
+    if let Some(et) = etype {
+      // Count only specific edge type
+      let count = db.get_out_edges(node_id as NodeId)
+        .into_iter()
+        .filter(|(e, _)| *e == et)
+        .count();
+      Ok(count as i64)
+    } else {
+      // Count all - use optimized degree function
+      Ok(db.get_out_degree(node_id as NodeId) as i64)
+    }
+  }
+
   /// Traverse incoming edges to a node
   ///
   /// Args:
@@ -1427,6 +1482,61 @@ impl PyDatabase {
       .map(|(_, src)| src as i64)
       .collect();
     Ok(results)
+  }
+
+  /// Traverse incoming edges and return (node_id, key) pairs
+  ///
+  /// This is optimized for the fluent API - gets both ID and key in one FFI call.
+  ///
+  /// Args:
+  ///   node_id: Target node ID
+  ///   etype: Edge type ID (optional, None = all types)
+  ///
+  /// Returns:
+  ///   List of (node_id, key) tuples
+  #[pyo3(signature = (node_id, etype=None))]
+  fn traverse_in_with_keys(&self, node_id: i64, etype: Option<u32>) -> PyResult<Vec<(i64, Option<String>)>> {
+    let guard = self.inner.lock().map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+    let db = guard.as_ref().ok_or_else(|| PyRuntimeError::new_err("Database is closed"))?;
+    
+    let edges = db.get_in_edges(node_id as NodeId);
+    let results: Vec<(i64, Option<String>)> = edges
+      .into_iter()
+      .filter(|(e, _)| etype.is_none() || etype == Some(*e))
+      .map(|(_, src)| {
+        let key = db.get_node_key(src);
+        (src as i64, key)
+      })
+      .collect();
+    Ok(results)
+  }
+
+  /// Count incoming edges to a node
+  ///
+  /// This is optimized for counting - doesn't allocate a list.
+  ///
+  /// Args:
+  ///   node_id: Target node ID
+  ///   etype: Edge type ID (optional, None = all types)
+  ///
+  /// Returns:
+  ///   Number of incoming edges
+  #[pyo3(signature = (node_id, etype=None))]
+  fn traverse_in_count(&self, node_id: i64, etype: Option<u32>) -> PyResult<i64> {
+    let guard = self.inner.lock().map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+    let db = guard.as_ref().ok_or_else(|| PyRuntimeError::new_err("Database is closed"))?;
+    
+    if let Some(et) = etype {
+      // Count only specific edge type
+      let count = db.get_in_edges(node_id as NodeId)
+        .into_iter()
+        .filter(|(e, _)| *e == et)
+        .count();
+      Ok(count as i64)
+    } else {
+      // Count all - use optimized degree function
+      Ok(db.get_in_degree(node_id as NodeId) as i64)
+    }
   }
 
   /// Variable-depth traversal from a node

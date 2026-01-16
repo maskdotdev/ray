@@ -201,14 +201,19 @@ class TraversalResult(Generic[N]):
             next_ids: List[int] = []
             visited: Set[int] = set()
             
+            # Get cached etype_id directly from EdgeDef if available
             etype_id = None
             if step.edge_def is not None:
-                etype_id = self._resolve_etype_id(step.edge_def)
+                etype_id = step.edge_def._etype_id
+                if etype_id is None:
+                    etype_id = self._resolve_etype_id(step.edge_def)
             
+            # Process all current nodes
+            step_type = step.type  # Cache for inner loop
             for node_id in current_ids:
-                if step.type == "out":
+                if step_type == "out":
                     neighbor_ids = self._db.traverse_out(node_id, etype_id)
-                elif step.type == "in":
+                elif step_type == "in":
                     neighbor_ids = self._db.traverse_in(node_id, etype_id)
                 else:  # both
                     out_ids = self._db.traverse_out(node_id, etype_id)
@@ -225,6 +230,92 @@ class TraversalResult(Generic[N]):
         for node_id in current_ids:
             yield node_id
     
+    def _execute_fast_with_keys(self) -> Generator[Tuple[int, str], None, None]:
+        """Execute traversal and yield (node_id, key) pairs using batch operations."""
+        # No steps - just yield start nodes
+        if not self._steps:
+            for node in self._start_nodes:
+                yield (node.id, node.key)
+            return
+        
+        current_ids: List[int] = [node.id for node in self._start_nodes]
+        next_pairs: List[Tuple[int, str]] = []
+        
+        for step in self._steps:
+            next_pairs = []
+            visited: Set[int] = set()
+            
+            # Get cached etype_id directly from EdgeDef if available
+            etype_id = None
+            if step.edge_def is not None:
+                etype_id = step.edge_def._etype_id
+                if etype_id is None:
+                    etype_id = self._resolve_etype_id(step.edge_def)
+            
+            step_type = step.type
+            for node_id in current_ids:
+                if step_type == "out":
+                    # Use batch operation that returns (id, key) pairs
+                    pairs = self._db.traverse_out_with_keys(node_id, etype_id)
+                elif step_type == "in":
+                    pairs = self._db.traverse_in_with_keys(node_id, etype_id)
+                else:  # both
+                    out_pairs = self._db.traverse_out_with_keys(node_id, etype_id)
+                    in_pairs = self._db.traverse_in_with_keys(node_id, etype_id)
+                    # Deduplicate by ID
+                    seen = set()
+                    pairs = []
+                    for nid, key in out_pairs + in_pairs:
+                        if nid not in seen:
+                            seen.add(nid)
+                            pairs.append((nid, key))
+                
+                for neighbor_id, key in pairs:
+                    if neighbor_id not in visited:
+                        visited.add(neighbor_id)
+                        next_pairs.append((neighbor_id, key or f"node:{neighbor_id}"))
+            
+            current_ids = [nid for nid, _ in next_pairs]
+        
+        # Yield final results
+        for nid, key in next_pairs:
+            yield (nid, key)
+    
+    def _execute_fast_count(self) -> int:
+        """Execute traversal and return just the count (most optimized)."""
+        current_ids: List[int] = [node.id for node in self._start_nodes]
+        
+        for step in self._steps:
+            next_ids: List[int] = []
+            visited: Set[int] = set()
+            
+            # Get cached etype_id
+            etype_id = None
+            if step.edge_def is not None:
+                etype_id = step.edge_def._etype_id
+                if etype_id is None:
+                    etype_id = self._resolve_etype_id(step.edge_def)
+            
+            step_type = step.type
+            for node_id in current_ids:
+                if step_type == "out":
+                    neighbor_ids = self._db.traverse_out(node_id, etype_id)
+                elif step_type == "in":
+                    neighbor_ids = self._db.traverse_in(node_id, etype_id)
+                else:  # both
+                    out_ids = self._db.traverse_out(node_id, etype_id)
+                    in_ids = self._db.traverse_in(node_id, etype_id)
+                    neighbor_ids = list(set(out_ids) | set(in_ids))
+                
+                for neighbor_id in neighbor_ids:
+                    if neighbor_id not in visited:
+                        visited.add(neighbor_id)
+                        next_ids.append(neighbor_id)
+            
+            current_ids = next_ids
+        
+        return len(current_ids)
+    
     def _execute(self) -> Generator[NodeRef[Any], None, None]:
         """Execute the traversal and yield results."""
         # Fast path: no filter and no properties needed
@@ -232,12 +323,11 @@ class TraversalResult(Generic[N]):
         needs_props = self._prop_strategy.needs_any_props()
         
         if not needs_filter and not needs_props:
-            # Ultra-fast path: just yield minimal NodeRefs
-            for node_id in self._execute_fast():
+            # Ultra-fast path: use batch operation to get IDs + keys in one call
+            for node_id, key in self._execute_fast_with_keys():
                 node_def = self._get_node_def(node_id)
                 if node_def is not None:
-                    key = self._db.get_node_key(node_id)
-                    yield NodeRef(id=node_id, key=key or f"node:{node_id}", node_def=node_def, props={})
+                    yield NodeRef(id=node_id, key=key, node_def=node_def, props={})
             return
         
         # Standard path: may need to load properties
@@ -281,8 +371,8 @@ class TraversalResult(Generic[N]):
             Number of matching nodes
         """
         if self._node_filter is None:
-            # Fast count - just count IDs
-            return sum(1 for _ in self._execute_fast())
+            # Fast count - optimized path that avoids generator overhead
+            return self._execute_fast_count()
         else:
             # Need to check filter - must load props
             return sum(1 for _ in self._execute())

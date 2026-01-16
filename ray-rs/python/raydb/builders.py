@@ -45,7 +45,6 @@ if TYPE_CHECKING:
 # Node Reference
 # ============================================================================
 
-@dataclass
 class NodeRef(Generic[TypeVar("N", bound=NodeDef)]):
     """
     A reference to a node in the database.
@@ -59,25 +58,43 @@ class NodeRef(Generic[TypeVar("N", bound=NodeDef)]):
         node_def: The node definition this reference belongs to
         props: Dictionary of property values
     """
-    id: int
-    key: str
-    node_def: NodeDef[Any]
-    props: Dict[str, Any] = field(default_factory=dict)
+    __slots__ = ('id', 'key', 'node_def', 'props')
+    
+    def __init__(
+        self,
+        id: int,
+        key: str,
+        node_def: NodeDef[Any],
+        props: Optional[Dict[str, Any]] = None,
+    ):
+        self.id = id
+        self.key = key
+        self.node_def = node_def
+        self.props = props if props is not None else {}
     
     def __getattr__(self, name: str) -> Any:
         """Allow attribute-style access to properties."""
-        if name.startswith("_") or name in ("id", "key", "node_def", "props"):
-            raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
-        if name in self.props:
-            return self.props[name]
+        # __slots__ classes don't have __dict__, so we check props directly
+        props = object.__getattribute__(self, 'props')
+        if name in props:
+            return props[name]
         # Check if it's a valid property in the schema
-        if name in self.node_def.props:
+        node_def = object.__getattribute__(self, 'node_def')
+        if name in node_def.props:
             return None  # Property exists but wasn't set
         raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
     
     def __repr__(self) -> str:
         props_str = ", ".join(f"{k}={v!r}" for k, v in self.props.items())
         return f"NodeRef(id={self.id}, key={self.key!r}, {props_str})"
+    
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, NodeRef):
+            return self.id == other.id
+        return False
+    
+    def __hash__(self) -> int:
+        return hash(self.id)
 
 
 N = TypeVar("N", bound=NodeDef)
