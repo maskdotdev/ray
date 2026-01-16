@@ -1298,19 +1298,49 @@ impl Ray {
 
     let node_count = count_nodes(&self.db);
     let edge_count = count_edges(&self.db, None);
+    
+    // Get delta statistics
+    let delta = self.db.delta.read();
+    let delta_nodes_created = delta.created_nodes.len();
+    let delta_nodes_deleted = delta.deleted_nodes.len();
+    let delta_edges_added = delta.total_edges_added();
+    let delta_edges_deleted = delta.total_edges_deleted();
+    drop(delta);
+    
+    // Get snapshot statistics
+    let (snapshot_gen, snapshot_nodes, snapshot_edges, snapshot_max_node_id) = 
+      if let Some(ref snapshot) = self.db.snapshot {
+        (
+          snapshot.header.generation,
+          snapshot.header.num_nodes,
+          snapshot.header.num_edges,
+          snapshot.header.max_node_id,
+        )
+      } else {
+        (0, 0, 0, 0)
+      };
+    
+    // Get WAL segment from manifest
+    let wal_segment = self.db.manifest.as_ref()
+      .map(|m| m.active_wal_seg)
+      .unwrap_or(0);
+    
+    // Recommend compaction if delta has significant changes
+    let total_changes = delta_nodes_created + delta_nodes_deleted + delta_edges_added + delta_edges_deleted;
+    let recommend_compact = total_changes > 10_000;
 
     DbStats {
-      snapshot_gen: 0,
-      snapshot_nodes: node_count,
-      snapshot_edges: edge_count,
-      snapshot_max_node_id: 0,
-      delta_nodes_created: 0,
-      delta_nodes_deleted: 0,
-      delta_edges_added: 0,
-      delta_edges_deleted: 0,
-      wal_segment: 0,
-      wal_bytes: 0,
-      recommend_compact: false,
+      snapshot_gen,
+      snapshot_nodes: snapshot_nodes.max(node_count), // Use higher of snapshot or total
+      snapshot_edges: snapshot_edges.max(edge_count),
+      snapshot_max_node_id,
+      delta_nodes_created,
+      delta_nodes_deleted,
+      delta_edges_added,
+      delta_edges_deleted,
+      wal_segment,
+      wal_bytes: 0, // Would need to track WAL size
+      recommend_compact,
       mvcc_stats: None,
     }
   }
