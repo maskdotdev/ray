@@ -13,7 +13,11 @@ import { Route as DocsRouteImport } from './routes/docs'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DocsIndexRouteImport } from './routes/docs/index'
 import { Route as DocsSplatRouteImport } from './routes/docs/$'
+import { Route as DocsInternalsSplatRouteImport } from './routes/docs/internals/$'
+import { Route as DocsGuidesSplatRouteImport } from './routes/docs/guides/$'
 import { Route as DocsGettingStartedInstallationRouteImport } from './routes/docs/getting-started/installation'
+import { Route as DocsGettingStartedSplatRouteImport } from './routes/docs/getting-started/$'
+import { Route as DocsApiSplatRouteImport } from './routes/docs/api/$'
 
 const DocsRoute = DocsRouteImport.update({
   id: '/docs',
@@ -35,25 +39,53 @@ const DocsSplatRoute = DocsSplatRouteImport.update({
   path: '/$',
   getParentRoute: () => DocsRoute,
 } as any)
+const DocsInternalsSplatRoute = DocsInternalsSplatRouteImport.update({
+  id: '/internals/$',
+  path: '/internals/$',
+  getParentRoute: () => DocsRoute,
+} as any)
+const DocsGuidesSplatRoute = DocsGuidesSplatRouteImport.update({
+  id: '/guides/$',
+  path: '/guides/$',
+  getParentRoute: () => DocsRoute,
+} as any)
 const DocsGettingStartedInstallationRoute =
   DocsGettingStartedInstallationRouteImport.update({
     id: '/getting-started/installation',
     path: '/getting-started/installation',
     getParentRoute: () => DocsRoute,
   } as any)
+const DocsGettingStartedSplatRoute = DocsGettingStartedSplatRouteImport.update({
+  id: '/getting-started/$',
+  path: '/getting-started/$',
+  getParentRoute: () => DocsRoute,
+} as any)
+const DocsApiSplatRoute = DocsApiSplatRouteImport.update({
+  id: '/api/$',
+  path: '/api/$',
+  getParentRoute: () => DocsRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/docs': typeof DocsRouteWithChildren
   '/docs/$': typeof DocsSplatRoute
   '/docs/': typeof DocsIndexRoute
+  '/docs/api/$': typeof DocsApiSplatRoute
+  '/docs/getting-started/$': typeof DocsGettingStartedSplatRoute
   '/docs/getting-started/installation': typeof DocsGettingStartedInstallationRoute
+  '/docs/guides/$': typeof DocsGuidesSplatRoute
+  '/docs/internals/$': typeof DocsInternalsSplatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/docs/$': typeof DocsSplatRoute
   '/docs': typeof DocsIndexRoute
+  '/docs/api/$': typeof DocsApiSplatRoute
+  '/docs/getting-started/$': typeof DocsGettingStartedSplatRoute
   '/docs/getting-started/installation': typeof DocsGettingStartedInstallationRoute
+  '/docs/guides/$': typeof DocsGuidesSplatRoute
+  '/docs/internals/$': typeof DocsInternalsSplatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -61,7 +93,11 @@ export interface FileRoutesById {
   '/docs': typeof DocsRouteWithChildren
   '/docs/$': typeof DocsSplatRoute
   '/docs/': typeof DocsIndexRoute
+  '/docs/api/$': typeof DocsApiSplatRoute
+  '/docs/getting-started/$': typeof DocsGettingStartedSplatRoute
   '/docs/getting-started/installation': typeof DocsGettingStartedInstallationRoute
+  '/docs/guides/$': typeof DocsGuidesSplatRoute
+  '/docs/internals/$': typeof DocsInternalsSplatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -70,16 +106,32 @@ export interface FileRouteTypes {
     | '/docs'
     | '/docs/$'
     | '/docs/'
+    | '/docs/api/$'
+    | '/docs/getting-started/$'
     | '/docs/getting-started/installation'
+    | '/docs/guides/$'
+    | '/docs/internals/$'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/docs/$' | '/docs' | '/docs/getting-started/installation'
+  to:
+    | '/'
+    | '/docs/$'
+    | '/docs'
+    | '/docs/api/$'
+    | '/docs/getting-started/$'
+    | '/docs/getting-started/installation'
+    | '/docs/guides/$'
+    | '/docs/internals/$'
   id:
     | '__root__'
     | '/'
     | '/docs'
     | '/docs/$'
     | '/docs/'
+    | '/docs/api/$'
+    | '/docs/getting-started/$'
     | '/docs/getting-started/installation'
+    | '/docs/guides/$'
+    | '/docs/internals/$'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -117,11 +169,39 @@ declare module '@tanstack/solid-router' {
       preLoaderRoute: typeof DocsSplatRouteImport
       parentRoute: typeof DocsRoute
     }
+    '/docs/internals/$': {
+      id: '/docs/internals/$'
+      path: '/internals/$'
+      fullPath: '/docs/internals/$'
+      preLoaderRoute: typeof DocsInternalsSplatRouteImport
+      parentRoute: typeof DocsRoute
+    }
+    '/docs/guides/$': {
+      id: '/docs/guides/$'
+      path: '/guides/$'
+      fullPath: '/docs/guides/$'
+      preLoaderRoute: typeof DocsGuidesSplatRouteImport
+      parentRoute: typeof DocsRoute
+    }
     '/docs/getting-started/installation': {
       id: '/docs/getting-started/installation'
       path: '/getting-started/installation'
       fullPath: '/docs/getting-started/installation'
       preLoaderRoute: typeof DocsGettingStartedInstallationRouteImport
+      parentRoute: typeof DocsRoute
+    }
+    '/docs/getting-started/$': {
+      id: '/docs/getting-started/$'
+      path: '/getting-started/$'
+      fullPath: '/docs/getting-started/$'
+      preLoaderRoute: typeof DocsGettingStartedSplatRouteImport
+      parentRoute: typeof DocsRoute
+    }
+    '/docs/api/$': {
+      id: '/docs/api/$'
+      path: '/api/$'
+      fullPath: '/docs/api/$'
+      preLoaderRoute: typeof DocsApiSplatRouteImport
       parentRoute: typeof DocsRoute
     }
   }
@@ -130,13 +210,21 @@ declare module '@tanstack/solid-router' {
 interface DocsRouteChildren {
   DocsSplatRoute: typeof DocsSplatRoute
   DocsIndexRoute: typeof DocsIndexRoute
+  DocsApiSplatRoute: typeof DocsApiSplatRoute
+  DocsGettingStartedSplatRoute: typeof DocsGettingStartedSplatRoute
   DocsGettingStartedInstallationRoute: typeof DocsGettingStartedInstallationRoute
+  DocsGuidesSplatRoute: typeof DocsGuidesSplatRoute
+  DocsInternalsSplatRoute: typeof DocsInternalsSplatRoute
 }
 
 const DocsRouteChildren: DocsRouteChildren = {
   DocsSplatRoute: DocsSplatRoute,
   DocsIndexRoute: DocsIndexRoute,
+  DocsApiSplatRoute: DocsApiSplatRoute,
+  DocsGettingStartedSplatRoute: DocsGettingStartedSplatRoute,
   DocsGettingStartedInstallationRoute: DocsGettingStartedInstallationRoute,
+  DocsGuidesSplatRoute: DocsGuidesSplatRoute,
+  DocsInternalsSplatRoute: DocsInternalsSplatRoute,
 }
 
 const DocsRouteWithChildren = DocsRoute._addFileChildren(DocsRouteChildren)
