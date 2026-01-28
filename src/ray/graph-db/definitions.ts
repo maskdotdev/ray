@@ -4,7 +4,7 @@ import type {
   ETypeID,
   PropKeyID,
   TxHandle,
-} from "../../types.ts";
+} from "../../types.js";
 
 /**
  * Define a new label

@@ -1,5 +1,5 @@
-import { edgePropKey, isNodeDeleted } from "../../core/delta.ts";
-import { findEdgeIndex, getPhysNode, getEdgeProp as snapshotGetEdgeProp, getEdgeProps as snapshotGetEdgeProps } from "../../core/snapshot-reader.ts";
+import { edgePropKey, isNodeDeleted } from "../../core/delta.js";
+import { findEdgeIndex, getPhysNode, getEdgeProp as snapshotGetEdgeProp, getEdgeProps as snapshotGetEdgeProps } from "../../core/snapshot-reader.js";
 import type {
   GraphDB,
   NodeID,
@@ -8,13 +8,13 @@ import type {
   PropValue,
   TxHandle,
   Edge,
-} from "../../types.ts";
-import { hasEdgeMerged, neighborsIn, neighborsOut } from "../iterators.ts";
-import { getCache } from "./cache-helper.ts";
-import { getMvccManager, isMvccEnabled } from "../../mvcc/index.ts";
-import { getVisibleVersion, edgeExists as mvccEdgeExists } from "../../mvcc/visibility.ts";
-import { getSnapshot } from "./snapshot-helper.ts";
-import { listNodes } from "./nodes.ts";
+} from "../../types.js";
+import { hasEdgeMerged, neighborsIn, neighborsOut } from "../iterators.js";
+import { getCache } from "./cache-helper.js";
+import { getMvccManager, isMvccEnabled } from "../../mvcc/index.js";
+import { getVisibleVersion, edgeExists as mvccEdgeExists } from "../../mvcc/visibility.js";
+import { getSnapshot } from "./snapshot-helper.js";
+import { listNodes } from "./nodes.js";
 
 /**
  * Helper to detect if argument is a TxHandle (duck-typing)

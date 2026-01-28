@@ -14,14 +14,14 @@ import type {
   PropKeyID,
   PropValue,
   SnapshotData,
-} from "../../types.ts";
-import { parseSnapshot } from "../../core/snapshot-reader.ts";
+} from "../../types.js";
+import { parseSnapshot } from "../../core/snapshot-reader.js";
 import {
   edgePropKey,
   getNodeDelta,
   isEdgeDeleted,
   isNodeDeleted,
-} from "../../core/delta.ts";
+} from "../../core/delta.js";
 import {
   findEdgeIndex,
   getEdgeProps,
@@ -29,9 +29,9 @@ import {
   getNodeProps,
   getOutEdges,
   getString,
-} from "../../core/snapshot-reader.ts";
-import { readU32At } from "../../util/binary.ts";
-import type { NodeData, EdgeData } from "../../core/snapshot-writer-buffer.ts";
+} from "../../core/snapshot-reader.js";
+import { readU32At } from "../../util/binary.js";
+import type { NodeData, EdgeData } from "../../core/snapshot-writer-buffer.js";
 
 /**
  * Get the snapshot data for a database

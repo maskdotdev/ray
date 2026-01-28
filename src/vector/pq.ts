@@ -14,7 +14,7 @@
  * 3. Search: Build distance table (query to all centroids), sum table lookups
  */
 
-import { squaredEuclidean } from "./distance.ts";
+import { squaredEuclidean } from "./distance.js";
 
 // ============================================================================
 // Types

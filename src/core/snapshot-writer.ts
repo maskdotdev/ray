@@ -10,7 +10,7 @@ import {
   SNAPSHOTS_DIR,
   snapshotFilename,
   VERSION_SNAPSHOT,
-} from "../constants.ts";
+} from "../constants.js";
 import {
   type Edge,
   type ETypeID,
@@ -27,21 +27,21 @@ import {
   SNAPSHOT_HEADER_SIZE,
   SnapshotFlags,
   type StringID,
-} from "../types.ts";
+} from "../types.js";
 import {
   alignUp,
   BufferBuilder,
   encodeString,
   f64ToU64Bits,
-} from "../util/binary.ts";
+} from "../util/binary.js";
 import {
   type CompressionOptions,
   CompressionType,
   DEFAULT_COMPRESSION_OPTIONS,
   maybeCompress,
-} from "../util/compression.ts";
-import { crc32c } from "../util/crc.ts";
-import { xxhash64String } from "../util/hash.ts";
+} from "../util/compression.js";
+import { crc32c } from "../util/crc.js";
+import { xxhash64String } from "../util/hash.js";
 
 // ============================================================================
 // Builder types

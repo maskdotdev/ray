@@ -10,17 +10,17 @@ import {
   MAGIC_RAYDB,
   MIN_READER_SINGLE_FILE,
   VERSION_SINGLE_FILE,
-} from "../constants.ts";
-import type { DbHeaderV1 } from "../types.ts";
+} from "../constants.js";
+import type { DbHeaderV1 } from "../types.js";
 import {
   readU32,
   readU64,
   viewOf,
   writeU32,
   writeU64,
-} from "../util/binary.ts";
-import { crc32c } from "../util/crc.ts";
-import type { FilePager } from "./pager.ts";
+} from "../util/binary.js";
+import { crc32c } from "../util/crc.js";
+import type { FilePager } from "./pager.js";
 
 // Header field offsets
 const OFFSET_MAGIC = 0;

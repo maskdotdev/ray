@@ -1,5 +1,5 @@
-import type { GraphDB, NodeID, ETypeID } from "../../types.ts";
-import { getCache } from "./cache-helper.ts";
+import type { GraphDB, NodeID, ETypeID } from "../../types.js";
+import { getCache } from "./cache-helper.js";
 
 /**
  * Invalidate all caches for a node
@@ -39,7 +39,7 @@ export function clearCache(db: GraphDB): void {
 /**
  * Get cache statistics
  */
-export function getCacheStats(db: GraphDB): import("../../types.ts").CacheStats | null {
+export function getCacheStats(db: GraphDB): import("../../types.js").CacheStats | null {
   const cache = getCache(db);
   if (!cache || !cache.isEnabled()) {
     return null;

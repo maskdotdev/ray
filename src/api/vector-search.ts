@@ -4,10 +4,10 @@
  * Provides high-level API for vector similarity search integrated with the Ray API.
  */
 
-import type { NodeID } from "../types.ts";
-import type { NodeDef } from "./schema.ts";
-import type { NodeRef } from "./builders.ts";
-import type { VectorSearchResult, VectorManifest, IvfIndex, IvfConfig } from "../vector/types.ts";
+import type { NodeID } from "../types.js";
+import type { NodeDef } from "./schema.js";
+import type { NodeRef } from "./builders.js";
+import type { VectorSearchResult, VectorManifest, IvfIndex, IvfConfig } from "../vector/types.js";
 import {
   createVectorStore,
   vectorStoreInsert,
@@ -15,7 +15,7 @@ import {
   vectorStoreGet,
   vectorStoreStats,
   vectorStoreClear,
-} from "../vector/columnar-store.ts";
+} from "../vector/columnar-store.js";
 import {
   createIvfIndex,
   ivfAddTrainingVectors,
@@ -23,9 +23,9 @@ import {
   ivfInsert,
   ivfDelete,
   ivfSearch,
-} from "../vector/ivf-index.ts";
-import { normalize, validateVector } from "../vector/normalize.ts";
-import { getDistanceFunction, distanceToSimilarity } from "../vector/distance.ts";
+} from "../vector/ivf-index.js";
+import { normalize, validateVector } from "../vector/normalize.js";
+import { getDistanceFunction, distanceToSimilarity } from "../vector/distance.js";
 
 // ============================================================================
 // LRU Cache

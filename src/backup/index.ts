@@ -8,9 +8,9 @@
 import { existsSync } from "node:fs";
 import { copyFile, mkdir, readdir, stat, rm } from "node:fs/promises";
 import { join, basename, dirname } from "node:path";
-import type { GraphDB } from "../types.ts";
-import { EXT_RAYDB, MANIFEST_FILENAME, SNAPSHOTS_DIR, WAL_DIR } from "../constants.ts";
-import { checkpoint } from "../ray/graph-db/checkpoint.ts";
+import type { GraphDB } from "../types.js";
+import { EXT_RAYDB, MANIFEST_FILENAME, SNAPSHOTS_DIR, WAL_DIR } from "../constants.js";
+import { checkpoint } from "../ray/graph-db/checkpoint.js";
 
 export interface BackupOptions {
   /**

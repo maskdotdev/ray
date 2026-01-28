@@ -32,9 +32,9 @@ export type {
   SealFragmentPayload,
   CompactFragmentsPayload,
   VectorDeltaState,
-} from "./types.ts";
+} from "./types.js";
 
-export { DEFAULT_VECTOR_CONFIG, DEFAULT_IVF_CONFIG } from "./types.ts";
+export { DEFAULT_VECTOR_CONFIG, DEFAULT_IVF_CONFIG } from "./types.js";
 
 // Normalization & Validation
 export {
@@ -49,8 +49,8 @@ export {
   normalizeRowGroup,
   normalizeVectorAt,
   isNormalizedAt,
-} from "./normalize.ts";
-export type { VectorValidationResult } from "./normalize.ts";
+} from "./normalize.js";
+export type { VectorValidationResult } from "./normalize.js";
 
 // Distance functions
 export {
@@ -70,7 +70,7 @@ export {
   findKNearest,
   MinHeap,
   MaxHeap,
-} from "./distance.ts";
+} from "./distance.js";
 
 // Row group operations
 export {
@@ -86,7 +86,7 @@ export {
   rowGroupFromData,
   rowGroupIterator,
   rowGroupCopy,
-} from "./row-group.ts";
+} from "./row-group.js";
 
 // Fragment operations
 export {
@@ -104,7 +104,7 @@ export {
   fragmentIterator,
   fragmentFromData,
   fragmentClone,
-} from "./fragment.ts";
+} from "./fragment.js";
 
 // Columnar store
 export {
@@ -126,7 +126,7 @@ export {
   vectorStoreGetAllVectors,
   vectorStoreClear,
   vectorStoreClone,
-} from "./columnar-store.ts";
+} from "./columnar-store.js";
 
 // IVF index
 export {
@@ -140,7 +140,7 @@ export {
   ivfBuildFromStore,
   ivfStats,
   ivfClear,
-} from "./ivf-index.ts";
+} from "./ivf-index.js";
 
 // Compaction
 export {
@@ -152,8 +152,8 @@ export {
   forceFullCompaction,
   clearDeletedFragments,
   DEFAULT_COMPACTION_STRATEGY,
-} from "./compaction.ts";
-export type { CompactionStrategy } from "./compaction.ts";
+} from "./compaction.js";
+export type { CompactionStrategy } from "./compaction.js";
 
 // Serialization
 export {
@@ -163,7 +163,7 @@ export {
   manifestSerializedSize,
   serializeManifest,
   deserializeManifest,
-} from "./ivf-serialize.ts";
+} from "./ivf-serialize.js";
 
 // Product Quantization
 export {
@@ -177,8 +177,8 @@ export {
   pqSearchWithTable,
   pqStats,
   DEFAULT_PQ_CONFIG,
-} from "./pq.ts";
-export type { PQConfig, PQIndex } from "./pq.ts";
+} from "./pq.js";
+export type { PQConfig, PQIndex } from "./pq.js";
 
 // IVF-PQ Combined Index
 export {
@@ -189,5 +189,5 @@ export {
   ivfPqSearch,
   ivfPqStats,
   DEFAULT_IVF_PQ_CONFIG,
-} from "./ivf-pq.ts";
-export type { IvfPqConfig, IvfPqIndex } from "./ivf-pq.ts";
+} from "./ivf-pq.js";
+export type { IvfPqConfig, IvfPqIndex } from "./ivf-pq.js";

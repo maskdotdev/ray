@@ -9,7 +9,7 @@
  * 5. Clear WAL buffer
  */
 
-import { SECTION_ALIGNMENT } from "../constants.ts";
+import { SECTION_ALIGNMENT } from "../constants.js";
 import type {
   DbHeaderV1,
   DeltaState,
@@ -20,19 +20,19 @@ import type {
   PropKeyID,
   PropValue,
   SnapshotData,
-} from "../types.ts";
-import { alignUp, readU32At } from "../util/binary.ts";
-import type { CompressionOptions } from "../util/compression.ts";
+} from "../types.js";
+import { alignUp, readU32At } from "../util/binary.js";
+import type { CompressionOptions } from "../util/compression.js";
 import {
   clearDelta,
   edgePropKey,
   getNodeDelta,
   isEdgeDeleted,
   isNodeDeleted,
-} from "./delta.ts";
-import { updateHeaderForCompaction, writeHeader } from "./header.ts";
-import type { FilePager } from "./pager.ts";
-import { pagesToStore } from "./pager.ts";
+} from "./delta.js";
+import { updateHeaderForCompaction, writeHeader } from "./header.js";
+import type { FilePager } from "./pager.js";
+import { pagesToStore } from "./pager.js";
 import {
   findEdgeIndex,
   getEdgeProps,
@@ -41,15 +41,15 @@ import {
   getOutEdges,
   getString,
   parseSnapshot,
-} from "./snapshot-reader.ts";
+} from "./snapshot-reader.js";
 import {
   type EdgeData,
   type NodeData,
   buildSnapshotBuffer,
-} from "./snapshot-writer-buffer.ts";
-import { createWalBuffer } from "./wal-buffer.ts";
-import { invalidateSnapshotCache } from "../ray/graph-db/snapshot-helper.ts";
-import { isCheckpointRunning, getCheckpointPromise } from "../ray/graph-db/checkpoint.ts";
+} from "./snapshot-writer-buffer.js";
+import { createWalBuffer } from "./wal-buffer.js";
+import { invalidateSnapshotCache } from "../ray/graph-db/snapshot-helper.js";
+import { isCheckpointRunning, getCheckpointPromise } from "../ray/graph-db/checkpoint.js";
 
 /**
  * Options for single-file optimize operation

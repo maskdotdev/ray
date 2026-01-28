@@ -5,14 +5,14 @@
  * Fragments follow an append-only design and are sealed when full.
  */
 
-import type { Fragment, RowGroup, VectorStoreConfig } from "./types.ts";
+import type { Fragment, RowGroup, VectorStoreConfig } from "./types.js";
 import {
   createRowGroup,
   rowGroupAppend,
   rowGroupIsFull,
   rowGroupTrim,
   rowGroupGet,
-} from "./row-group.ts";
+} from "./row-group.js";
 
 /**
  * Create a new fragment

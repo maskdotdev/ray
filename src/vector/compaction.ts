@@ -5,14 +5,14 @@
  * from one or more source fragments.
  */
 
-import type { Fragment, VectorManifest } from "./types.ts";
+import type { Fragment, VectorManifest } from "./types.js";
 import {
   createFragment,
   fragmentAppend,
   fragmentSeal,
   fragmentIsDeleted,
   fragmentLiveCount,
-} from "./fragment.ts";
+} from "./fragment.js";
 
 /**
  * Compaction strategy configuration

@@ -2,8 +2,8 @@ import {
   getNodeDelta,
   isNodeCreated,
   isNodeDeleted,
-} from "../../core/delta.ts";
-import { getPhysNode, getNodeId, getNodeProp as snapshotGetNodeProp, getNodeProps as snapshotGetNodeProps } from "../../core/snapshot-reader.ts";
+} from "../../core/delta.js";
+import { getPhysNode, getNodeId, getNodeProp as snapshotGetNodeProp, getNodeProps as snapshotGetNodeProps } from "../../core/snapshot-reader.js";
 import type {
   GraphDB,
   NodeID,
@@ -12,13 +12,13 @@ import type {
   PropValue,
   TxHandle,
   LabelID,
-} from "../../types.ts";
-import { lookupByKey } from "../key-index.ts";
-import { getCache } from "./cache-helper.ts";
-import { getMvccManager, isMvccEnabled } from "../../mvcc/index.ts";
-import { getVisibleVersion, nodeExists as mvccNodeExists } from "../../mvcc/visibility.ts";
-import { getSnapshot } from "./snapshot-helper.ts";
-import type { VectorManifest } from "../../vector/types.ts";
+} from "../../types.js";
+import { lookupByKey } from "../key-index.js";
+import { getCache } from "./cache-helper.js";
+import { getMvccManager, isMvccEnabled } from "../../mvcc/index.js";
+import { getVisibleVersion, nodeExists as mvccNodeExists } from "../../mvcc/visibility.js";
+import { getSnapshot } from "./snapshot-helper.js";
+import type { VectorManifest } from "../../vector/types.js";
 
 /**
  * Helper to detect if argument is a TxHandle (duck-typing)

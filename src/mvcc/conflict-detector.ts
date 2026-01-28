@@ -4,10 +4,10 @@
  * Detects read-write and write-write conflicts using optimistic concurrency control
  */
 
-import type { MvccTransaction } from "../types.ts";
-import { ConflictError } from "../types.ts";
-import { TxManager } from "./tx-manager.ts";
-import { VersionChainManager } from "./version-chain.ts";
+import type { MvccTransaction } from "../types.js";
+import { ConflictError } from "../types.js";
+import { TxManager } from "./tx-manager.js";
+import { VersionChainManager } from "./version-chain.js";
 
 export class ConflictDetector {
   constructor(

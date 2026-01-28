@@ -15,12 +15,12 @@
  * flush entire pages at once.
  */
 
-import { WAL_RECORD_ALIGNMENT } from "../constants.ts";
-import { WalBufferFullError, type DbHeaderV1 } from "../types.ts";
-import { alignUp, paddingFor, viewOf, writeU32 } from "../util/binary.ts";
-import { crc32c } from "../util/crc.ts";
-import type { FilePager } from "./pager.ts";
-import { buildWalRecord, parseWalRecord, type ParsedWalRecord, type WalRecord } from "./wal.ts";
+import { WAL_RECORD_ALIGNMENT } from "../constants.js";
+import { WalBufferFullError, type DbHeaderV1 } from "../types.js";
+import { alignUp, paddingFor, viewOf, writeU32 } from "../util/binary.js";
+import { crc32c } from "../util/crc.js";
+import type { FilePager } from "./pager.js";
+import { buildWalRecord, parseWalRecord, type ParsedWalRecord, type WalRecord } from "./wal.js";
 
 /** WAL region split ratio: primary gets 75%, secondary gets 25% */
 const PRIMARY_REGION_RATIO = 0.75;

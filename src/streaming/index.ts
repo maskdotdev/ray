@@ -8,12 +8,12 @@
  * - Progress callbacks for long-running operations
  */
 
-import type { GraphDB, TxHandle, NodeID, ETypeID, Edge, PropKeyID, PropValue } from "../types.ts";
-import { listNodes, countNodes, getNodeProps, nodeExists, getNodeByKey } from "../ray/graph-db/nodes.ts";
-import { listEdges, countEdges, getEdgeProps } from "../ray/graph-db/edges.ts";
-import { getSnapshot } from "../ray/graph-db/snapshot-helper.ts";
-import { getNodeId, getPhysNode } from "../core/snapshot-reader.ts";
-import { getNodeKey } from "../ray/key-index.ts";
+import type { GraphDB, TxHandle, NodeID, ETypeID, Edge, PropKeyID, PropValue } from "../types.js";
+import { listNodes, countNodes, getNodeProps, nodeExists, getNodeByKey } from "../ray/graph-db/nodes.js";
+import { listEdges, countEdges, getEdgeProps } from "../ray/graph-db/edges.js";
+import { getSnapshot } from "../ray/graph-db/snapshot-helper.js";
+import { getNodeId, getPhysNode } from "../core/snapshot-reader.js";
+import { getNodeKey } from "../ray/key-index.js";
 
 // ============================================================================
 // Types

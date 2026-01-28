@@ -14,8 +14,8 @@ import type {
   ETypeID,
   PropKeyID,
   PropValue,
-} from "../types.ts";
-import { SoaPropertyVersions, NULL_IDX, type PooledVersion } from "./version-pool.ts";
+} from "../types.js";
+import { SoaPropertyVersions, NULL_IDX, type PooledVersion } from "./version-pool.js";
 
 /**
  * Adapter to convert PooledVersion to VersionedRecord for API compatibility

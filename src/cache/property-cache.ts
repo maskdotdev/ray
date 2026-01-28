@@ -7,8 +7,8 @@
  * Maintains a reverse index from node/edge to their cache keys for O(1) invalidation.
  */
 
-import type { ETypeID, NodeID, PropKeyID, PropValue } from "../types.ts";
-import { LRUCache } from "../util/lru.ts";
+import type { ETypeID, NodeID, PropKeyID, PropValue } from "../types.js";
+import { LRUCache } from "../util/lru.js";
 
 // Cache keys
 type NodePropKey = string; // Format: `n:${NodeID}:${PropKeyID}`

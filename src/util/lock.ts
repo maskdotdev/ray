@@ -11,8 +11,8 @@
 import { closeSync, openSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { dlopen, FFIType, suffix } from "bun:ffi";
-import { LOCK_FILENAME } from "../constants.ts";
-import { lockLogger } from "./logger.ts";
+import { LOCK_FILENAME } from "../constants.js";
+import { lockLogger } from "./logger.js";
 
 // ============================================================================
 // Native flock() via Bun FFI

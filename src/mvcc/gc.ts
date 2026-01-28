@@ -4,9 +4,9 @@
  * Periodically prunes old versions that are no longer needed
  */
 
-import { TxManager } from "./tx-manager.ts";
-import { VersionChainManager } from "./version-chain.ts";
-import { gcLogger } from "../util/logger.ts";
+import { TxManager } from "./tx-manager.js";
+import { VersionChainManager } from "./version-chain.js";
+import { gcLogger } from "../util/logger.js";
 
 export interface GcStats {
   versionsPruned: bigint;
