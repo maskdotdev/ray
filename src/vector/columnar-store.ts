@@ -9,8 +9,8 @@ import type {
   VectorManifest,
   VectorStoreConfig,
   Fragment,
-} from "./types.ts";
-import { DEFAULT_VECTOR_CONFIG } from "./types.ts";
+} from "./types.js";
+import { DEFAULT_VECTOR_CONFIG } from "./types.js";
 import {
   createFragment,
   fragmentAppend,
@@ -20,9 +20,9 @@ import {
   fragmentIsDeleted,
   fragmentGetVector,
   fragmentLiveCount,
-} from "./fragment.ts";
-import { validateVector } from "./normalize.ts";
-import type { NodeID } from "../types.ts";
+} from "./fragment.js";
+import { validateVector } from "./normalize.js";
+import type { NodeID } from "../types.js";
 
 /**
  * Create a new vector store

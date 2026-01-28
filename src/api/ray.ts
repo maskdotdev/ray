@@ -4,7 +4,7 @@
  * High-level Drizzle-style API for the graph database.
  */
 
-import { optimize } from "../core/compactor.ts";
+import { optimize } from "../core/compactor.js";
 import {
   beginTx,
   closeGraphDB,
@@ -24,8 +24,8 @@ import {
   check as rawCheck,
   stats as rawStats,
   rollback,
-} from "../ray/graph-db/index.ts";
-import { getNodeKey } from "../ray/key-index.ts";
+} from "../ray/graph-db/index.js";
+import { getNodeKey } from "../ray/key-index.js";
 import type {
   CheckResult,
   DbStats,
@@ -36,7 +36,7 @@ import type {
   OpenOptions,
   PropKeyID,
   TxHandle,
-} from "../types.ts";
+} from "../types.js";
 import {
   type BatchOperation,
   createDeleteBuilder,
@@ -54,7 +54,7 @@ import {
   type UpdateBuilder,
   type UpdateByRefBuilder,
   type UpdateEdgeBuilder,
-} from "./builders.ts";
+} from "./builders.js";
 import type {
   EdgeDef,
   InferEdgeProps,
@@ -62,13 +62,13 @@ import type {
   InferNodeInsert,
   NodeDef,
   RaySchema,
-} from "./schema.ts";
-import { createTraversalBuilder, type TraversalBuilder } from "./traversal.ts";
+} from "./schema.js";
+import { createTraversalBuilder, type TraversalBuilder } from "./traversal.js";
 import {
   createPathFindingBuilder,
   type PathFindingBuilder,
   type WeightSpec,
-} from "./pathfinding.ts";
+} from "./pathfinding.js";
 
 // ============================================================================
 // Ray Options
@@ -830,7 +830,7 @@ export class Ray {
   // Private Helpers
   // ==========================================================================
 
-  private fromPropValue(pv: import("../types.ts").PropValue): unknown {
+  private fromPropValue(pv: import("../types.js").PropValue): unknown {
     switch (pv.tag) {
       case 0: // NULL
         return null;

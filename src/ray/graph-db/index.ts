@@ -6,10 +6,10 @@
  */
 
 // Lifecycle
-export { openGraphDB, closeGraphDB } from "./lifecycle.ts";
+export { openGraphDB, closeGraphDB } from "./lifecycle.js";
 
 // Transactions
-export { beginTx, commit, rollback } from "./tx.ts";
+export { beginTx, commit, rollback } from "./tx.js";
 
 // Node operations
 export {
@@ -23,7 +23,7 @@ export {
   getNodeProps,
   listNodes,
   countNodes,
-} from "./nodes.ts";
+} from "./nodes.js";
 
 // Edge operations
 export {
@@ -38,10 +38,10 @@ export {
   getEdgeProps,
   listEdges,
   countEdges,
-} from "./edges.ts";
+} from "./edges.js";
 
 // Schema definitions
-export { defineLabel, defineEtype, definePropkey } from "./definitions.ts";
+export { defineLabel, defineEtype, definePropkey } from "./definitions.js";
 
 // Cache API
 export {
@@ -49,10 +49,10 @@ export {
   invalidateEdgeCache,
   clearCache,
   getCacheStats,
-} from "./cache-api.ts";
+} from "./cache-api.js";
 
 // Stats and maintenance
-export { stats, check } from "./stats.ts";
+export { stats, check } from "./stats.js";
 
 // Vector operations
 export {
@@ -62,5 +62,5 @@ export {
   hasNodeVector,
   getVectorStore,
   getVectorStats,
-} from "./vectors.ts";
+} from "./vectors.js";
 

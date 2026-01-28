@@ -2,7 +2,7 @@
  * Binary serialization for IVF index and vector store
  */
 
-import type { IvfIndex, IvfConfig, VectorManifest, Fragment, RowGroup } from "./types.ts";
+import type { IvfIndex, IvfConfig, VectorManifest, Fragment, RowGroup } from "./types.js";
 
 // ============================================================================
 // Constants

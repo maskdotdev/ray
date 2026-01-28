@@ -7,7 +7,7 @@
 import type {
   VersionedRecord,
   MvccTransaction,
-} from "../types.ts";
+} from "../types.js";
 
 /**
  * Check if a version is visible to a transaction

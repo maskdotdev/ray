@@ -1,9 +1,9 @@
-import { COMPACT_WAL_SIZE } from "../../constants.ts";
-import { getDeltaStats } from "../../core/delta.ts";
-import { checkSnapshot as checkSnapshotFn } from "../../check/checker.ts";
-import type { CheckResult, DbStats, GraphDB } from "../../types.ts";
-import { getMvccManager, isMvccEnabled } from "../../mvcc/index.ts";
-import { getSnapshot } from "./snapshot-helper.ts";
+import { COMPACT_WAL_SIZE } from "../../constants.js";
+import { getDeltaStats } from "../../core/delta.js";
+import { checkSnapshot as checkSnapshotFn } from "../../check/checker.js";
+import type { CheckResult, DbStats, GraphDB } from "../../types.js";
+import { getMvccManager, isMvccEnabled } from "../../mvcc/index.js";
+import { getSnapshot } from "./snapshot-helper.js";
 
 /**
  * Get database statistics

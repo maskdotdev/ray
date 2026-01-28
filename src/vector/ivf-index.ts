@@ -14,8 +14,8 @@ import type {
   IvfConfig,
   VectorManifest,
   VectorSearchResult,
-} from "./types.ts";
-import { DEFAULT_IVF_CONFIG } from "./types.ts";
+} from "./types.js";
+import { DEFAULT_IVF_CONFIG } from "./types.js";
 import {
   dotProduct,
   cosineDistance,
@@ -24,15 +24,15 @@ import {
   getDistanceFunction,
   getBatchDistanceFunction,
   MaxHeap,
-} from "./distance.ts";
-import { normalize, l2Norm } from "./normalize.ts";
+} from "./distance.js";
+import { normalize, l2Norm } from "./normalize.js";
 import {
   vectorStoreGetById,
   vectorStoreGetLocation,
   vectorStoreGetNodeId,
-} from "./columnar-store.ts";
-import { fragmentIsDeleted } from "./fragment.ts";
-import type { NodeID } from "../types.ts";
+} from "./columnar-store.js";
+import { fragmentIsDeleted } from "./fragment.js";
+import type { NodeID } from "../types.js";
 
 // ============================================================================
 // Index Creation

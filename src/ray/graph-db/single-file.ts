@@ -13,8 +13,8 @@ import {
   INITIAL_PROPKEY_ID,
   INITIAL_TX_ID,
   WAL_DEFAULT_SIZE,
-} from "../../constants.ts";
-import { createDelta } from "../../core/delta.ts";
+} from "../../constants.js";
+import { createDelta } from "../../core/delta.js";
 import {
   createEmptyHeader,
   hasValidHeader,
@@ -24,25 +24,25 @@ import {
   updateHeaderForCommit,
   writeHeader,
   writeHeaderSync,
-} from "../../core/header.ts";
-import type { DbHeaderV1, GraphDB, OpenOptions, DeltaState } from "../../types.ts";
-import { createPager, FilePager, isValidPageSize, openPager, pagesToStore } from "../../core/pager.ts";
-import { createWalBuffer, WalBuffer } from "../../core/wal-buffer.ts";
-import { isCheckpointRunning, getCheckpointPromise } from "./checkpoint.ts";
-import { extractCommittedTransactions, type ParsedWalRecord } from "../../core/wal.ts";
-import { WalRecordType } from "../../types.ts";
+} from "../../core/header.js";
+import type { DbHeaderV1, GraphDB, OpenOptions, DeltaState } from "../../types.js";
+import { createPager, FilePager, isValidPageSize, openPager, pagesToStore } from "../../core/pager.js";
+import { createWalBuffer, WalBuffer } from "../../core/wal-buffer.js";
+import { isCheckpointRunning, getCheckpointPromise } from "./checkpoint.js";
+import { extractCommittedTransactions, type ParsedWalRecord } from "../../core/wal.js";
+import { WalRecordType } from "../../types.js";
 import {
   acquireExclusiveFileLock,
   acquireSharedFileLock,
   releaseFileLock,
   isProperLockingAvailable,
   type SingleFileLockHandle,
-} from "../../util/lock.ts";
-import { CacheManager } from "../../cache/index.ts";
-import { replayWalRecord, replayVectorRecord } from "./wal-replay.ts";
-import { MvccManager } from "../../mvcc/index.ts";
-import type { PropKeyID } from "../../types.ts";
-import type { VectorManifest } from "../../vector/types.ts";
+} from "../../util/lock.js";
+import { CacheManager } from "../../cache/index.js";
+import { replayWalRecord, replayVectorRecord } from "./wal-replay.js";
+import { MvccManager } from "../../mvcc/index.js";
+import type { PropKeyID } from "../../types.js";
+import type { VectorManifest } from "../../vector/types.js";
 import {
   parseCreateNodePayload,
   parseDefineEtypePayload,
@@ -55,8 +55,8 @@ import {
   parseDelNodePropPayload,
   parseSetEdgePropPayload,
   parseDelEdgePropPayload,
-} from "../../core/wal.ts";
-import { checkpointLogger } from "../../util/logger.ts";
+} from "../../core/wal.js";
+import { checkpointLogger } from "../../util/logger.js";
 
 /**
  * Open a single-file database (.raydb format)

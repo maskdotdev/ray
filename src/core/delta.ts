@@ -2,7 +2,7 @@
  * Delta overlay - in-memory patches for uncommitted and committed changes
  */
 
-import { DELTA_SET_UPGRADE_THRESHOLD } from "../constants.ts";
+import { DELTA_SET_UPGRADE_THRESHOLD } from "../constants.js";
 import type {
   DeltaState,
   EdgePatch,
@@ -12,7 +12,7 @@ import type {
   NodeID,
   PropKeyID,
   PropValue,
-} from "../types.ts";
+} from "../types.js";
 
 // ============================================================================
 // Delta creation

@@ -3,7 +3,7 @@
  * All operations are little-endian as per spec
  */
 
-import { SECTION_ALIGNMENT, WAL_RECORD_ALIGNMENT } from "../constants.ts";
+import { SECTION_ALIGNMENT, WAL_RECORD_ALIGNMENT } from "../constants.js";
 
 // ============================================================================
 // Buffer allocation

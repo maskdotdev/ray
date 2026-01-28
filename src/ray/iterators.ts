@@ -4,13 +4,13 @@
  * Optimization: Uses Set-based lookups for O(1) edge existence checks in delta
  */
 
-import { isEdgeDeleted, isNodeDeleted } from "../core/delta.ts";
+import { isEdgeDeleted, isNodeDeleted } from "../core/delta.js";
 import {
   getNodeId,
   getPhysNode,
   iterateInEdges,
   iterateOutEdges,
-} from "../core/snapshot-reader.ts";
+} from "../core/snapshot-reader.js";
 import type {
   DeltaState,
   Edge,
@@ -18,8 +18,8 @@ import type {
   ETypeID,
   NodeID,
   SnapshotData,
-} from "../types.ts";
-import { readU32At } from "../util/binary.ts";
+} from "../types.js";
+import { readU32At } from "../util/binary.js";
 
 // ============================================================================
 // Edge iteration with merged view

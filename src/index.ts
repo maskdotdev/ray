@@ -30,15 +30,15 @@ export type {
   PropertyCacheConfig,
   TraversalCacheConfig,
   QueryCacheConfig,
-} from "./types.ts";
+} from "./types.js";
 
-export { PropValueTag } from "./types.ts";
+export { PropValueTag } from "./types.js";
 
 // ============================================================================
 // Database lifecycle
 // ============================================================================
 
-export { openGraphDB, closeGraphDB } from "./ray/graph-db/index.ts";
+export { openGraphDB, closeGraphDB } from "./ray/graph-db/index.js";
 
 // ============================================================================
 // Locking utilities
@@ -59,7 +59,7 @@ export { openGraphDB, closeGraphDB } from "./ray/graph-db/index.ts";
  * });
  * ```
  */
-export { isProperLockingAvailable } from "./util/lock.ts";
+export { isProperLockingAvailable } from "./util/lock.js";
 
 // ============================================================================
 // Backup and Restore
@@ -73,7 +73,7 @@ export {
   type BackupOptions,
   type RestoreOptions,
   type BackupResult,
-} from "./backup/index.ts";
+} from "./backup/index.js";
 
 // ============================================================================
 // Streaming and Pagination
@@ -97,7 +97,7 @@ export {
   type Page,
   type NodeWithProps,
   type EdgeWithProps,
-} from "./streaming/index.ts";
+} from "./streaming/index.js";
 
 // ============================================================================
 // Export and Import
@@ -114,7 +114,7 @@ export {
   type ExportedDatabase,
   type ExportedNode,
   type ExportedEdge,
-} from "./export/index.ts";
+} from "./export/index.js";
 
 // ============================================================================
 // Metrics and Observability
@@ -131,13 +131,13 @@ export {
   type MvccMetrics,
   type MemoryMetrics,
   type HealthCheckResult,
-} from "./metrics/index.ts";
+} from "./metrics/index.js";
 
 // ============================================================================
 // Transactions
 // ============================================================================
 
-export { beginTx, commit, rollback } from "./ray/graph-db/index.ts";
+export { beginTx, commit, rollback } from "./ray/graph-db/index.js";
 
 // ============================================================================
 // Node operations
@@ -150,7 +150,7 @@ export {
   nodeExists,
   listNodes,
   countNodes,
-} from "./ray/graph-db/index.ts";
+} from "./ray/graph-db/index.js";
 
 // ============================================================================
 // Edge operations
@@ -164,7 +164,7 @@ export {
   edgeExists,
   listEdges,
   countEdges,
-} from "./ray/graph-db/index.ts";
+} from "./ray/graph-db/index.js";
 
 // ============================================================================
 // Property operations
@@ -179,19 +179,19 @@ export {
   getNodeProps,
   getEdgeProp,
   getEdgeProps,
-} from "./ray/graph-db/index.ts";
+} from "./ray/graph-db/index.js";
 
 // ============================================================================
 // Schema definitions
 // ============================================================================
 
-export { defineLabel, defineEtype, definePropkey } from "./ray/graph-db/index.ts";
+export { defineLabel, defineEtype, definePropkey } from "./ray/graph-db/index.js";
 
 // ============================================================================
 // Maintenance
 // ============================================================================
 
-export { stats, check } from "./ray/graph-db/index.ts";
+export { stats, check } from "./ray/graph-db/index.js";
 
 // ============================================================================
 // Vector operations (low-level)
@@ -204,7 +204,7 @@ export {
   hasNodeVector,
   getVectorStore,
   getVectorStats,
-} from "./ray/graph-db/index.ts";
+} from "./ray/graph-db/index.js";
 
 // ============================================================================
 // Cache API
@@ -215,9 +215,9 @@ export {
   invalidateEdgeCache,
   clearCache,
   getCacheStats,
-} from "./ray/graph-db/index.ts";
+} from "./ray/graph-db/index.js";
 
-export { optimize, type OptimizeOptions } from "./core/compactor.ts";
+export { optimize, type OptimizeOptions } from "./core/compactor.js";
 
 // ============================================================================
 // Single-file database format (.raydb)
@@ -230,22 +230,22 @@ export {
   vacuumSingleFile,
   type SingleFileOptimizeOptions,
   type VacuumOptions,
-} from "./core/single-file-compactor.ts";
+} from "./core/single-file-compactor.js";
 
-export { WalBufferFullError } from "./types.ts";
+export { WalBufferFullError } from "./types.js";
 
 // Deprecated exports for backwards compatibility
 // Use openGraphDB/closeGraphDB instead - they auto-detect format
 /** @deprecated Use openGraphDB instead - it auto-detects format */
-export { openSingleFileDB, closeSingleFileDB, isSingleFilePath } from "./ray/graph-db/single-file.ts";
+export { openSingleFileDB, closeSingleFileDB, isSingleFilePath } from "./ray/graph-db/single-file.js";
 /** @deprecated SingleFileDB is now just an alias for GraphDB */
-export type { SingleFileDB, SingleFileOpenOptions } from "./types.ts";
+export type { SingleFileDB, SingleFileOpenOptions } from "./types.js";
 
 // ============================================================================
 // Utilities for advanced use
 // ============================================================================
 
-export { checkSnapshot } from "./check/checker.ts";
+export { checkSnapshot } from "./check/checker.js";
 
 // ============================================================================
 // Compression
@@ -255,7 +255,7 @@ export {
   CompressionType,
   type CompressionOptions,
   DEFAULT_COMPRESSION_OPTIONS,
-} from "./util/compression.ts";
+} from "./util/compression.js";
 
 // ============================================================================
 // High-Level API (Drizzle-style)
@@ -311,7 +311,7 @@ export {
   type PathResult,
   type WeightSpec,
   type Heuristic,
-} from "./api/index.ts";
+} from "./api/index.js";
 
 // ============================================================================
 // Vector Embeddings (Lance-style columnar storage with IVF index)
@@ -409,7 +409,7 @@ export {
   deserializeIvf,
   serializeManifest,
   deserializeManifest,
-} from "./vector/index.ts";
+} from "./vector/index.js";
 
 // High-level vector search API
 export {
@@ -418,4 +418,4 @@ export {
   type VectorIndexOptions,
   type SimilarOptions,
   type VectorSearchHit,
-} from "./api/vector-search.ts";
+} from "./api/vector-search.js";

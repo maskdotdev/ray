@@ -12,12 +12,12 @@ import type {
   NodeID,
   PropKeyID,
   PropValue,
-} from "../types.ts";
-import type { Edge } from "../types.ts";
-import { PropertyCache } from "./property-cache.ts";
-import { QueryCache } from "./query-cache.ts";
-import { TraversalCache } from "./traversal-cache.ts";
-import { LRUCache } from "../util/lru.ts";
+} from "../types.js";
+import type { Edge } from "../types.js";
+import { PropertyCache } from "./property-cache.js";
+import { QueryCache } from "./query-cache.js";
+import { TraversalCache } from "./traversal-cache.js";
+import { LRUCache } from "../util/lru.js";
 
 const DEFAULT_PROPERTY_CACHE_CONFIG = {
   maxNodeProps: 10000,

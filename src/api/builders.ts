@@ -17,7 +17,7 @@ import {
   rollback,
   setEdgeProp,
   setNodeProp,
-} from "../ray/graph-db/index.ts";
+} from "../ray/graph-db/index.js";
 import type {
   ETypeID,
   GraphDB,
@@ -25,15 +25,15 @@ import type {
   PropKeyID,
   PropValue,
   TxHandle,
-} from "../types.ts";
-import { PropValueTag } from "../types.ts";
+} from "../types.js";
+import { PropValueTag } from "../types.js";
 import type {
   EdgeDef,
   InferEdgeProps,
   InferNode,
   InferNodeInsert,
   NodeDef,
-} from "./schema.ts";
+} from "./schema.js";
 
 // ============================================================================
 // Node Reference (returned from operations)

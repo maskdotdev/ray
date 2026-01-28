@@ -4,7 +4,7 @@
  * Manages transaction lifecycle, timestamps, and active transaction tracking
  */
 
-import type { MvccTransaction } from "../types.ts";
+import type { MvccTransaction } from "../types.js";
 
 /** Maximum number of entries in committedWrites before pruning */
 const MAX_COMMITTED_WRITES = 100_000;

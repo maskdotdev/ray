@@ -10,9 +10,9 @@
  * invalidation when any node in a cached traversal result changes.
  */
 
-import type { ETypeID, NodeID } from "../types.ts";
-import type { Edge } from "../types.ts";
-import { LRUCache } from "../util/lru.ts";
+import type { ETypeID, NodeID } from "../types.js";
+import type { Edge } from "../types.js";
+import { LRUCache } from "../util/lru.js";
 
 // Use bigint keys for faster comparison and hashing
 // Pack: nodeId (53 bits) | etype (10 bits) | direction (1 bit)

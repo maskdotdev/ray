@@ -9,17 +9,17 @@ import {
   getNeighborsIn,
   getNeighborsOut,
   getNodeProp,
-} from "../ray/graph-db/index.ts";
+} from "../ray/graph-db/index.js";
 import type {
   ETypeID,
   GraphDB,
   NodeID,
   PropKeyID,
   PropValue,
-} from "../types.ts";
-import { PropValueTag } from "../types.ts";
-import { createNodeRef, type NodeRef } from "./builders.ts";
-import type { EdgeDef, InferEdge, InferNode, NodeDef } from "./schema.ts";
+} from "../types.js";
+import { PropValueTag } from "../types.js";
+import { createNodeRef, type NodeRef } from "./builders.js";
+import type { EdgeDef, InferEdge, InferNode, NodeDef } from "./schema.js";
 
 // ============================================================================
 // Traversal Options

@@ -4,7 +4,7 @@
  * Inspired by LanceDB's columnar architecture for efficient vector operations.
  */
 
-import type { NodeID, PropKeyID } from "../types.ts";
+import type { NodeID, PropKeyID } from "../types.js";
 
 // ============================================================================
 // Configuration

@@ -2,13 +2,13 @@
  * Key index - lookup across snapshot and delta
  */
 
-import { isNodeDeleted, lookupKeyInDelta } from "../core/delta.ts";
+import { isNodeDeleted, lookupKeyInDelta } from "../core/delta.js";
 import {
   getPhysNode,
   getNodeKey as snapshotGetNodeKey,
   lookupByKey as snapshotLookupByKey,
-} from "../core/snapshot-reader.ts";
-import type { DeltaState, NodeID, SnapshotData } from "../types.ts";
+} from "../core/snapshot-reader.js";
+import type { DeltaState, NodeID, SnapshotData } from "../types.js";
 
 /**
  * Look up a node by key across snapshot and delta

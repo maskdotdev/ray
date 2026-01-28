@@ -5,8 +5,8 @@
  * Uses content-addressed keys based on query parameters.
  */
 
-import { LRUCache } from "../util/lru.ts";
-import { xxhash64String } from "../util/hash.ts";
+import { LRUCache } from "../util/lru.js";
+import { xxhash64String } from "../util/hash.js";
 
 type QueryKey = string; // Hash of query parameters
 

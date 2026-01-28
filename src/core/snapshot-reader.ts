@@ -8,7 +8,7 @@ import {
   MIN_READER_SNAPSHOT,
   SNAPSHOTS_DIR,
   snapshotFilename,
-} from "../constants.ts";
+} from "../constants.js";
 import {
   type ETypeID,
   KEY_INDEX_ENTRY_SIZE,
@@ -26,7 +26,7 @@ import {
   SnapshotFlags,
   type SnapshotHeaderV1,
   type StringID,
-} from "../types.ts";
+} from "../types.js";
 import {
   decodeString,
   readI32,
@@ -37,14 +37,14 @@ import {
   readU64At,
   u64BitsToF64,
   viewOf,
-} from "../util/binary.ts";
+} from "../util/binary.js";
 import {
   CompressionType,
   decompress,
   isValidCompressionType,
-} from "../util/compression.ts";
-import { crc32c } from "../util/crc.ts";
-import { xxhash64String } from "../util/hash.ts";
+} from "../util/compression.js";
+import { crc32c } from "../util/crc.js";
+import { xxhash64String } from "../util/hash.js";
 
 // ============================================================================
 // Snapshot loading

@@ -46,13 +46,13 @@ export type {
   UpdateEdgeExecutor,
   UpdateExecutor,
   WhereCondition,
-} from "./builders.ts";
+} from "./builders.js";
 /**
  * Main database context
  * @see {@link ray}
  * @see {@link Ray}
  */
-export { Ray, type RayOptions, ray, type TransactionContext } from "./ray.ts";
+export { Ray, type RayOptions, ray, type TransactionContext } from "./ray.js";
 /**
  * Schema definition builders
  * Define node and edge types with properties and type inference
@@ -77,7 +77,7 @@ export {
   type PropsSchema,
   prop,
   type RaySchema,
-} from "./schema.ts";
+} from "./schema.js";
 
 /**
  * Graph traversal with filtering and aggregation
@@ -91,7 +91,7 @@ export type {
   TraversalBuilder,
   TraversalDirection,
   TraverseOptions,
-} from "./traversal.ts";
+} from "./traversal.js";
 
 /**
  * Path finding algorithms (Dijkstra, A*)
@@ -104,4 +104,4 @@ export type {
   PathFindingBuilder,
   PathResult,
   WeightSpec,
-} from "./pathfinding.ts";
+} from "./pathfinding.js";

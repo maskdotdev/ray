@@ -32,7 +32,7 @@
  * ```
  */
 
-import type { PropValueTag } from "../types.ts";
+import type { PropValueTag } from "../types.js";
 
 // ============================================================================
 // Property Definition Types

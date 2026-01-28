@@ -9,8 +9,8 @@ import {
   LOCK_BYTE_OFFSET,
   LOCK_BYTE_RANGE,
   OS_PAGE_SIZE,
-} from "../constants.ts";
-import type { Pager } from "../types.ts";
+} from "../constants.js";
+import type { Pager } from "../types.js";
 
 /**
  * FilePager implementation for single-file database

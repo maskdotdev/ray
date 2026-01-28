@@ -2,9 +2,9 @@
  * Snapshot checker - validates snapshot invariants
  */
 
-import type { CheckResult, SnapshotData } from "../types.ts";
-import { KEY_INDEX_ENTRY_SIZE, SectionId } from "../types.ts";
-import { readI32At, readU32At, readU64At } from "../util/binary.ts";
+import type { CheckResult, SnapshotData } from "../types.js";
+import { KEY_INDEX_ENTRY_SIZE, SectionId } from "../types.js";
+import { readI32At, readU32At, readU64At } from "../util/binary.js";
 
 /**
  * Check all snapshot invariants

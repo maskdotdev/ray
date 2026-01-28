@@ -1,5 +1,5 @@
-import type { GraphDB } from "../../types.ts";
-import { CacheManager } from "../../cache/index.ts";
+import type { GraphDB } from "../../types.js";
+import { CacheManager } from "../../cache/index.js";
 
 /**
  * Get cache manager from database

@@ -10,7 +10,7 @@ import {
   WAL_DIR,
   WAL_RECORD_ALIGNMENT,
   walFilename,
-} from "../constants.ts";
+} from "../constants.js";
 import {
   type ETypeID,
   type LabelID,
@@ -23,7 +23,7 @@ import {
   type WalHeaderV1,
   type WalRecordHeader,
   WalRecordType,
-} from "../types.ts";
+} from "../types.js";
 import {
   alignUp,
   BufferBuilder,
@@ -41,8 +41,8 @@ import {
   writeU16,
   writeU32,
   writeU64,
-} from "../util/binary.ts";
-import { crc32c } from "../util/crc.ts";
+} from "../util/binary.js";
+import { crc32c } from "../util/crc.js";
 
 // ============================================================================
 // WAL Header

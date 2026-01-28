@@ -7,23 +7,23 @@
  * 2. Background checkpoint: Non-blocking, writes continue to secondary WAL region
  */
 
-import type { CheckpointState, GraphDB } from "../../types.ts";
-import type { WalRecord } from "../../core/wal.ts";
-import { estimateWalRecordSize } from "../../core/wal.ts";
-import { createWalBuffer, WalBuffer } from "../../core/wal-buffer.ts";
-import type { FilePager } from "../../core/pager.ts";
-import { optimizeSingleFile } from "../../core/single-file-compactor.ts";
-import { invalidateSnapshotCache } from "./snapshot-helper.ts";
-import { parseSnapshot } from "../../core/snapshot-reader.ts";
-import { writeHeader, updateHeaderForCompaction } from "../../core/header.ts";
-import { clearDelta } from "../../core/delta.ts";
-import { pagesToStore } from "../../core/pager.ts";
+import type { CheckpointState, GraphDB } from "../../types.js";
+import type { WalRecord } from "../../core/wal.js";
+import { estimateWalRecordSize } from "../../core/wal.js";
+import { createWalBuffer, WalBuffer } from "../../core/wal-buffer.js";
+import type { FilePager } from "../../core/pager.js";
+import { optimizeSingleFile } from "../../core/single-file-compactor.js";
+import { invalidateSnapshotCache } from "./snapshot-helper.js";
+import { parseSnapshot } from "../../core/snapshot-reader.js";
+import { writeHeader, updateHeaderForCompaction } from "../../core/header.js";
+import { clearDelta } from "../../core/delta.js";
+import { pagesToStore } from "../../core/pager.js";
 import {
   type EdgeData,
   type NodeData,
   buildSnapshotBuffer,
-} from "../../core/snapshot-writer-buffer.ts";
-import { collectGraphDataForCheckpoint } from "./snapshot-helper.ts";
+} from "../../core/snapshot-writer-buffer.js";
+import { collectGraphDataForCheckpoint } from "./snapshot-helper.js";
 
 /**
  * Check if auto-checkpoint should be triggered based on primary WAL usage

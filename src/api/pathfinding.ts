@@ -11,20 +11,20 @@ import {
   getNeighborsOut,
   getNodeProp,
   nodeExists,
-} from "../ray/graph-db/index.ts";
-import { getNodeKey } from "../ray/key-index.ts";
+} from "../ray/graph-db/index.js";
+import { getNodeKey } from "../ray/key-index.js";
 import type {
   ETypeID,
   GraphDB,
   NodeID,
   PropKeyID,
   PropValue,
-} from "../types.ts";
-import { PropValueTag } from "../types.ts";
-import { MinHeap } from "../util/heap.ts";
-import { createNodeRef, type NodeRef } from "./builders.ts";
-import type { EdgeDef, InferEdgeProps, NodeDef } from "./schema.ts";
-import type { EdgeResult, TraversalDirection } from "./traversal.ts";
+} from "../types.js";
+import { PropValueTag } from "../types.js";
+import { MinHeap } from "../util/heap.js";
+import { createNodeRef, type NodeRef } from "./builders.js";
+import type { EdgeDef, InferEdgeProps, NodeDef } from "./schema.js";
+import type { EdgeResult, TraversalDirection } from "./traversal.js";
 
 // ============================================================================
 // Types

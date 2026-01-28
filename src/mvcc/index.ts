@@ -4,17 +4,17 @@
  * Multi-Version Concurrency Control for snapshot isolation
  */
 
-export { TxManager } from "./tx-manager.ts";
-export { VersionChainManager } from "./version-chain.ts";
-export { ConflictDetector } from "./conflict-detector.ts";
-export { GarbageCollector, type GcStats, DEFAULT_MAX_CHAIN_DEPTH } from "./gc.ts";
-export * from "./visibility.ts";
+export { TxManager } from "./tx-manager.js";
+export { VersionChainManager } from "./version-chain.js";
+export { ConflictDetector } from "./conflict-detector.js";
+export { GarbageCollector, type GcStats, DEFAULT_MAX_CHAIN_DEPTH } from "./gc.js";
+export * from "./visibility.js";
 
-import { TxManager } from "./tx-manager.ts";
-import { VersionChainManager } from "./version-chain.ts";
-import { ConflictDetector } from "./conflict-detector.ts";
-import { GarbageCollector, DEFAULT_MAX_CHAIN_DEPTH } from "./gc.ts";
-import type { GraphDB, OpenOptions } from "../types.ts";
+import { TxManager } from "./tx-manager.js";
+import { VersionChainManager } from "./version-chain.js";
+import { ConflictDetector } from "./conflict-detector.js";
+import { GarbageCollector, DEFAULT_MAX_CHAIN_DEPTH } from "./gc.js";
+import type { GraphDB, OpenOptions } from "../types.js";
 
 /**
  * MVCC Manager - coordinates all MVCC components

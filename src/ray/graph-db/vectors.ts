@@ -10,10 +10,10 @@ import type {
   NodeID,
   PropKeyID,
   TxHandle,
-} from "../../types.ts";
-import type { VectorManifest } from "../../vector/types.ts";
-import { vectorStoreGet, vectorStoreStats } from "../../vector/columnar-store.ts";
-import { getOrCreateVectorStore } from "./wal-replay.ts";
+} from "../../types.js";
+import type { VectorManifest } from "../../vector/types.js";
+import { vectorStoreGet, vectorStoreStats } from "../../vector/columnar-store.js";
+import { getOrCreateVectorStore } from "./wal-replay.js";
 
 /** Helper to create vector pending key */
 function vectorKey(nodeId: NodeID, propKeyId: PropKeyID): string {

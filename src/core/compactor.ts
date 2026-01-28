@@ -10,7 +10,7 @@ import {
   TRASH_DIR,
   WAL_DIR,
   walFilename,
-} from "../constants.ts";
+} from "../constants.js";
 import type {
   DeltaState,
   ETypeID,
@@ -20,10 +20,10 @@ import type {
   PropKeyID,
   PropValue,
   SnapshotData,
-} from "../types.ts";
-import { PropValueTag } from "../types.ts";
-import { readU32At } from "../util/binary.ts";
-import type { CompressionOptions } from "../util/compression.ts";
+} from "../types.js";
+import { PropValueTag } from "../types.js";
+import { readU32At } from "../util/binary.js";
+import type { CompressionOptions } from "../util/compression.js";
 import {
   clearDelta,
   createDelta,
@@ -31,8 +31,8 @@ import {
   getNodeDelta,
   isEdgeDeleted,
   isNodeDeleted,
-} from "./delta.ts";
-import { updateManifestForCompaction, writeManifest } from "./manifest.ts";
+} from "./delta.js";
+import { updateManifestForCompaction, writeManifest } from "./manifest.js";
 import {
   closeSnapshot,
   findEdgeIndex,
@@ -42,14 +42,14 @@ import {
   getOutEdges,
   getString,
   loadSnapshot,
-} from "./snapshot-reader.ts";
+} from "./snapshot-reader.js";
 import {
   buildSnapshot,
   type EdgeData,
   type NodeData,
   type SnapshotBuildInput,
-} from "./snapshot-writer.ts";
-import { createWalSegment } from "./wal.ts";
+} from "./snapshot-writer.js";
+import { createWalSegment } from "./wal.js";
 
 /**
  * Options for the optimize operation

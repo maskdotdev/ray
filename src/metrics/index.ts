@@ -8,10 +8,10 @@
  * - Memory usage estimates
  */
 
-import type { GraphDB } from "../types.ts";
-import { getCacheStats } from "../ray/graph-db/cache-api.ts";
-import { stats } from "../ray/graph-db/stats.ts";
-import { getSnapshot } from "../ray/graph-db/snapshot-helper.ts";
+import type { GraphDB } from "../types.js";
+import { getCacheStats } from "../ray/graph-db/cache-api.js";
+import { stats } from "../ray/graph-db/stats.js";
+import { getSnapshot } from "../ray/graph-db/snapshot-helper.js";
 
 // ============================================================================
 // Types

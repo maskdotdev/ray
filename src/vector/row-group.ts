@@ -5,8 +5,8 @@
  * This enables efficient batch operations and SIMD processing.
  */
 
-import type { RowGroup } from "./types.ts";
-import { normalizeVectorAt } from "./normalize.ts";
+import type { RowGroup } from "./types.js";
+import { normalizeVectorAt } from "./normalize.js";
 
 /**
  * Create a new row group with pre-allocated capacity

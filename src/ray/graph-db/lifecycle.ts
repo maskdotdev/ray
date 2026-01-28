@@ -16,15 +16,15 @@ import {
   snapshotFilename,
   WAL_DIR,
   walFilename,
-} from "../../constants.ts";
-import { createDelta } from "../../core/delta.ts";
+} from "../../constants.js";
+import { createDelta } from "../../core/delta.js";
 import {
   createEmptyManifest,
   readManifest,
   writeManifest,
-} from "../../core/manifest.ts";
-import { closeSnapshot, loadSnapshot } from "../../core/snapshot-reader.ts";
-import { snapshotLogger } from "../../util/logger.ts";
+} from "../../core/manifest.js";
+import { closeSnapshot, loadSnapshot } from "../../core/snapshot-reader.js";
+import { snapshotLogger } from "../../util/logger.js";
 import {
   createWalSegment,
   extractCommittedTransactions,
@@ -40,27 +40,27 @@ import {
   parseDelNodePropPayload,
   parseSetEdgePropPayload,
   parseDelEdgePropPayload,
-} from "../../core/wal.ts";
+} from "../../core/wal.js";
 import type {
   GraphDB,
   OpenOptions,
-} from "../../types.ts";
-import { WalRecordType } from "../../types.ts";
+} from "../../types.js";
+import { WalRecordType } from "../../types.js";
 import {
   acquireExclusiveLock,
   acquireSharedLock,
   releaseLock,
   isProperLockingAvailable,
   type LockHandle,
-} from "../../util/lock.ts";
-import { CacheManager } from "../../cache/index.ts";
-import { replayWalRecord, replayVectorRecord } from "./wal-replay.ts";
-import { MvccManager } from "../../mvcc/index.ts";
-import type { PropKeyID } from "../../types.ts";
-import type { VectorManifest } from "../../vector/types.ts";
-import { openSingleFileDB, closeSingleFileDB, isSingleFilePath } from "./single-file.ts";
-import { releaseFileLock, type SingleFileLockHandle } from "../../util/lock.ts";
-import type { FilePager } from "../../core/pager.ts";
+} from "../../util/lock.js";
+import { CacheManager } from "../../cache/index.js";
+import { replayWalRecord, replayVectorRecord } from "./wal-replay.js";
+import { MvccManager } from "../../mvcc/index.js";
+import type { PropKeyID } from "../../types.js";
+import type { VectorManifest } from "../../vector/types.js";
+import { openSingleFileDB, closeSingleFileDB, isSingleFilePath } from "./single-file.js";
+import { releaseFileLock, type SingleFileLockHandle } from "../../util/lock.js";
+import type { FilePager } from "../../core/pager.js";
 
 /**
  * Validate a database path for security

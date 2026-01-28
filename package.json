@@ -2,12 +2,12 @@
   "name": "@ray-db/ray",
   "version": "0.1.4",
   "description": "High-performance embedded graph database for Bun/TypeScript",
-  "module": "src/index.ts",
-  "main": "src/index.ts",
-  "types": "src/index.ts",
+  "module": "./dist/index.js",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "type": "module",
   "files": [
-    "src"
+    "dist"
   ],
   "keywords": [
     "graph",
@@ -29,6 +29,7 @@
     "access": "public"
   },
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
     "test": "bun test --ignore '**/stress/**'",
     "test:all": "bun test",
     "test:stress": "bun test tests/stress --timeout 300000",
@@ -41,7 +42,10 @@
     "bench:mvcc:v2": "bun run bench/benchmark-mvcc-v2.ts",
     "bench:memgraph": "bun run bench/benchmark-memgraph.ts",
     "bench:memgraph:scale": "bun run bench/benchmark-memgraph.ts --scale",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "docs:dev": "npm run dev --prefix docs-site",
+    "docs:build": "npm run build --prefix docs-site",
+    "docs:preview": "npm run preview --prefix docs-site"
   },
   "devDependencies": {
     "@types/bun": "^1.3.6",
@@ -50,5 +54,11 @@
   },
   "peerDependencies": {
     "typescript": "^5"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
   }
 }

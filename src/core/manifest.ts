@@ -10,17 +10,17 @@ import {
   MANIFEST_FILENAME,
   MIN_READER_MANIFEST,
   VERSION_MANIFEST,
-} from "../constants.ts";
-import type { ManifestV1 } from "../types.ts";
-import { MANIFEST_SIZE } from "../types.ts";
+} from "../constants.js";
+import type { ManifestV1 } from "../types.js";
+import { MANIFEST_SIZE } from "../types.js";
 import {
   readU32,
   readU64,
   viewOf,
   writeU32,
   writeU64,
-} from "../util/binary.ts";
-import { crc32c } from "../util/crc.ts";
+} from "../util/binary.js";
+import { crc32c } from "../util/crc.js";
 
 /**
  * Create a new empty manifest

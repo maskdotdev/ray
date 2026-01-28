@@ -13,12 +13,12 @@ import {
   setNodeProp as deltaSetNodeProp,
   getNodeDelta,
   isNodeCreated,
-} from "../../core/delta.ts";
+} from "../../core/delta.js";
 import {
   getNodeProp as snapshotGetNodeProp,
   getEdgeProp as snapshotGetEdgeProp,
   getPhysNode,
-} from "../../core/snapshot-reader.ts";
+} from "../../core/snapshot-reader.js";
 import {
   appendToWal,
   buildAddEdgePayload,
@@ -37,10 +37,10 @@ import {
   buildSetNodeVectorPayload,
   buildDelNodeVectorPayload,
   type WalRecord,
-} from "../../core/wal.ts";
-import { getOrCreateVectorStore } from "./wal-replay.ts";
-import type { VectorManifest } from "../../vector/types.ts";
-import { vectorStoreInsert, vectorStoreDelete } from "../../vector/columnar-store.ts";
+} from "../../core/wal.js";
+import { getOrCreateVectorStore } from "./wal-replay.js";
+import type { VectorManifest } from "../../vector/types.js";
+import { vectorStoreInsert, vectorStoreDelete } from "../../vector/columnar-store.js";
 import type {
   GraphDB,
   NodeID,
@@ -49,22 +49,22 @@ import type {
   PropKeyID,
   PropValue,
   ETypeID,
-} from "../../types.ts";
-import { WalRecordType } from "../../types.ts";
-import { WAL_DIR, walFilename } from "../../constants.ts";
-import { getCache } from "./cache-helper.ts";
-import { getMvccManager, isMvccEnabled } from "../../mvcc/index.ts";
-import { createWalBuffer } from "../../core/wal-buffer.ts";
-import { WalBufferFullError } from "../../types.ts";
-import { writeHeader, updateHeaderForCommit } from "../../core/header.ts";
-import type { FilePager } from "../../core/pager.ts";
+} from "../../types.js";
+import { WalRecordType } from "../../types.js";
+import { WAL_DIR, walFilename } from "../../constants.js";
+import { getCache } from "./cache-helper.js";
+import { getMvccManager, isMvccEnabled } from "../../mvcc/index.js";
+import { createWalBuffer } from "../../core/wal-buffer.js";
+import { WalBufferFullError } from "../../types.js";
+import { writeHeader, updateHeaderForCommit } from "../../core/header.js";
+import type { FilePager } from "../../core/pager.js";
 import { 
   checkpoint, 
   shouldCheckpoint, 
   triggerBackgroundCheckpoint,
   isCheckpointRunning,
   getCheckpointPromise,
-} from "./checkpoint.ts";
+} from "./checkpoint.js";
 
 function createTxState(txid: bigint): TxState {
   return {

@@ -11,9 +11,9 @@ import {
   setEdgeProp as deltaSetEdgeProp,
   setNodeProp as deltaSetNodeProp,
   isNodeCreated,
-} from "../../core/delta.ts";
-import type { DeltaState } from "../../types.ts";
-import { WalRecordType } from "../../types.ts";
+} from "../../core/delta.js";
+import type { DeltaState } from "../../types.js";
+import { WalRecordType } from "../../types.js";
 import {
   type ParsedWalRecord,
   parseAddEdgePayload,
@@ -29,14 +29,14 @@ import {
   parseSetNodePropPayload,
   parseSetNodeVectorPayload,
   parseDelNodeVectorPayload,
-} from "../../core/wal.ts";
-import type { GraphDB, PropKeyID } from "../../types.ts";
-import type { VectorManifest } from "../../vector/types.ts";
+} from "../../core/wal.js";
+import type { GraphDB, PropKeyID } from "../../types.js";
+import type { VectorManifest } from "../../vector/types.js";
 import {
   createVectorStore,
   vectorStoreInsert,
   vectorStoreDelete,
-} from "../../vector/columnar-store.ts";
+} from "../../vector/columnar-store.js";
 
 /**
  * Replay a WAL record into the delta

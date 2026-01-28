@@ -7,16 +7,16 @@
  */
 
 import { writeFile, readFile } from "node:fs/promises";
-import type { GraphDB, TxHandle, NodeID, ETypeID, PropKeyID, PropValue, LabelID } from "../types.ts";
-import { PropValueTag } from "../types.ts";
-import { listNodes, countNodes, getNodeProps } from "../ray/graph-db/nodes.ts";
-import { listEdges, countEdges, getEdgeProps } from "../ray/graph-db/edges.ts";
-import { beginTx, commit } from "../ray/graph-db/tx.ts";
-import { createNode } from "../ray/graph-db/nodes.ts";
-import { addEdge } from "../ray/graph-db/edges.ts";
-import { definePropkey, defineEtype, defineLabel } from "../ray/graph-db/definitions.ts";
-import { getSnapshot } from "../ray/graph-db/snapshot-helper.ts";
-import { getNodeKey } from "../ray/key-index.ts";
+import type { GraphDB, TxHandle, NodeID, ETypeID, PropKeyID, PropValue, LabelID } from "../types.js";
+import { PropValueTag } from "../types.js";
+import { listNodes, countNodes, getNodeProps } from "../ray/graph-db/nodes.js";
+import { listEdges, countEdges, getEdgeProps } from "../ray/graph-db/edges.js";
+import { beginTx, commit } from "../ray/graph-db/tx.js";
+import { createNode } from "../ray/graph-db/nodes.js";
+import { addEdge } from "../ray/graph-db/edges.js";
+import { definePropkey, defineEtype, defineLabel } from "../ray/graph-db/definitions.js";
+import { getSnapshot } from "../ray/graph-db/snapshot-helper.js";
+import { getNodeKey } from "../ray/key-index.js";
 
 // ============================================================================
 // Types

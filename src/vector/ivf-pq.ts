@@ -15,10 +15,10 @@
  * - Memory efficiency (PQ codes instead of full vectors)
  */
 
-import type { VectorManifest, VectorSearchResult, IvfConfig } from "./types.ts";
-import { DEFAULT_IVF_CONFIG } from "./types.ts";
-import { getDistanceFunction, distanceToSimilarity, MaxHeap } from "./distance.ts";
-import { normalize } from "./normalize.ts";
+import type { VectorManifest, VectorSearchResult, IvfConfig } from "./types.js";
+import { DEFAULT_IVF_CONFIG } from "./types.js";
+import { getDistanceFunction, distanceToSimilarity, MaxHeap } from "./distance.js";
+import { normalize } from "./normalize.js";
 import {
   createPQIndex,
   pqTrain,
@@ -28,8 +28,8 @@ import {
   type PQIndex,
   type PQConfig,
   DEFAULT_PQ_CONFIG,
-} from "./pq.ts";
-import type { NodeID } from "../types.ts";
+} from "./pq.js";
+import type { NodeID } from "../types.js";
 
 // ============================================================================
 // Types
