@@ -10,16 +10,17 @@ pub mod vector;
 pub use database::{
   collect_metrics, create_backup, create_offline_backup, get_backup_info, health_check,
   open_database, restore_backup, BackupOptions, BackupResult, CacheLayerMetrics, CacheMetrics,
-  CheckResult, DataMetrics, Database, DatabaseMetrics, DbStats, EdgePage, EdgeWithProps,
-  HealthCheckEntry, HealthCheckResult, JsEdge, JsFullEdge, JsNodeProp, JsPropValue, MemoryMetrics,
-  MvccMetrics, NodePage, NodeWithProps, OfflineBackupOptions, OpenOptions, PaginationOptions,
-  PropType, RestoreOptions, StreamOptions,
+  CheckResult, CompressionOptions, DataMetrics, Database, DatabaseMetrics, DbStats, EdgePage,
+  EdgeWithProps, HealthCheckEntry, HealthCheckResult, JsCompressionType, JsEdge, JsFullEdge,
+  JsNodeProp, JsPropValue, MemoryMetrics, MvccMetrics, MvccStats, NodePage, NodeWithProps,
+  OfflineBackupOptions, OpenOptions, PaginationOptions, PropType, RestoreOptions,
+  SingleFileOptimizeOptions, StreamOptions, VacuumOptions,
 };
 
 pub use ray::{
   ray, JsEdgeSpec, JsKeySpec, JsNodeSpec, JsPathEdge, JsPathResult, JsPropSpec, JsRayOptions, Ray,
   RayInsertBuilder, RayInsertExecutorMany, RayInsertExecutorSingle, RayPath, RayTraversal,
-  RayUpdateBuilder,
+  RayUpdateBuilder, RayUpdateEdgeBuilder,
 };
 
 pub use traversal::{

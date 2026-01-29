@@ -515,6 +515,12 @@ export declare class Ray {
   get(nodeType: string, key: unknown): object | null
   /** Get a node by ID (returns node object with props) */
   getById(nodeId: number): object | null
+  /** Get a lightweight node reference by key (no properties) */
+  getRef(nodeType: string, key: unknown): object | null
+  /** Get a node property value */
+  getProp(nodeId: number, propName: string): JsPropValue | null
+  /** Set a node property value */
+  setProp(nodeId: number, propName: string, value: unknown): void
   /** Check if a node exists */
   exists(nodeId: number): boolean
   /** Delete a node by ID */
@@ -533,6 +539,16 @@ export declare class Ray {
   unlink(src: number, edgeType: string, dst: number): boolean
   /** Check if an edge exists */
   hasEdge(src: number, edgeType: string, dst: number): boolean
+  /** Get an edge property value */
+  getEdgeProp(src: number, edgeType: string, dst: number, propName: string): JsPropValue | null
+  /** Get all edge properties */
+  getEdgeProps(src: number, edgeType: string, dst: number): Record<string, JsPropValue>
+  /** Set an edge property value */
+  setEdgeProp(src: number, edgeType: string, dst: number, propName: string, value: unknown): void
+  /** Delete an edge property */
+  delEdgeProp(src: number, edgeType: string, dst: number, propName: string): void
+  /** Create an update builder for edge properties */
+  updateEdge(src: number, edgeType: string, dst: number): RayUpdateEdgeBuilder
   /** List all nodes of a type (returns array of node objects) */
   all(nodeType: string): Array<object>
   /** Count nodes (optionally by type) */
@@ -541,6 +557,22 @@ export declare class Ray {
   countEdges(edgeType?: string | undefined | null): number
   /** List all edges (optionally by type) */
   allEdges(edgeType?: string | undefined | null): Array<JsFullEdge>
+  /** Check if a path exists between two nodes */
+  hasPath(source: number, target: number, edgeType?: string | undefined | null): boolean
+  /** Get all nodes reachable from a source within max depth */
+  reachableFrom(source: number, maxDepth: number, edgeType?: string | undefined | null): Array<number>
+  /** Get all node type names */
+  nodeTypes(): Array<string>
+  /** Get all edge type names */
+  edgeTypes(): Array<string>
+  /** Get database statistics */
+  stats(): DbStats
+  /** Get a human-readable description of the database */
+  describe(): string
+  /** Check database integrity */
+  check(): CheckResult
+  /** Execute a batch of operations atomically */
+  batch(ops: Array<RayBatchOp>): Array<RayBatchResult>
   /** Begin a traversal from a node ID */
   from(nodeId: number): RayTraversal
   /** Begin a traversal from multiple nodes */
@@ -583,6 +615,8 @@ export declare class RayPath {
 }
 
 export declare class RayTraversal {
+  whereEdge(predicate: (edge: Record<string, unknown>) => boolean): void
+  whereNode(predicate: (node: Record<string, unknown>) => boolean): void
   out(edgeType?: string | undefined | null): void
   in(edgeType?: string | undefined | null): void
   both(edgeType?: string | undefined | null): void
@@ -599,8 +633,52 @@ export declare class RayUpdateBuilder {
   set(propName: string, value: unknown): void
   /** Remove a node property */
   unset(propName: string): void
+  /** Set multiple properties at once */
+  setAll(props: object): void
   /** Execute the update */
   execute(): void
+}
+
+export declare class RayUpdateEdgeBuilder {
+  /** Set an edge property */
+  set(propName: string, value: unknown): void
+  /** Remove an edge property */
+  unset(propName: string): void
+  /** Set multiple properties at once */
+  setAll(props: object): void
+  /** Execute the update */
+  execute(): void
+}
+
+export interface RayBatchOp {
+  op:
+    | "createNode"
+    | "deleteNode"
+    | "link"
+    | "unlink"
+    | "setProp"
+    | "delProp"
+  nodeType?: string
+  key?: unknown
+  props?: object | null
+  nodeId?: number
+  src?: number
+  dst?: number
+  edgeType?: string
+  propName?: string
+  value?: unknown
+}
+
+export interface RayBatchResult {
+  type:
+    | "nodeCreated"
+    | "nodeDeleted"
+    | "edgeCreated"
+    | "edgeRemoved"
+    | "propSet"
+    | "propDeleted"
+  node?: object
+  deleted?: boolean
 }
 
 /** High-level vector index for similarity search */
@@ -726,8 +804,20 @@ export interface DbStats {
   deltaNodesDeleted: number
   deltaEdgesAdded: number
   deltaEdgesDeleted: number
+  walSegment: number
   walBytes: number
   recommendCompact: boolean
+  mvccStats?: MvccStats
+}
+
+export interface MvccStats {
+  activeTransactions: number
+  minActiveTs: number
+  versionsPruned: number
+  gcRuns: number
+  lastGcTime: number
+  committedWritesSize: number
+  committedWritesPruned: number
 }
 
 /** Page of edges */
@@ -1087,6 +1177,8 @@ export interface MvccMetrics {
   versionsPruned: number
   gcRuns: number
   minActiveTimestamp: number
+  committedWritesSize: number
+  committedWritesPruned: number
 }
 
 /** Page of node IDs */

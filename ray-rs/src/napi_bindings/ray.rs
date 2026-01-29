@@ -1,6 +1,7 @@
 //! NAPI bindings for the high-level Ray API
 
 use napi::bindgen_prelude::*;
+use napi::UnknownRef;
 use napi_derive::napi;
 use parking_lot::Mutex;
 use std::collections::{HashMap, HashSet};
@@ -8,10 +9,13 @@ use std::sync::Arc;
 
 use crate::api::pathfinding::{bfs, dijkstra, yen_k_shortest, PathConfig, PathResult};
 use crate::api::ray::{
-  EdgeDef, NodeDef, PropDef, PropType as RayPropType, Ray as RustRay, RayOptions,
+  BatchOp, BatchResult, EdgeDef, NodeDef, PropDef, PropType as RayPropType, Ray as RustRay,
+  RayOptions,
 };
 use crate::api::traversal::{TraversalBuilder, TraversalDirection, TraverseOptions};
-use crate::graph::edges::edge_exists_db;
+use crate::graph::edges::{
+  del_edge_prop as graph_del_edge_prop, edge_exists_db, get_edge_props_db, set_edge_prop,
+};
 use crate::graph::iterators::{
   list_edges as graph_list_edges, list_nodes as graph_list_nodes, ListEdgesOptions,
 };
@@ -21,6 +25,7 @@ use crate::graph::tx::{begin_tx, commit, rollback};
 use crate::types::{ETypeId, Edge, EdgePatch, NodeId, PropValue};
 
 use super::database::{JsFullEdge, JsPropValue, PropType as DbPropType};
+use super::database::{CheckResult, DbStats, MvccStats};
 use super::traversal::{JsTraversalDirection, JsTraverseOptions};
 
 // =============================================================================
@@ -269,10 +274,11 @@ fn js_value_to_string(_env: &Env, value: Unknown, field: &str) -> Result<String>
 fn render_template(template: &str, args: &HashMap<String, String>) -> Result<String> {
   let mut out = String::new();
   let mut chars = template.chars().peekable();
-  while let Some(ch) = chars.next() {
+  loop {
+    let Some(ch) = chars.next() else { break };
     if ch == '{' {
       let mut field = String::new();
-      while let Some(c) = chars.next() {
+      for c in chars.by_ref() {
         if c == '}' {
           break;
         }
@@ -297,8 +303,8 @@ fn key_suffix_from_js(env: &Env, spec: &KeySpec, value: Unknown) -> Result<Strin
   match value.get_type()? {
     ValueType::String => {
       let raw = value.coerce_to_string()?.into_utf8()?.as_str()?.to_string();
-      if raw.starts_with(prefix) {
-        Ok(raw[prefix.len()..].to_string())
+      if let Some(stripped) = raw.strip_prefix(prefix) {
+        Ok(stripped.to_string())
       } else {
         match spec {
           KeySpec::Prefix { .. } => Ok(raw),
@@ -369,6 +375,41 @@ fn prop_value_to_js(env: &Env, value: PropValue) -> Result<Unknown> {
   }
 }
 
+fn batch_result_to_js(env: &Env, result: BatchResult) -> Result<Object<'static>> {
+  let mut obj = Object::new(env)?;
+  match result {
+    BatchResult::NodeCreated(node_ref) => {
+      obj.set_named_property("type", "nodeCreated")?;
+      let node_obj = node_to_js(
+        env,
+        node_ref.id,
+        node_ref.key,
+        &node_ref.node_type,
+        HashMap::new(),
+      )?;
+      obj.set_named_property("node", node_obj)?;
+    }
+    BatchResult::NodeDeleted(deleted) => {
+      obj.set_named_property("type", "nodeDeleted")?;
+      obj.set_named_property("deleted", deleted)?;
+    }
+    BatchResult::EdgeCreated => {
+      obj.set_named_property("type", "edgeCreated")?;
+    }
+    BatchResult::EdgeRemoved(deleted) => {
+      obj.set_named_property("type", "edgeRemoved")?;
+      obj.set_named_property("deleted", deleted)?;
+    }
+    BatchResult::PropSet => {
+      obj.set_named_property("type", "propSet")?;
+    }
+    BatchResult::PropDeleted => {
+      obj.set_named_property("type", "propDeleted")?;
+    }
+  }
+  Ok(Object::from_raw(env.raw(), obj.raw()))
+}
+
 fn node_to_js(
   env: &Env,
   node_id: NodeId,
@@ -387,6 +428,106 @@ fn node_to_js(
   }
 
   Ok(Object::from_raw(env.raw(), obj.raw()))
+}
+
+struct NodeFilterData {
+  id: NodeId,
+  key: String,
+  node_type: String,
+  props: HashMap<String, PropValue>,
+}
+
+struct EdgeFilterData {
+  src: NodeId,
+  dst: NodeId,
+  etype: ETypeId,
+  props: HashMap<String, PropValue>,
+}
+
+struct TraversalFilterItem {
+  node_id: NodeId,
+  edge: Option<Edge>,
+  node: NodeFilterData,
+  edge_info: Option<EdgeFilterData>,
+}
+
+fn node_filter_data(
+  ray: &RustRay,
+  node_id: NodeId,
+  selected_props: Option<&std::collections::HashSet<String>>,
+) -> NodeFilterData {
+  let node_ref = ray.get_by_id(node_id).ok().flatten();
+  let (key, node_type) = match node_ref {
+    Some(node_ref) => (node_ref.key.unwrap_or_default(), node_ref.node_type),
+    None => ("".to_string(), "unknown".to_string()),
+  };
+
+  let mut props = HashMap::new();
+  if let Some(props_by_id) = get_node_props_db(ray.raw(), node_id) {
+    for (key_id, value) in props_by_id {
+      if let Some(name) = ray.raw().get_propkey_name(key_id) {
+        if selected_props.map_or(true, |set| set.contains(&name)) {
+          props.insert(name, value);
+        }
+      }
+    }
+  }
+
+  NodeFilterData {
+    id: node_id,
+    key,
+    node_type,
+    props,
+  }
+}
+
+fn edge_filter_data(ray: &RustRay, edge: &Edge) -> EdgeFilterData {
+  let mut props = HashMap::new();
+  if let Some(props_by_id) = get_edge_props_db(ray.raw(), edge.src, edge.etype, edge.dst) {
+    for (key_id, value) in props_by_id {
+      if let Some(name) = ray.raw().get_propkey_name(key_id) {
+        props.insert(name, value);
+      }
+    }
+  }
+
+  EdgeFilterData {
+    src: edge.src,
+    dst: edge.dst,
+    etype: edge.etype,
+    props,
+  }
+}
+
+fn node_filter_arg(env: &Env, data: &NodeFilterData) -> Result<Object<'static>> {
+  let mut obj = Object::new(env)?;
+  obj.set_named_property("$id", data.id as i64)?;
+  obj.set_named_property("$key", data.key.as_str())?;
+  obj.set_named_property("$type", data.node_type.as_str())?;
+  for (name, value) in &data.props {
+    let js_value = prop_value_to_js(env, value.clone())?;
+    obj.set_named_property(name, js_value)?;
+  }
+  Ok(Object::from_raw(env.raw(), obj.raw()))
+}
+
+fn edge_filter_arg(env: &Env, data: &EdgeFilterData) -> Result<Object<'static>> {
+  let mut obj = Object::new(env)?;
+  obj.set_named_property("$src", data.src as i64)?;
+  obj.set_named_property("$dst", data.dst as i64)?;
+  obj.set_named_property("$etype", data.etype)?;
+  for (name, value) in &data.props {
+    let js_value = prop_value_to_js(env, value.clone())?;
+    obj.set_named_property(name, js_value)?;
+  }
+  Ok(Object::from_raw(env.raw(), obj.raw()))
+}
+
+fn call_filter(env: &Env, func_ref: &UnknownRef<false>, arg: Object) -> Result<bool> {
+  let func_value = func_ref.get_value(env)?;
+  let func: Function<Unknown, Unknown> = unsafe { func_value.cast()? };
+  let result: Unknown = func.call(arg.into_unknown(env)?)?;
+  Ok(result.coerce_to_bool()?)
 }
 
 fn get_node_props(ray: &RustRay, node_id: NodeId) -> HashMap<String, PropValue> {
@@ -445,17 +586,16 @@ fn get_neighbors(
 
       if let Some(add_set) = delta.out_add.get(&node_id) {
         for patch in add_set {
-          if etype.is_none() || etype == Some(patch.etype) {
-            if !edges
+          if (etype.is_none() || etype == Some(patch.etype))
+            && !edges
               .iter()
               .any(|e| e.dst == patch.other && e.etype == patch.etype)
-            {
-              edges.push(Edge {
-                src: node_id,
-                etype: patch.etype,
-                dst: patch.other,
-              });
-            }
+          {
+            edges.push(Edge {
+              src: node_id,
+              etype: patch.etype,
+              dst: patch.other,
+            });
           }
         }
       }
@@ -494,17 +634,16 @@ fn get_neighbors(
 
       if let Some(add_set) = delta.in_add.get(&node_id) {
         for patch in add_set {
-          if etype.is_none() || etype == Some(patch.etype) {
-            if !edges
+          if (etype.is_none() || etype == Some(patch.etype))
+            && !edges
               .iter()
               .any(|e| e.src == patch.other && e.etype == patch.etype)
-            {
-              edges.push(Edge {
-                src: patch.other,
-                etype: patch.etype,
-                dst: node_id,
-              });
-            }
+          {
+            edges.push(Edge {
+              src: patch.other,
+              etype: patch.etype,
+              dst: node_id,
+            });
           }
         }
       }
@@ -643,6 +782,56 @@ impl Ray {
         }
         None => Ok(None),
       }
+    })
+  }
+
+  /// Get a lightweight node reference by key (no properties)
+  #[napi]
+  pub fn get_ref(&self, env: Env, node_type: String, key: Unknown) -> Result<Option<Object>> {
+    let spec = self.key_spec(&node_type)?.clone();
+    let key_suffix = key_suffix_from_js(&env, &spec, key)?;
+    self.with_ray(move |ray| {
+      let node_ref = ray
+        .get_ref(&node_type, &key_suffix)
+        .map_err(|e| Error::from_reason(e.to_string()))?;
+
+      match node_ref {
+        Some(node_ref) => {
+          let obj = node_to_js(
+            &env,
+            node_ref.id,
+            node_ref.key,
+            &node_ref.node_type,
+            HashMap::new(),
+          )?;
+          Ok(Some(obj))
+        }
+        None => Ok(None),
+      }
+    })
+  }
+
+  /// Get a node property value
+  #[napi]
+  pub fn get_prop(&self, node_id: i64, prop_name: String) -> Result<Option<JsPropValue>> {
+    let value = self.with_ray(|ray| Ok(ray.get_prop(node_id as NodeId, &prop_name)))?;
+    Ok(value.map(JsPropValue::from))
+  }
+
+  /// Set a node property value
+  #[napi]
+  pub fn set_prop(
+    &self,
+    env: Env,
+    node_id: i64,
+    prop_name: String,
+    value: Unknown,
+  ) -> Result<()> {
+    let prop_value = js_value_to_prop_value(&env, value)?;
+    self.with_ray_mut(|ray| {
+      ray
+        .set_prop(node_id as NodeId, &prop_name, prop_value)
+        .map_err(|e| Error::from_reason(e.to_string()))
     })
   }
 
@@ -789,6 +978,106 @@ impl Ray {
     })
   }
 
+  /// Get an edge property value
+  #[napi]
+  pub fn get_edge_prop(
+    &self,
+    src: i64,
+    edge_type: String,
+    dst: i64,
+    prop_name: String,
+  ) -> Result<Option<JsPropValue>> {
+    let value = self.with_ray(|ray| {
+      ray
+        .get_edge_prop(src as NodeId, &edge_type, dst as NodeId, &prop_name)
+        .map_err(|e| Error::from_reason(e.to_string()))
+    })?;
+    Ok(value.map(JsPropValue::from))
+  }
+
+  /// Get all edge properties
+  #[napi]
+  pub fn get_edge_props(
+    &self,
+    src: i64,
+    edge_type: String,
+    dst: i64,
+  ) -> Result<HashMap<String, JsPropValue>> {
+    let props_opt = self.with_ray(|ray| {
+      ray
+        .get_edge_props(src as NodeId, &edge_type, dst as NodeId)
+        .map_err(|e| Error::from_reason(e.to_string()))
+    })?;
+    let props = props_opt.unwrap_or_default();
+    Ok(
+      props
+        .into_iter()
+        .map(|(key, value)| (key, JsPropValue::from(value)))
+        .collect(),
+    )
+  }
+
+  /// Set an edge property value
+  #[napi]
+  pub fn set_edge_prop(
+    &self,
+    env: Env,
+    src: i64,
+    edge_type: String,
+    dst: i64,
+    prop_name: String,
+    value: Unknown,
+  ) -> Result<()> {
+    let prop_value = js_value_to_prop_value(&env, value)?;
+    self.with_ray_mut(|ray| {
+      ray
+        .set_edge_prop(src as NodeId, &edge_type, dst as NodeId, &prop_name, prop_value)
+        .map_err(|e| Error::from_reason(e.to_string()))
+    })
+  }
+
+  /// Delete an edge property
+  #[napi]
+  pub fn del_edge_prop(
+    &self,
+    src: i64,
+    edge_type: String,
+    dst: i64,
+    prop_name: String,
+  ) -> Result<()> {
+    self.with_ray_mut(|ray| {
+      ray
+        .del_edge_prop(src as NodeId, &edge_type, dst as NodeId, &prop_name)
+        .map_err(|e| Error::from_reason(e.to_string()))
+    })
+  }
+
+  /// Update edge properties with a builder
+  #[napi]
+  pub fn update_edge(
+    &self,
+    src: i64,
+    edge_type: String,
+    dst: i64,
+  ) -> Result<RayUpdateEdgeBuilder> {
+    let etype_id = self.with_ray(|ray| {
+      let edge_def = ray
+        .edge_def(&edge_type)
+        .ok_or_else(|| Error::from_reason(format!("Unknown edge type: {edge_type}")))?;
+      edge_def
+        .etype_id
+        .ok_or_else(|| Error::from_reason("Edge type not initialized"))
+    })?;
+
+    Ok(RayUpdateEdgeBuilder {
+      ray: self.inner.clone(),
+      src: src as NodeId,
+      etype_id,
+      dst: dst as NodeId,
+      updates: HashMap::new(),
+    })
+  }
+
   /// List all nodes of a type (returns array of node objects)
   #[napi]
   pub fn all(&self, env: Env, node_type: String) -> Result<Vec<Object>> {
@@ -860,12 +1149,190 @@ impl Ray {
           .into_iter()
           .map(|edge| JsFullEdge {
             src: edge.src as i64,
-            etype: edge.etype as u32,
+            etype: edge.etype,
             dst: edge.dst as i64,
           })
           .collect(),
       )
     })
+  }
+
+  /// Check if a path exists between two nodes
+  #[napi]
+  pub fn has_path(
+    &self,
+    source: i64,
+    target: i64,
+    edge_type: Option<String>,
+  ) -> Result<bool> {
+    self.with_ray_mut(|ray| {
+      ray
+        .has_path(source as NodeId, target as NodeId, edge_type.as_deref())
+        .map_err(|e| Error::from_reason(e.to_string()))
+    })
+  }
+
+  /// Get all nodes reachable within a maximum depth
+  #[napi]
+  pub fn reachable_from(
+    &self,
+    source: i64,
+    max_depth: i64,
+    edge_type: Option<String>,
+  ) -> Result<Vec<i64>> {
+    self.with_ray(|ray| {
+      let nodes = ray
+        .reachable_from(source as NodeId, max_depth as usize, edge_type.as_deref())
+        .map_err(|e| Error::from_reason(e.to_string()))?;
+      Ok(nodes.into_iter().map(|id| id as i64).collect())
+    })
+  }
+
+  /// Get all node type names
+  #[napi]
+  pub fn node_types(&self) -> Result<Vec<String>> {
+    self.with_ray(|ray| Ok(ray.node_types().into_iter().map(|s| s.to_string()).collect()))
+  }
+
+  /// Get all edge type names
+  #[napi]
+  pub fn edge_types(&self) -> Result<Vec<String>> {
+    self.with_ray(|ray| Ok(ray.edge_types().into_iter().map(|s| s.to_string()).collect()))
+  }
+
+  /// Get database statistics
+  #[napi]
+  pub fn stats(&self) -> Result<DbStats> {
+    self.with_ray(|ray| {
+      let s = ray.stats();
+      Ok(DbStats {
+        snapshot_gen: s.snapshot_gen as i64,
+        snapshot_nodes: s.snapshot_nodes as i64,
+        snapshot_edges: s.snapshot_edges as i64,
+        snapshot_max_node_id: s.snapshot_max_node_id as i64,
+        delta_nodes_created: s.delta_nodes_created as i64,
+        delta_nodes_deleted: s.delta_nodes_deleted as i64,
+        delta_edges_added: s.delta_edges_added as i64,
+        delta_edges_deleted: s.delta_edges_deleted as i64,
+        wal_segment: s.wal_segment as i64,
+        wal_bytes: s.wal_bytes as i64,
+        recommend_compact: s.recommend_compact,
+        mvcc_stats: s.mvcc_stats.map(|stats| MvccStats {
+          active_transactions: stats.active_transactions as i64,
+          min_active_ts: stats.min_active_ts as i64,
+          versions_pruned: stats.versions_pruned as i64,
+          gc_runs: stats.gc_runs as i64,
+          last_gc_time: stats.last_gc_time as i64,
+          committed_writes_size: stats.committed_writes_size as i64,
+          committed_writes_pruned: stats.committed_writes_pruned as i64,
+        }),
+      })
+    })
+  }
+
+  /// Get a human-readable description of the database
+  #[napi]
+  pub fn describe(&self) -> Result<String> {
+    self.with_ray(|ray| Ok(ray.describe()))
+  }
+
+  /// Check database integrity
+  #[napi]
+  pub fn check(&self) -> Result<CheckResult> {
+    self.with_ray(|ray| {
+      let result = ray.check().map_err(|e| Error::from_reason(e.to_string()))?;
+      Ok(CheckResult::from(result))
+    })
+  }
+
+  /// Execute a batch of operations atomically
+  #[napi]
+  pub fn batch(&self, env: Env, ops: Vec<Object>) -> Result<Vec<Object>> {
+    let mut rust_ops = Vec::with_capacity(ops.len());
+
+    for op in ops {
+      let op_name: Option<String> = op.get_named_property("op").ok();
+      let op_name = match op_name {
+        Some(name) => name,
+        None => op.get_named_property("type")?,
+      };
+
+      match op_name.as_str() {
+        "createNode" => {
+          let node_type: String = op.get_named_property("nodeType")?;
+          let key: Unknown = op.get_named_property("key")?;
+          let props: Option<Object> = op.get_named_property("props")?;
+          let spec = self.key_spec(&node_type)?.clone();
+          let key_suffix = key_suffix_from_js(&env, &spec, key)?;
+          let props_map = js_props_to_map(&env, props)?;
+          rust_ops.push(BatchOp::CreateNode {
+            node_type,
+            key_suffix,
+            props: props_map,
+          });
+        }
+        "deleteNode" => {
+          let node_id: i64 = op.get_named_property("nodeId")?;
+          rust_ops.push(BatchOp::DeleteNode {
+            node_id: node_id as NodeId,
+          });
+        }
+        "link" => {
+          let src: i64 = op.get_named_property("src")?;
+          let dst: i64 = op.get_named_property("dst")?;
+          let edge_type: String = op.get_named_property("edgeType")?;
+          rust_ops.push(BatchOp::Link {
+            src: src as NodeId,
+            edge_type,
+            dst: dst as NodeId,
+          });
+        }
+        "unlink" => {
+          let src: i64 = op.get_named_property("src")?;
+          let dst: i64 = op.get_named_property("dst")?;
+          let edge_type: String = op.get_named_property("edgeType")?;
+          rust_ops.push(BatchOp::Unlink {
+            src: src as NodeId,
+            edge_type,
+            dst: dst as NodeId,
+          });
+        }
+        "setProp" => {
+          let node_id: i64 = op.get_named_property("nodeId")?;
+          let prop_name: String = op.get_named_property("propName")?;
+          let value: Unknown = op.get_named_property("value")?;
+          let prop_value = js_value_to_prop_value(&env, value)?;
+          rust_ops.push(BatchOp::SetProp {
+            node_id: node_id as NodeId,
+            prop_name,
+            value: prop_value,
+          });
+        }
+        "delProp" => {
+          let node_id: i64 = op.get_named_property("nodeId")?;
+          let prop_name: String = op.get_named_property("propName")?;
+          rust_ops.push(BatchOp::DelProp {
+            node_id: node_id as NodeId,
+            prop_name,
+          });
+        }
+        other => {
+          return Err(Error::from_reason(format!("Unknown batch op: {other}")));
+        }
+      }
+    }
+
+    let results = self.with_ray_mut(|ray| {
+      ray
+        .batch(rust_ops)
+        .map_err(|e| Error::from_reason(e.to_string()))
+    })?;
+
+    let mut out = Vec::with_capacity(results.len());
+    for result in results {
+      out.push(batch_result_to_js(&env, result)?);
+    }
+    Ok(out)
   }
 
   /// Begin a traversal from a node ID
@@ -874,6 +1341,8 @@ impl Ray {
     Ok(RayTraversal {
       ray: self.inner.clone(),
       builder: TraversalBuilder::new(vec![node_id as NodeId]),
+      where_edge: None,
+      where_node: None,
     })
   }
 
@@ -883,6 +1352,8 @@ impl Ray {
     Ok(RayTraversal {
       ray: self.inner.clone(),
       builder: TraversalBuilder::new(node_ids.into_iter().map(|id| id as NodeId).collect()),
+      where_edge: None,
+      where_node: None,
     })
   }
 
@@ -1113,6 +1584,16 @@ impl RayUpdateBuilder {
     Ok(())
   }
 
+  /// Set multiple properties at once
+  #[napi]
+  pub fn set_all(&mut self, env: Env, props: Object) -> Result<()> {
+    let props_map = js_props_to_map(&env, Some(props))?;
+    for (prop_name, value) in props_map {
+      self.updates.insert(prop_name, Some(value));
+    }
+    Ok(())
+  }
+
   /// Execute the update
   #[napi]
   pub fn execute(&self) -> Result<()> {
@@ -1149,6 +1630,100 @@ impl RayUpdateBuilder {
 }
 
 // =============================================================================
+// Update Edge Builder
+// =============================================================================
+
+#[napi]
+pub struct RayUpdateEdgeBuilder {
+  ray: Arc<Mutex<Option<RustRay>>>,
+  src: NodeId,
+  etype_id: ETypeId,
+  dst: NodeId,
+  updates: HashMap<String, Option<PropValue>>,
+}
+
+#[napi]
+impl RayUpdateEdgeBuilder {
+  /// Set an edge property
+  #[napi]
+  pub fn set(&mut self, env: Env, prop_name: String, value: Unknown) -> Result<()> {
+    let prop_value = js_value_to_prop_value(&env, value)?;
+    self.updates.insert(prop_name, Some(prop_value));
+    Ok(())
+  }
+
+  /// Remove an edge property
+  #[napi]
+  pub fn unset(&mut self, prop_name: String) -> Result<()> {
+    self.updates.insert(prop_name, None);
+    Ok(())
+  }
+
+  /// Set multiple edge properties at once
+  #[napi]
+  pub fn set_all(&mut self, env: Env, props: Object) -> Result<()> {
+    let props_map = js_props_to_map(&env, Some(props))?;
+    for (prop_name, value) in props_map {
+      self.updates.insert(prop_name, Some(value));
+    }
+    Ok(())
+  }
+
+  /// Execute the edge update
+  #[napi]
+  pub fn execute(&self) -> Result<()> {
+    let mut guard = self.ray.lock();
+    let ray = guard
+      .as_mut()
+      .ok_or_else(|| Error::from_reason("Ray is closed"))?;
+
+    if self.updates.is_empty() {
+      return Ok(());
+    }
+
+    let mut handle =
+      begin_tx(ray.raw()).map_err(|e| Error::from_reason(format!("Failed to begin tx: {e}")))?;
+
+    for (prop_name, value_opt) in &self.updates {
+      let result = match value_opt {
+        Some(value) => {
+          let prop_key_id = ray.raw().get_or_create_propkey(prop_name);
+          set_edge_prop(
+            &mut handle,
+            self.src,
+            self.etype_id,
+            self.dst,
+            prop_key_id,
+            value.clone(),
+          )
+        }
+        None => {
+          if let Some(prop_key_id) = ray.raw().get_propkey_id(prop_name) {
+            graph_del_edge_prop(
+              &mut handle,
+              self.src,
+              self.etype_id,
+              self.dst,
+              prop_key_id,
+            )
+          } else {
+            Ok(())
+          }
+        }
+      };
+
+      if let Err(e) = result {
+        let _ = rollback(&mut handle);
+        return Err(Error::from_reason(format!("Failed to update edge prop: {e}")));
+      }
+    }
+
+    commit(&mut handle).map_err(|e| Error::from_reason(format!("Failed to commit: {e}")))?;
+    Ok(())
+  }
+}
+
+// =============================================================================
 // Traversal Builder
 // =============================================================================
 
@@ -1156,10 +1731,32 @@ impl RayUpdateBuilder {
 pub struct RayTraversal {
   ray: Arc<Mutex<Option<RustRay>>>,
   builder: TraversalBuilder,
+  where_edge: Option<UnknownRef<false>>,
+  where_node: Option<UnknownRef<false>>,
 }
 
 #[napi]
 impl RayTraversal {
+  #[napi(js_name = "whereEdge")]
+  pub fn where_edge(&mut self, env: Env, func: UnknownRef<false>) -> Result<()> {
+    let value = func.get_value(&env)?;
+    if value.get_type()? != ValueType::Function {
+      return Err(Error::from_reason("whereEdge requires a function"));
+    }
+    self.where_edge = Some(func);
+    Ok(())
+  }
+
+  #[napi(js_name = "whereNode")]
+  pub fn where_node(&mut self, env: Env, func: UnknownRef<false>) -> Result<()> {
+    let value = func.get_value(&env)?;
+    if value.get_type()? != ValueType::Function {
+      return Err(Error::from_reason("whereNode requires a function"));
+    }
+    self.where_node = Some(func);
+    Ok(())
+  }
+
   #[napi]
   pub fn out(&mut self, edge_type: Option<String>) -> Result<()> {
     let etype = self.resolve_etype(edge_type)?;
@@ -1217,61 +1814,198 @@ impl RayTraversal {
   }
 
   #[napi]
-  pub fn nodes(&self) -> Result<Vec<i64>> {
-    let ray = self.ray.clone();
-    let guard = ray.lock();
-    let ray = guard
-      .as_ref()
-      .ok_or_else(|| Error::from_reason("Ray is closed"))?;
+  pub fn nodes(&self, env: Env) -> Result<Vec<i64>> {
+    let selected_props = self
+      .builder
+      .selected_properties()
+      .map(|props| props.iter().cloned().collect::<std::collections::HashSet<String>>());
 
-    Ok(
-      self
+    let items = {
+      let ray = self.ray.clone();
+      let guard = ray.lock();
+      let ray = guard
+        .as_ref()
+        .ok_or_else(|| Error::from_reason("Ray is closed"))?;
+
+      let results: Vec<_> = self
         .builder
         .clone()
-        .collect_node_ids(|node_id, dir, etype| get_neighbors(ray.raw(), node_id, dir, etype))
-        .into_iter()
-        .map(|id| id as i64)
-        .collect(),
-    )
+        .execute(|node_id, dir, etype| get_neighbors(ray.raw(), node_id, dir, etype))
+        .collect();
+
+      let mut items = Vec::with_capacity(results.len());
+      for result in results {
+        let edge = result.edge.map(|edge| Edge {
+          src: edge.src,
+          etype: edge.etype,
+          dst: edge.dst,
+        });
+        let edge_info = edge.as_ref().map(|edge| edge_filter_data(ray, edge));
+        let node = node_filter_data(ray, result.node_id, selected_props.as_ref());
+        items.push(TraversalFilterItem {
+          node_id: result.node_id,
+          edge,
+          node,
+          edge_info,
+        });
+      }
+      items
+    };
+
+    let mut out = Vec::new();
+    for item in items {
+      if let Some(ref edge_filter) = self.where_edge {
+        if let Some(ref edge_info) = item.edge_info {
+          let arg = edge_filter_arg(&env, edge_info)?;
+          if !call_filter(&env, edge_filter, arg)? {
+            continue;
+          }
+        }
+      }
+
+      if let Some(ref node_filter) = self.where_node {
+        let arg = node_filter_arg(&env, &item.node)?;
+        if !call_filter(&env, node_filter, arg)? {
+          continue;
+        }
+      }
+
+      out.push(item.node_id as i64);
+    }
+
+    Ok(out)
   }
 
   #[napi]
-  pub fn edges(&self) -> Result<Vec<JsFullEdge>> {
-    let ray = self.ray.clone();
-    let guard = ray.lock();
-    let ray = guard
-      .as_ref()
-      .ok_or_else(|| Error::from_reason("Ray is closed"))?;
-
-    let edges = self
+  pub fn edges(&self, env: Env) -> Result<Vec<JsFullEdge>> {
+    let selected_props = self
       .builder
-      .clone()
-      .execute(|node_id, dir, etype| get_neighbors(ray.raw(), node_id, dir, etype))
-      .filter_map(|result| result.edge)
-      .map(|edge| JsFullEdge {
-        src: edge.src as i64,
-        etype: edge.etype as u32,
-        dst: edge.dst as i64,
-      })
-      .collect();
+      .selected_properties()
+      .map(|props| props.iter().cloned().collect::<std::collections::HashSet<String>>());
+
+    let items = {
+      let ray = self.ray.clone();
+      let guard = ray.lock();
+      let ray = guard
+        .as_ref()
+        .ok_or_else(|| Error::from_reason("Ray is closed"))?;
+
+      let results: Vec<_> = self
+        .builder
+        .clone()
+        .execute(|node_id, dir, etype| get_neighbors(ray.raw(), node_id, dir, etype))
+        .collect();
+
+      let mut items = Vec::with_capacity(results.len());
+      for result in results {
+        let edge = result.edge.map(|edge| Edge {
+          src: edge.src,
+          etype: edge.etype,
+          dst: edge.dst,
+        });
+        let edge_info = edge.as_ref().map(|edge| edge_filter_data(ray, edge));
+        let node = node_filter_data(ray, result.node_id, selected_props.as_ref());
+        items.push(TraversalFilterItem {
+          node_id: result.node_id,
+          edge,
+          node,
+          edge_info,
+        });
+      }
+      items
+    };
+
+    let mut edges = Vec::new();
+    for item in items {
+      if let Some(ref edge_filter) = self.where_edge {
+        if let Some(ref edge_info) = item.edge_info {
+          let arg = edge_filter_arg(&env, edge_info)?;
+          if !call_filter(&env, edge_filter, arg)? {
+            continue;
+          }
+        }
+      }
+
+      if let Some(ref node_filter) = self.where_node {
+        let arg = node_filter_arg(&env, &item.node)?;
+        if !call_filter(&env, node_filter, arg)? {
+          continue;
+        }
+      }
+
+      if let Some(edge) = item.edge {
+        edges.push(JsFullEdge {
+          src: edge.src as i64,
+          etype: edge.etype,
+          dst: edge.dst as i64,
+        });
+      }
+    }
 
     Ok(edges)
   }
 
   #[napi]
-  pub fn count(&self) -> Result<i64> {
-    let ray = self.ray.clone();
-    let guard = ray.lock();
-    let ray = guard
-      .as_ref()
-      .ok_or_else(|| Error::from_reason("Ray is closed"))?;
+  pub fn count(&self, env: Env) -> Result<i64> {
+    let selected_props = self
+      .builder
+      .selected_properties()
+      .map(|props| props.iter().cloned().collect::<std::collections::HashSet<String>>());
 
-    Ok(
-      self
+    let items = {
+      let ray = self.ray.clone();
+      let guard = ray.lock();
+      let ray = guard
+        .as_ref()
+        .ok_or_else(|| Error::from_reason("Ray is closed"))?;
+
+      let results: Vec<_> = self
         .builder
         .clone()
-        .count(|node_id, dir, etype| get_neighbors(ray.raw(), node_id, dir, etype)) as i64,
-    )
+        .execute(|node_id, dir, etype| get_neighbors(ray.raw(), node_id, dir, etype))
+        .collect();
+
+      let mut items = Vec::with_capacity(results.len());
+      for result in results {
+        let edge = result.edge.map(|edge| Edge {
+          src: edge.src,
+          etype: edge.etype,
+          dst: edge.dst,
+        });
+        let edge_info = edge.as_ref().map(|edge| edge_filter_data(ray, edge));
+        let node = node_filter_data(ray, result.node_id, selected_props.as_ref());
+        items.push(TraversalFilterItem {
+          node_id: result.node_id,
+          edge,
+          node,
+          edge_info,
+        });
+      }
+      items
+    };
+
+    let mut count = 0i64;
+    for item in items {
+      if let Some(ref edge_filter) = self.where_edge {
+        if let Some(ref edge_info) = item.edge_info {
+          let arg = edge_filter_arg(&env, edge_info)?;
+          if !call_filter(&env, edge_filter, arg)? {
+            continue;
+          }
+        }
+      }
+
+      if let Some(ref node_filter) = self.where_node {
+        let arg = node_filter_arg(&env, &item.node)?;
+        if !call_filter(&env, node_filter, arg)? {
+          continue;
+        }
+      }
+
+      count += 1;
+    }
+
+    Ok(count)
   }
 
   fn resolve_etype(&self, edge_type: Option<String>) -> Result<Option<ETypeId>> {
