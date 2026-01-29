@@ -427,8 +427,12 @@ await db.update(Document)
 								<span>PERFORMANCE_LEVEL</span>
 								<span class="text-[#00d4ff]">118× faster than Memgraph</span>
 							</div>
-							<div class="voltage-bar">
+							<div class="voltage-bar relative">
 								<div class="voltage-bar-fill" style="width: 95%" />
+								{/* Electric sparks */}
+								<div class="voltage-spark voltage-spark-1" aria-hidden="true" />
+								<div class="voltage-spark voltage-spark-2" aria-hidden="true" />
+								<div class="voltage-spark voltage-spark-3" aria-hidden="true" />
 							</div>
 						</div>
 					</div>

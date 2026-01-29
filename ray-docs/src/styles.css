@@ -1355,11 +1355,90 @@ kbd {
   }
 
   .voltage-bar-fill {
+    position: relative;
     height: 100%;
     border-radius: 9999px;
     background: linear-gradient(90deg, #00d4ff, #7c3aed, #ff00ff);
     box-shadow: 0 0 10px rgba(0, 212, 255, 0.5);
     animation: voltage-pulse 2s ease-in-out infinite;
+    overflow: hidden;
+  }
+
+  /* Individual electric sparks */
+  .voltage-spark {
+    position: absolute;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 
+      0 0 4px 2px rgba(0, 212, 255, 0.8),
+      0 0 8px 4px rgba(0, 212, 255, 0.4);
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  .voltage-spark-1 {
+    top: 50%;
+    left: 20%;
+    transform: translateY(-50%);
+    animation: spark-flicker 0.8s ease-in-out infinite;
+  }
+
+  .voltage-spark-2 {
+    top: 50%;
+    left: 55%;
+    transform: translateY(-50%);
+    animation: spark-flicker 1.1s ease-in-out infinite 0.3s;
+  }
+
+  .voltage-spark-3 {
+    top: 50%;
+    left: 85%;
+    transform: translateY(-50%);
+    animation: spark-flicker 0.7s ease-in-out infinite 0.6s;
+  }
+
+  /* Electric spark overlay */
+  .voltage-bar-fill::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      transparent 40%,
+      rgba(255, 255, 255, 0.8) 45%,
+      rgba(255, 255, 255, 0.9) 50%,
+      rgba(255, 255, 255, 0.8) 55%,
+      transparent 60%,
+      transparent 100%
+    );
+    animation: spark-travel 1.5s ease-in-out infinite;
+  }
+
+  /* Secondary spark for more electric feel */
+  .voltage-bar-fill::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      transparent 70%,
+      rgba(0, 212, 255, 0.6) 75%,
+      rgba(255, 255, 255, 0.7) 80%,
+      rgba(0, 212, 255, 0.6) 85%,
+      transparent 90%,
+      transparent 100%
+    );
+    animation: spark-travel 2.3s ease-in-out infinite 0.7s;
   }
 
   /* ASCII art styling */
@@ -1576,6 +1655,58 @@ kbd {
   }
 }
 
+@keyframes spark-travel {
+  0% {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(200%);
+    opacity: 0;
+  }
+}
+
+@keyframes spark-flicker {
+  0%, 100% {
+    opacity: 0;
+    transform: translateY(-50%) scale(0.5);
+  }
+  10% {
+    opacity: 1;
+    transform: translateY(-50%) scale(1.2);
+  }
+  20% {
+    opacity: 0.3;
+    transform: translateY(-50%) scale(0.8);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-50%) scale(1);
+  }
+  40% {
+    opacity: 0;
+    transform: translateY(-50%) scale(0.5);
+  }
+  50% {
+    opacity: 0.8;
+    transform: translateY(-50%) scale(1.1);
+  }
+  60% {
+    opacity: 0.2;
+    transform: translateY(-50%) scale(0.7);
+  }
+  70% {
+    opacity: 0;
+    transform: translateY(-50%) scale(0.5);
+  }
+}
+
 @keyframes holographic-shift {
   0% {
     background-position: 0% 50%;
@@ -1779,10 +1910,17 @@ kbd {
     width: 100%;
     font-size: 0.875rem;
     border-collapse: collapse;
+    border-radius: 0.5rem;
+    overflow: hidden;
+    background: var(--card);
+    border: 1px solid var(--border);
+    box-shadow:
+      0 0 0 1px var(--speed-accent-soft),
+      0 10px 30px -10px rgba(0, 0, 0, 0.4);
   }
 
   .prose-console thead {
-    background: #0a1628;
+    background: var(--muted);
   }
 
   .prose-console th {
@@ -1790,22 +1928,36 @@ kbd {
     text-align: left;
     font-family: "JetBrains Mono", monospace;
     font-weight: 600;
-    color: white;
-    border-bottom: 1px solid #1a2a42;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--speed-accent);
+    border-bottom: 1px solid var(--border);
   }
 
   .prose-console td {
     padding: 0.75rem 1rem;
-    border-bottom: 1px solid rgba(26, 42, 66, 0.5);
+    border-bottom: 1px solid var(--border);
+    color: var(--muted-foreground);
+  }
+
+  .prose-console tbody tr:last-child td {
+    border-bottom: none;
   }
 
   .prose-console tr:hover td {
-    background: rgba(0, 212, 255, 0.03);
+    background: var(--speed-accent-soft);
+  }
+
+  .prose-console td:first-child {
+    color: var(--foreground);
+    font-weight: 500;
   }
 
   .prose-console td:not(:first-child) {
     font-family: "JetBrains Mono", monospace;
     font-variant-numeric: tabular-nums;
+    color: var(--speed-accent-strong);
   }
 
   .prose-console hr {
