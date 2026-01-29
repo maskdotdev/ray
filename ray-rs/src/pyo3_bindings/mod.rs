@@ -31,6 +31,28 @@ pub fn raydb(m: &Bound<'_, PyModule>) -> PyResult<()> {
   m.add_class::<database::PyDbStats>()?;
   m.add_class::<database::PyCheckResult>()?;
   m.add_class::<database::PyCacheStats>()?;
+  m.add_class::<database::PyExportOptions>()?;
+  m.add_class::<database::PyImportOptions>()?;
+  m.add_class::<database::PyExportResult>()?;
+  m.add_class::<database::PyImportResult>()?;
+  m.add_class::<database::PyStreamOptions>()?;
+  m.add_class::<database::PyPaginationOptions>()?;
+  m.add_class::<database::PyNodeWithProps>()?;
+  m.add_class::<database::PyEdgeWithProps>()?;
+  m.add_class::<database::PyNodePage>()?;
+  m.add_class::<database::PyEdgePage>()?;
+  m.add_class::<database::PyCacheLayerMetrics>()?;
+  m.add_class::<database::PyCacheMetrics>()?;
+  m.add_class::<database::PyDataMetrics>()?;
+  m.add_class::<database::PyMvccMetrics>()?;
+  m.add_class::<database::PyMemoryMetrics>()?;
+  m.add_class::<database::PyDatabaseMetrics>()?;
+  m.add_class::<database::PyHealthCheckEntry>()?;
+  m.add_class::<database::PyHealthCheckResult>()?;
+  m.add_class::<database::PyBackupOptions>()?;
+  m.add_class::<database::PyRestoreOptions>()?;
+  m.add_class::<database::PyOfflineBackupOptions>()?;
+  m.add_class::<database::PyBackupResult>()?;
   m.add_class::<database::PyPropValue>()?;
   m.add_class::<database::PyEdge>()?;
   m.add_class::<database::PyFullEdge>()?;
@@ -52,6 +74,12 @@ pub fn raydb(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
   // Standalone functions
   m.add_function(wrap_pyfunction!(database::open_database, m)?)?;
+  m.add_function(wrap_pyfunction!(database::collect_metrics, m)?)?;
+  m.add_function(wrap_pyfunction!(database::health_check, m)?)?;
+  m.add_function(wrap_pyfunction!(database::create_backup, m)?)?;
+  m.add_function(wrap_pyfunction!(database::restore_backup, m)?)?;
+  m.add_function(wrap_pyfunction!(database::get_backup_info, m)?)?;
+  m.add_function(wrap_pyfunction!(database::create_offline_backup, m)?)?;
   m.add_function(wrap_pyfunction!(version, m)?)?;
   m.add_function(wrap_pyfunction!(vector::brute_force_search, m)?)?;
 

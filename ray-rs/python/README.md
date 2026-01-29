@@ -74,7 +74,6 @@ with Database("my_graph.raydb") as db:
 ### Pathfinding
 - BFS (unweighted shortest path)
 - Dijkstra's algorithm (weighted shortest path)
-- Yen's k-shortest paths algorithm
 - Reachability queries
 
 ### Vector Search
@@ -169,7 +168,7 @@ edges = db.from_(alice).out(knows).edges().to_list()
 
 ```python
 # Shortest path (BFS)
-path = db.shortest_path(alice).to(bob).bfs()
+path = db.shortest_path(alice).via(knows).to(bob).bfs()
 if path.found:
     print([n.key for n in path.nodes])
 
@@ -182,7 +181,7 @@ path = db.shortest_path(alice).via(knows).to(bob).a_star(
 )
 
 # Path existence
-exists = db.shortest_path(alice).to(bob).exists()
+exists = db.shortest_path(alice).via(knows).to(bob).exists()
 ```
 
 ### Vector Search

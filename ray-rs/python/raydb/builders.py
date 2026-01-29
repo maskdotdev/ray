@@ -119,8 +119,7 @@ def to_prop_value(prop_def: PropDef[Any], value: Any, PropValue: type) -> PropVa
     elif prop_def.type == "bool":
         return PropValue.bool(bool(value))
     elif prop_def.type == "vector":
-        # Vectors are handled separately
-        raise ValueError("Vector properties should be set using set_node_vector")
+        return PropValue.vector([float(v) for v in value])
     else:
         raise ValueError(f"Unknown property type: {prop_def.type}")
 

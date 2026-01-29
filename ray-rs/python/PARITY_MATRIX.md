@@ -1,6 +1,6 @@
 # Python Parity Matrix (TypeScript Core)
 
-Scope: TypeScript core API under `src/api/*` plus `src/api/vector-search.ts` and `Ray.check()` in `src/api/ray.ts`. Excludes streaming, backup/restore, export/import, metrics, and CLI helpers from `src/index.ts`.
+Scope: TypeScript core API under `src/api/*` plus `src/api/vector-search.ts`, `Ray.check()` in `src/api/ray.ts`, and the operational helpers exported from `src/index.ts` (export/import, streaming, backup/restore, metrics/health). CLI helpers are excluded.
 
 Legend: parity = full feature match, partial = similar capability with API or behavior differences, missing = not exposed in Python bindings.
 
@@ -59,6 +59,10 @@ Legend: parity = full feature match, partial = similar capability with API or be
 | Stats | `stats()` | `stats()` | parity | Returns stats struct. |
 | Check | `check()` | `check()` | parity | Schema warnings included. |
 | Optimize | `optimize()` | `optimize()` | parity | Same behavior. |
+| Export/Import | `export*`, `import*` | `export*`, `import*` | parity | Python exposes JSON object and file helpers. |
+| Streaming | `stream*`, `get*Page` | `stream*`, `get*Page` | parity | Same batching/pagination behavior. |
+| Backup/Restore | `createBackup`, `restoreBackup` | `create_backup`, `restore_backup` | parity | Naming differences only. |
+| Metrics/Health | `collectMetrics`, `healthCheck` | `collect_metrics`, `health_check` | parity | Naming differences only. |
 
 ## Vector Search
 
@@ -70,4 +74,4 @@ Legend: parity = full feature match, partial = similar capability with API or be
 
 ## Remaining Gaps
 
-- None.
+- None noted.
