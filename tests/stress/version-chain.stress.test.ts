@@ -32,12 +32,19 @@ import { MvccManager } from "../../src/mvcc/index.ts";
 import { getConfig, isQuickMode } from "./stress.config.ts";
 
 const config = getConfig(isQuickMode());
+const dbOptions = {
+  mvcc: true,
+  autoCheckpoint: false,
+  walSize: config.durability.walSizeBytes,
+};
 
 describe("Version Chain Stress Tests", () => {
   let testDir: string;
+  let testPath: string;
 
   beforeEach(async () => {
     testDir = await mkdtemp(join(tmpdir(), "ray-vchain-stress-"));
+    testPath = join(testDir, "db.raydb");
   });
 
   afterEach(async () => {
@@ -45,8 +52,8 @@ describe("Version Chain Stress Tests", () => {
   });
 
   test("deep version chains (many updates to same node)", async () => {
-    const db = await openGraphDB(testDir, { 
-      mvcc: true,
+    const db = await openGraphDB(testPath, { 
+      ...dbOptions,
       mvccGcInterval: 60000, // Disable GC during test
       mvccRetentionMs: 300000,
     });
@@ -103,8 +110,8 @@ describe("Version Chain Stress Tests", () => {
   }, 300000);
 
   test("wide version spread (many concurrent readers at different snapshots)", async () => {
-    const db = await openGraphDB(testDir, { 
-      mvcc: true,
+    const db = await openGraphDB(testPath, { 
+      ...dbOptions,
       mvccGcInterval: 60000,
       mvccRetentionMs: 300000,
     });
@@ -163,8 +170,8 @@ describe("Version Chain Stress Tests", () => {
   }, 120000);
 
   test("GC under active readers preserves needed versions", async () => {
-    const db = await openGraphDB(testDir, { 
-      mvcc: true,
+    const db = await openGraphDB(testPath, { 
+      ...dbOptions,
       mvccGcInterval: 100, // Aggressive GC
       mvccRetentionMs: 100,
     });
@@ -215,8 +222,8 @@ describe("Version Chain Stress Tests", () => {
   }, 60000);
 
   test("version chain integrity under heavy updates", async () => {
-    const db = await openGraphDB(testDir, { 
-      mvcc: true,
+    const db = await openGraphDB(testPath, { 
+      ...dbOptions,
       mvccGcInterval: 1000,
       mvccRetentionMs: 5000,
     });

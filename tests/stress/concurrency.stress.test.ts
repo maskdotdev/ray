@@ -39,12 +39,19 @@ import { getConfig, isQuickMode } from "./stress.config.ts";
 import { randomString, randomInt } from "./helpers/generators.ts";
 
 const config = getConfig(isQuickMode());
+const dbOptions = {
+  mvcc: true,
+  autoCheckpoint: false,
+  walSize: config.durability.walSizeBytes,
+};
 
 describe("Concurrency Stress Tests", () => {
   let testDir: string;
+  let testPath: string;
 
   beforeEach(async () => {
     testDir = await mkdtemp(join(tmpdir(), "ray-concurrency-stress-"));
+    testPath = join(testDir, "db.raydb");
   });
 
   afterEach(async () => {
@@ -52,7 +59,7 @@ describe("Concurrency Stress Tests", () => {
   });
 
   test("reader-writer contention maintains snapshot isolation", async () => {
-    const db = await openGraphDB(testDir, { mvcc: true });
+    const db = await openGraphDB(testPath, dbOptions);
     const READERS = Math.min(config.concurrency.maxWorkers, 20);
     const WRITERS = Math.min(config.concurrency.maxWorkers / 5, 5);
     const ITERATIONS = Math.min(config.concurrency.txPerWorker, 200);
@@ -142,7 +149,7 @@ describe("Concurrency Stress Tests", () => {
   }, 120000);
 
   test("concurrent writers detect all conflicts (no lost updates)", async () => {
-    const db = await openGraphDB(testDir, { mvcc: true });
+    const db = await openGraphDB(testPath, dbOptions);
     const WRITERS = config.concurrency.maxWorkers;
 
     // Setup: create a shared node
@@ -203,7 +210,7 @@ describe("Concurrency Stress Tests", () => {
   }, 60000);
 
   test("long-running reader sees consistent snapshot while writers commit", async () => {
-    const db = await openGraphDB(testDir, { mvcc: true });
+    const db = await openGraphDB(testPath, dbOptions);
     const UPDATES = Math.min(config.concurrency.txPerWorker, 500);
 
     // Setup: create nodes
@@ -258,7 +265,7 @@ describe("Concurrency Stress Tests", () => {
   }, 120000);
 
   test("transaction storms (rapid begin/commit cycles)", async () => {
-    const db = await openGraphDB(testDir, { mvcc: true });
+    const db = await openGraphDB(testPath, dbOptions);
     const TARGET_TX = config.concurrency.txStormTarget;
 
     const startTime = performance.now();
@@ -299,7 +306,7 @@ describe("Concurrency Stress Tests", () => {
   }, 180000);
 
   test("rollback storms cleanup properly", async () => {
-    const db = await openGraphDB(testDir, { mvcc: true });
+    const db = await openGraphDB(testPath, dbOptions);
     const ROLLBACKS = Math.min(config.concurrency.txStormTarget, 2000);
 
     const mvcc = db._mvcc as MvccManager;
@@ -339,7 +346,7 @@ describe("Concurrency Stress Tests", () => {
   }, 60000);
 
   test("mixed concurrent operations with conflict detection", async () => {
-    const db = await openGraphDB(testDir, { mvcc: true });
+    const db = await openGraphDB(testPath, dbOptions);
     const WORKERS = config.concurrency.maxWorkers;
     const OPS_PER_WORKER = Math.min(config.concurrency.txPerWorker, 100);
 

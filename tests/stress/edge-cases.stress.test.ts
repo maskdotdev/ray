@@ -46,12 +46,19 @@ import {
 } from "./helpers/generators.ts";
 
 const config = getConfig(isQuickMode());
+const dbOptions = {
+  mvcc: true,
+  autoCheckpoint: false,
+  walSize: config.durability.walSizeBytes,
+};
 
 describe("Edge Case Stress Tests", () => {
   let testDir: string;
+  let testPath: string;
 
   beforeEach(async () => {
     testDir = await mkdtemp(join(tmpdir(), "ray-edge-case-stress-"));
+    testPath = join(testDir, "db.raydb");
   });
 
   afterEach(async () => {
@@ -59,7 +66,7 @@ describe("Edge Case Stress Tests", () => {
   });
 
   test("self-loops are handled correctly", async () => {
-    const db = await openGraphDB(testDir, { mvcc: true });
+    const db = await openGraphDB(testPath, dbOptions);
     const ITERATIONS = config.edgeCases.iterations;
 
     // Create node with self-loop
@@ -102,7 +109,7 @@ describe("Edge Case Stress Tests", () => {
   }, 60000);
 
   test("duplicate edge add/delete cycles", async () => {
-    const db = await openGraphDB(testDir, { mvcc: true });
+    const db = await openGraphDB(testPath, dbOptions);
     const ITERATIONS = config.edgeCases.iterations;
 
     // Create two nodes
@@ -143,7 +150,7 @@ describe("Edge Case Stress Tests", () => {
   }, 120000);
 
   test("empty transactions have no overhead accumulation", async () => {
-    const db = await openGraphDB(testDir, { mvcc: true });
+    const db = await openGraphDB(testPath, dbOptions);
     const ITERATIONS = config.edgeCases.iterations * 10;
 
     const mvcc = db._mvcc as MvccManager;
@@ -174,7 +181,7 @@ describe("Edge Case Stress Tests", () => {
   }, 60000);
 
   test("chain topology traversal", async () => {
-    const db = await openGraphDB(testDir, { mvcc: true });
+    const db = await openGraphDB(testPath, dbOptions);
     const CHAIN_LENGTH = config.edgeCases.chainLength;
 
     console.log(`Building chain of ${CHAIN_LENGTH} nodes...`);
@@ -218,7 +225,7 @@ describe("Edge Case Stress Tests", () => {
   }, 300000);
 
   test("star topology (high fan-out)", async () => {
-    const db = await openGraphDB(testDir, { mvcc: true });
+    const db = await openGraphDB(testPath, dbOptions);
     const SPOKES = config.edgeCases.starSpokes;
 
     console.log(`Building star with ${SPOKES} spokes...`);
@@ -259,7 +266,7 @@ describe("Edge Case Stress Tests", () => {
   }, 300000);
 
   test("complete graph (dense connectivity)", async () => {
-    const db = await openGraphDB(testDir, { mvcc: true });
+    const db = await openGraphDB(testPath, dbOptions);
     const SIZE = config.edgeCases.completeGraphSize;
     const EXPECTED_EDGES = SIZE * (SIZE - 1);
 
@@ -291,7 +298,7 @@ describe("Edge Case Stress Tests", () => {
   }, 300000);
 
   test("rapid node create/delete cycles", async () => {
-    const db = await openGraphDB(testDir, { mvcc: true });
+    const db = await openGraphDB(testPath, dbOptions);
     const ITERATIONS = config.edgeCases.iterations;
 
     // Create and delete nodes rapidly
@@ -313,7 +320,7 @@ describe("Edge Case Stress Tests", () => {
   }, 120000);
 
   test("property update cycles on same key", async () => {
-    const db = await openGraphDB(testDir, { mvcc: true });
+    const db = await openGraphDB(testPath, dbOptions);
     const ITERATIONS = config.edgeCases.iterations;
 
     // Create node with property
@@ -341,7 +348,7 @@ describe("Edge Case Stress Tests", () => {
   }, 120000);
 
   test("interleaved operations on multiple nodes", async () => {
-    const db = await openGraphDB(testDir, { mvcc: true });
+    const db = await openGraphDB(testPath, dbOptions);
     const NODES = 50;
     const ITERATIONS = config.edgeCases.iterations;
 

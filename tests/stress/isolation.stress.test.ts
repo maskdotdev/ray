@@ -38,12 +38,19 @@ import { getConfig, isQuickMode } from "./stress.config.ts";
 import { randomInt, randomString } from "./helpers/generators.ts";
 
 const config = getConfig(isQuickMode());
+const dbOptions = {
+  mvcc: true,
+  autoCheckpoint: false,
+  walSize: config.durability.walSizeBytes,
+};
 
 describe("MVCC Isolation Stress Tests", () => {
   let testDir: string;
+  let testPath: string;
 
   beforeEach(async () => {
     testDir = await mkdtemp(join(tmpdir(), "ray-isolation-stress-"));
+    testPath = join(testDir, "db.raydb");
   });
 
   afterEach(async () => {
@@ -51,7 +58,7 @@ describe("MVCC Isolation Stress Tests", () => {
   });
 
   test("snapshot isolation prevents phantom reads during inserts", async () => {
-    const db = await openGraphDB(testDir, { mvcc: true });
+    const db = await openGraphDB(testPath, dbOptions);
     const ITERATIONS = config.isolation.iterations;
     const BASE_NODES = 100;
 
@@ -117,7 +124,7 @@ describe("MVCC Isolation Stress Tests", () => {
   }, 180000);
 
   test("non-repeatable reads prevented within transaction", async () => {
-    const db = await openGraphDB(testDir, { mvcc: true });
+    const db = await openGraphDB(testPath, dbOptions);
     const ITERATIONS = config.isolation.iterations;
 
     // Create a node
@@ -163,7 +170,7 @@ describe("MVCC Isolation Stress Tests", () => {
   }, 120000);
 
   test("write skew anomaly detection (concurrent balance transfers)", async () => {
-    const db = await openGraphDB(testDir, { mvcc: true });
+    const db = await openGraphDB(testPath, dbOptions);
     const ITERATIONS = config.isolation.iterations;
     const INITIAL_BALANCE = 1000n;
 
@@ -239,7 +246,7 @@ describe("MVCC Isolation Stress Tests", () => {
   }, 120000);
 
   test("lost update prevention under concurrent modifications", async () => {
-    const db = await openGraphDB(testDir, { mvcc: true });
+    const db = await openGraphDB(testPath, dbOptions);
     const ROUNDS = config.isolation.iterations / 10; // Fewer rounds, more concurrent txs per round
     const CONCURRENT_TXS = 10;
 
@@ -303,7 +310,7 @@ describe("MVCC Isolation Stress Tests", () => {
   }, 120000);
 
   test("read-only transactions see consistent snapshot across entire read", async () => {
-    const db = await openGraphDB(testDir, { mvcc: true });
+    const db = await openGraphDB(testPath, dbOptions);
     const NODES = 100;
     const ITERATIONS = 50;
 
