@@ -51,14 +51,26 @@ function DocNotFound(props: { slug: string }) {
 function DocPageContent(props: { slug: string }) {
   const slug = props.slug
 
-  // Benchmarks page (root level)
+  // Benchmarks overview page (root level)
   if (slug === 'benchmarks') {
     return (
       <DocPage slug={slug}>
         <p>
-          Performance benchmarks for RayDB bindings (NAPI, Python, Rust) using the
-          single-file raw benchmark suite.
+          Performance benchmarks for RayDB across graph operations, vector search, and
+          multi-language bindings.
         </p>
+
+        <h2 id="benchmark-categories">Benchmark Categories</h2>
+        <ul>
+          <li>
+            <a href="/docs/benchmarks/graph"><strong>Graph Benchmarks</strong></a> – 
+            Graph database operations compared against Memgraph (up to 150x faster)
+          </li>
+          <li>
+            <a href="/docs/benchmarks/vector"><strong>Vector Benchmarks</strong></a> – 
+            Vector search performance including IVF, PQ, and IVF-PQ indexes
+          </li>
+        </ul>
 
         <h2 id="test-environment">Test Environment</h2>
         <ul>
@@ -69,218 +81,72 @@ function DocPageContent(props: { slug: string }) {
           <li>RayDB 0.1.0</li>
         </ul>
 
-        <h2 id="methodology">Methodology</h2>
-        <ul>
-          <li>Benchmark suite: single-file raw bindings (TypeScript, Python, Rust)</li>
-          <li>Read: p50 latency for getNodeByKey / get_node_by_key</li>
-          <li>Write: p50 latency for batch write of 100 nodes</li>
-          <li>Mixed: full benchmark wall time (build + vector setup + compaction + reads + writes)</li>
-          <li>Memory: peak RSS from /usr/bin/time -l</li>
-          <li>Sizes: 10k/50k, 100k/500k, 250k/1.25M (nodes/edges)</li>
-          <li>WAL: default 64MB for small/medium; 512MB for large to avoid WAL exhaustion</li>
-        </ul>
+        <h2 id="highlights">Performance Highlights</h2>
 
-        <h2 id="typescript">TypeScript</h2>
+        <h3 id="graph-highlights">Graph Operations</h3>
         <table>
           <thead>
             <tr>
-              <th>Benchmark</th>
-              <th>Nodes/Edges</th>
-              <th>Time</th>
-              <th>Memory</th>
+              <th>Category</th>
+              <th>RayDB vs Memgraph</th>
             </tr>
           </thead>
           <tbody>
+            <tr><td>Key Lookups</td><td>100-780x faster</td></tr>
+            <tr><td>1-Hop Traversals</td><td>48-71x faster</td></tr>
+            <tr><td>Multi-Hop (3-hop)</td><td>51-730x faster</td></tr>
+            <tr><td>Batch Writes</td><td>1.5-19x faster</td></tr>
+          </tbody>
+        </table>
+        <p><a href="/docs/benchmarks/graph">View detailed graph benchmarks →</a></p>
+
+        <h3 id="vector-highlights">Vector Operations</h3>
+        <table>
+          <thead>
             <tr>
-              <td>Read</td>
-              <td>10k/50k</td>
-              <td>167ns</td>
-              <td>109.8MB</td>
+              <th>Operation</th>
+              <th>Performance</th>
             </tr>
+          </thead>
+          <tbody>
+            <tr><td>Distance Functions</td><td>500k-1.6M ops/sec</td></tr>
+            <tr><td>Vector Store Insert</td><td>487k vectors/sec</td></tr>
+            <tr><td>IVF Search (k=10)</td><td>2.2-11k ops/sec</td></tr>
+            <tr><td>IVF-PQ Memory Savings</td><td>15x compression</td></tr>
+          </tbody>
+        </table>
+        <p><a href="/docs/benchmarks/vector">View detailed vector benchmarks →</a></p>
+
+        <h2 id="bindings">Binding Performance (Read p50)</h2>
+        <table>
+          <thead>
             <tr>
-              <td>Read</td>
-              <td>100k/500k</td>
-              <td>459ns</td>
-              <td>419.2MB</td>
+              <th>Language</th>
+              <th>10k/50k</th>
+              <th>100k/500k</th>
+              <th>250k/1.25M</th>
             </tr>
-            <tr>
-              <td>Read</td>
-              <td>250k/1.25M</td>
-              <td>542ns</td>
-              <td>1027.4MB</td>
-            </tr>
-            <tr>
-              <td>Write</td>
-              <td>10k/50k</td>
-              <td>214.75us</td>
-              <td>109.8MB</td>
-            </tr>
-            <tr>
-              <td>Write</td>
-              <td>100k/500k</td>
-              <td>280.04us</td>
-              <td>419.2MB</td>
-            </tr>
-            <tr>
-              <td>Write</td>
-              <td>250k/1.25M</td>
-              <td>444.92us</td>
-              <td>1027.4MB</td>
-            </tr>
-            <tr>
-              <td>Mixed</td>
-              <td>10k/50k</td>
-              <td>0.30s</td>
-              <td>109.8MB</td>
-            </tr>
-            <tr>
-              <td>Mixed</td>
-              <td>100k/500k</td>
-              <td>3.43s</td>
-              <td>419.2MB</td>
-            </tr>
-            <tr>
-              <td>Mixed</td>
-              <td>250k/1.25M</td>
-              <td>19.47s</td>
-              <td>1027.4MB</td>
-            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Rust</td><td>83ns</td><td>291ns</td><td>417ns</td></tr>
+            <tr><td>TypeScript</td><td>167ns</td><td>459ns</td><td>542ns</td></tr>
+            <tr><td>Python</td><td>250ns</td><td>375ns</td><td>458ns</td></tr>
           </tbody>
         </table>
 
-        <h2 id="python">Python</h2>
+        <h2 id="running">Running Benchmarks</h2>
         <table>
           <thead>
             <tr>
-              <th>Benchmark</th>
-              <th>Nodes/Edges</th>
-              <th>Time</th>
-              <th>Memory</th>
+              <th>Command</th>
+              <th>Description</th>
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td>Read</td>
-              <td>10k/50k</td>
-              <td>250ns</td>
-              <td>63.4MB</td>
-            </tr>
-            <tr>
-              <td>Read</td>
-              <td>100k/500k</td>
-              <td>375ns</td>
-              <td>372.2MB</td>
-            </tr>
-            <tr>
-              <td>Read</td>
-              <td>250k/1.25M</td>
-              <td>458ns</td>
-              <td>910.7MB</td>
-            </tr>
-            <tr>
-              <td>Write</td>
-              <td>10k/50k</td>
-              <td>306.29us</td>
-              <td>63.4MB</td>
-            </tr>
-            <tr>
-              <td>Write</td>
-              <td>100k/500k</td>
-              <td>281.96us</td>
-              <td>372.2MB</td>
-            </tr>
-            <tr>
-              <td>Write</td>
-              <td>250k/1.25M</td>
-              <td>427.58us</td>
-              <td>910.7MB</td>
-            </tr>
-            <tr>
-              <td>Mixed</td>
-              <td>10k/50k</td>
-              <td>0.50s</td>
-              <td>63.4MB</td>
-            </tr>
-            <tr>
-              <td>Mixed</td>
-              <td>100k/500k</td>
-              <td>4.30s</td>
-              <td>372.2MB</td>
-            </tr>
-            <tr>
-              <td>Mixed</td>
-              <td>250k/1.25M</td>
-              <td>21.91s</td>
-              <td>910.7MB</td>
-            </tr>
-          </tbody>
-        </table>
-
-        <h2 id="rust">Rust</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Benchmark</th>
-              <th>Nodes/Edges</th>
-              <th>Time</th>
-              <th>Memory</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>Read</td>
-              <td>10k/50k</td>
-              <td>83ns</td>
-              <td>38.0MB</td>
-            </tr>
-            <tr>
-              <td>Read</td>
-              <td>100k/500k</td>
-              <td>291ns</td>
-              <td>339.7MB</td>
-            </tr>
-            <tr>
-              <td>Read</td>
-              <td>250k/1.25M</td>
-              <td>417ns</td>
-              <td>899.1MB</td>
-            </tr>
-            <tr>
-              <td>Write</td>
-              <td>10k/50k</td>
-              <td>160.21us</td>
-              <td>38.0MB</td>
-            </tr>
-            <tr>
-              <td>Write</td>
-              <td>100k/500k</td>
-              <td>240.25us</td>
-              <td>339.7MB</td>
-            </tr>
-            <tr>
-              <td>Write</td>
-              <td>250k/1.25M</td>
-              <td>378.83us</td>
-              <td>899.1MB</td>
-            </tr>
-            <tr>
-              <td>Mixed</td>
-              <td>10k/50k</td>
-              <td>0.12s</td>
-              <td>38.0MB</td>
-            </tr>
-            <tr>
-              <td>Mixed</td>
-              <td>100k/500k</td>
-              <td>3.03s</td>
-              <td>339.7MB</td>
-            </tr>
-            <tr>
-              <td>Mixed</td>
-              <td>250k/1.25M</td>
-              <td>17.97s</td>
-              <td>899.1MB</td>
-            </tr>
+            <tr><td><code>bun run bench/benchmark.ts</code></td><td>Main benchmark (RayDB only)</td></tr>
+            <tr><td><code>bun run bench:memgraph</code></td><td>Graph comparison vs Memgraph</td></tr>
+            <tr><td><code>bun run bench/benchmark-vector.ts</code></td><td>Vector search benchmarks</td></tr>
+            <tr><td><code>bun run bench:mvcc:v2</code></td><td>MVCC performance testing</td></tr>
           </tbody>
         </table>
       </DocPage>

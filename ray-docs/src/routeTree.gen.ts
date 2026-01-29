@@ -17,6 +17,7 @@ import { Route as DocsInternalsSplatRouteImport } from './routes/docs/internals/
 import { Route as DocsGuidesSplatRouteImport } from './routes/docs/guides/$'
 import { Route as DocsGettingStartedInstallationRouteImport } from './routes/docs/getting-started/installation'
 import { Route as DocsGettingStartedSplatRouteImport } from './routes/docs/getting-started/$'
+import { Route as DocsBenchmarksSplatRouteImport } from './routes/docs/benchmarks/$'
 import { Route as DocsApiSplatRouteImport } from './routes/docs/api/$'
 
 const DocsRoute = DocsRouteImport.update({
@@ -60,6 +61,11 @@ const DocsGettingStartedSplatRoute = DocsGettingStartedSplatRouteImport.update({
   path: '/getting-started/$',
   getParentRoute: () => DocsRoute,
 } as any)
+const DocsBenchmarksSplatRoute = DocsBenchmarksSplatRouteImport.update({
+  id: '/benchmarks/$',
+  path: '/benchmarks/$',
+  getParentRoute: () => DocsRoute,
+} as any)
 const DocsApiSplatRoute = DocsApiSplatRouteImport.update({
   id: '/api/$',
   path: '/api/$',
@@ -72,6 +78,7 @@ export interface FileRoutesByFullPath {
   '/docs/$': typeof DocsSplatRoute
   '/docs/': typeof DocsIndexRoute
   '/docs/api/$': typeof DocsApiSplatRoute
+  '/docs/benchmarks/$': typeof DocsBenchmarksSplatRoute
   '/docs/getting-started/$': typeof DocsGettingStartedSplatRoute
   '/docs/getting-started/installation': typeof DocsGettingStartedInstallationRoute
   '/docs/guides/$': typeof DocsGuidesSplatRoute
@@ -82,6 +89,7 @@ export interface FileRoutesByTo {
   '/docs/$': typeof DocsSplatRoute
   '/docs': typeof DocsIndexRoute
   '/docs/api/$': typeof DocsApiSplatRoute
+  '/docs/benchmarks/$': typeof DocsBenchmarksSplatRoute
   '/docs/getting-started/$': typeof DocsGettingStartedSplatRoute
   '/docs/getting-started/installation': typeof DocsGettingStartedInstallationRoute
   '/docs/guides/$': typeof DocsGuidesSplatRoute
@@ -94,6 +102,7 @@ export interface FileRoutesById {
   '/docs/$': typeof DocsSplatRoute
   '/docs/': typeof DocsIndexRoute
   '/docs/api/$': typeof DocsApiSplatRoute
+  '/docs/benchmarks/$': typeof DocsBenchmarksSplatRoute
   '/docs/getting-started/$': typeof DocsGettingStartedSplatRoute
   '/docs/getting-started/installation': typeof DocsGettingStartedInstallationRoute
   '/docs/guides/$': typeof DocsGuidesSplatRoute
@@ -107,6 +116,7 @@ export interface FileRouteTypes {
     | '/docs/$'
     | '/docs/'
     | '/docs/api/$'
+    | '/docs/benchmarks/$'
     | '/docs/getting-started/$'
     | '/docs/getting-started/installation'
     | '/docs/guides/$'
@@ -117,6 +127,7 @@ export interface FileRouteTypes {
     | '/docs/$'
     | '/docs'
     | '/docs/api/$'
+    | '/docs/benchmarks/$'
     | '/docs/getting-started/$'
     | '/docs/getting-started/installation'
     | '/docs/guides/$'
@@ -128,6 +139,7 @@ export interface FileRouteTypes {
     | '/docs/$'
     | '/docs/'
     | '/docs/api/$'
+    | '/docs/benchmarks/$'
     | '/docs/getting-started/$'
     | '/docs/getting-started/installation'
     | '/docs/guides/$'
@@ -197,6 +209,13 @@ declare module '@tanstack/solid-router' {
       preLoaderRoute: typeof DocsGettingStartedSplatRouteImport
       parentRoute: typeof DocsRoute
     }
+    '/docs/benchmarks/$': {
+      id: '/docs/benchmarks/$'
+      path: '/benchmarks/$'
+      fullPath: '/docs/benchmarks/$'
+      preLoaderRoute: typeof DocsBenchmarksSplatRouteImport
+      parentRoute: typeof DocsRoute
+    }
     '/docs/api/$': {
       id: '/docs/api/$'
       path: '/api/$'
@@ -211,6 +230,7 @@ interface DocsRouteChildren {
   DocsSplatRoute: typeof DocsSplatRoute
   DocsIndexRoute: typeof DocsIndexRoute
   DocsApiSplatRoute: typeof DocsApiSplatRoute
+  DocsBenchmarksSplatRoute: typeof DocsBenchmarksSplatRoute
   DocsGettingStartedSplatRoute: typeof DocsGettingStartedSplatRoute
   DocsGettingStartedInstallationRoute: typeof DocsGettingStartedInstallationRoute
   DocsGuidesSplatRoute: typeof DocsGuidesSplatRoute
@@ -221,6 +241,7 @@ const DocsRouteChildren: DocsRouteChildren = {
   DocsSplatRoute: DocsSplatRoute,
   DocsIndexRoute: DocsIndexRoute,
   DocsApiSplatRoute: DocsApiSplatRoute,
+  DocsBenchmarksSplatRoute: DocsBenchmarksSplatRoute,
   DocsGettingStartedSplatRoute: DocsGettingStartedSplatRoute,
   DocsGettingStartedInstallationRoute: DocsGettingStartedInstallationRoute,
   DocsGuidesSplatRoute: DocsGuidesSplatRoute,

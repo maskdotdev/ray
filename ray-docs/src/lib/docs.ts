@@ -43,7 +43,9 @@ export const docsStructure: DocSection[] = [
   {
     label: 'Benchmarks',
     items: [
-      { title: 'Benchmarks', description: 'Performance comparisons', slug: 'benchmarks' },
+      { title: 'Overview', description: 'Performance benchmarks overview', slug: 'benchmarks' },
+      { title: 'Graph Benchmarks', description: 'Graph database performance', slug: 'benchmarks/graph' },
+      { title: 'Vector Benchmarks', description: 'Vector search performance', slug: 'benchmarks/vector' },
     ],
   },
   {
