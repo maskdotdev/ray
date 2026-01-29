@@ -23,6 +23,7 @@ import Logo from "~/components/logo";
 import ThemeToggle from "~/components/theme-toggle";
 import CodeBlock from "~/components/code-block";
 import { Tabs } from "~/components/tabs";
+import { searchDialog } from "~/components/search-dialog";
 
 export const Route = createFileRoute("/")({
 	component: HomePage,
@@ -238,6 +239,19 @@ await db.update(Document)
 						</div>
 
 						<div class="flex items-center gap-2">
+							{/* Search button */}
+							<button
+								type="button"
+								onClick={() => searchDialog.open()}
+								class="flex items-center gap-2 px-3 py-1.5 rounded-md text-slate-400 hover:text-white bg-[#0a1628] border border-[#1a2a42] hover:border-[#00d4ff]/50 transition-colors duration-150 font-mono text-sm"
+								aria-label="Search documentation"
+							>
+								<Search size={14} aria-hidden="true" />
+								<span class="hidden sm:inline">search</span>
+								<kbd class="hidden md:inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] rounded bg-[#1a2a42] text-slate-500">
+									<span class="text-xs">⌘</span>K
+								</kbd>
+							</button>
 							<ThemeToggle />
 							<a
 								href="https://github.com/maskdotdev/ray"

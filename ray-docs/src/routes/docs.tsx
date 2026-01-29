@@ -6,6 +6,7 @@ import Logo from '~/components/logo'
 import ThemeToggle from '~/components/theme-toggle'
 import { docsStructure } from '~/lib/docs'
 import { cn } from '~/lib/utils'
+import { searchDialog } from '~/components/search-dialog'
 
 export const Route = createFileRoute('/docs')({
   component: DocsLayout,
@@ -186,6 +187,7 @@ function DocsLayout() {
             {/* Search - console style */}
             <button
               type="button"
+              onClick={() => searchDialog.open()}
               class="hidden sm:flex items-center gap-2 px-3 py-1.5 text-sm font-mono text-slate-500 bg-[#0a1628] border border-[#1a2a42] rounded-lg hover:border-[#00d4ff]/50 hover:text-[#00d4ff] transition-colors duration-150"
               aria-label="Search documentation"
             >

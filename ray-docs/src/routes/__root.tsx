@@ -11,6 +11,7 @@ import { Suspense } from "solid-js";
 // Import styles as URL to ensure explicit stylesheet link
 import stylesHref from "../styles.css?url";
 import NotFound from "../components/not-found";
+import { SearchDialog, SearchKeyboardShortcut, searchDialog } from "../components/search-dialog";
 
 function RootErrorComponent({ error }: { error: Error }) {
   return (
@@ -82,6 +83,8 @@ function RootComponent() {
         >
           <Outlet />
         </Suspense>
+        <SearchKeyboardShortcut />
+        <SearchDialog open={searchDialog.isOpen()} onClose={searchDialog.close} />
         <TanStackRouterDevtools position="bottom-right" />
         <Scripts />
       </body>
