@@ -1,4 +1,4 @@
-import { createFileRoute, useLocation, Link } from '@tanstack/solid-router'
+import { createFileRoute, useLocation } from '@tanstack/solid-router'
 import { Show } from 'solid-js'
 import DocPage from '~/components/doc-page'
 import { findDocBySlug } from '~/lib/docs'
@@ -488,6 +488,118 @@ function DocPageContent(props: { slug: string }) {
             <tr><td><code>bun run bench/benchmark-vector.ts</code></td><td>Default config (10k vectors, 768D)</td></tr>
             <tr><td><code>bun run bench/benchmark-vector.ts --vectors 50000</code></td><td>Custom vector count</td></tr>
             <tr><td><code>bun run bench/benchmark-vector.ts --dimensions 384</code></td><td>Custom dimensions</td></tr>
+          </tbody>
+        </table>
+      </DocPage>
+    )
+  }
+
+  // Cross-Language Benchmarks page
+  if (slug === 'benchmarks/cross-language') {
+    return (
+      <DocPage slug={slug}>
+        <p>
+          Cross-language benchmarks for RayDB bindings (TypeScript/NAPI, Python, Rust).
+          Graph results come from the single-file raw benchmark; vector results use the
+          VectorIndex benchmark.
+        </p>
+
+        <h2 id="graph-benchmarks">Graph Benchmarks</h2>
+        <p>
+          Read = p50 getNodeByKey, Write = p50 batch of 100 nodes, Mixed = full run
+          wall time, Memory = peak RSS.
+        </p>
+
+        <h3 id="graph-10k">Nodes/Edges: 10k/50k</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Language</th>
+              <th>Read (p50)</th>
+              <th>Write (p50)</th>
+              <th>Mixed</th>
+              <th>Memory</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Rust</td><td>83ns</td><td>160.21us</td><td>0.12s</td><td>38.0MB</td></tr>
+            <tr><td>TypeScript (NAPI)</td><td>167ns</td><td>214.75us</td><td>0.30s</td><td>109.8MB</td></tr>
+            <tr><td>Python</td><td>250ns</td><td>306.29us</td><td>0.50s</td><td>63.4MB</td></tr>
+          </tbody>
+        </table>
+
+        <h3 id="graph-100k">Nodes/Edges: 100k/500k</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Language</th>
+              <th>Read (p50)</th>
+              <th>Write (p50)</th>
+              <th>Mixed</th>
+              <th>Memory</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Rust</td><td>291ns</td><td>240.25us</td><td>3.03s</td><td>339.7MB</td></tr>
+            <tr><td>TypeScript (NAPI)</td><td>459ns</td><td>280.04us</td><td>3.43s</td><td>419.2MB</td></tr>
+            <tr><td>Python</td><td>375ns</td><td>281.96us</td><td>4.30s</td><td>372.2MB</td></tr>
+          </tbody>
+        </table>
+
+        <h3 id="graph-250k">Nodes/Edges: 250k/1.25M</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Language</th>
+              <th>Read (p50)</th>
+              <th>Write (p50)</th>
+              <th>Mixed</th>
+              <th>Memory</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Rust</td><td>417ns</td><td>378.83us</td><td>17.97s</td><td>899.1MB</td></tr>
+            <tr><td>TypeScript (NAPI)</td><td>542ns</td><td>444.92us</td><td>19.47s</td><td>1027.4MB</td></tr>
+            <tr><td>Python</td><td>458ns</td><td>427.58us</td><td>21.91s</td><td>910.7MB</td></tr>
+          </tbody>
+        </table>
+
+        <h2 id="vector-benchmarks">Vector Benchmarks</h2>
+        <p>
+          VectorIndex config: 10k vectors, 768D, k=10, nProbe=10, 1,000 iterations.
+          Memory = peak RSS from /usr/bin/time -l.
+        </p>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Language</th>
+              <th>Set (p50)</th>
+              <th>Build</th>
+              <th>Get (p50)</th>
+              <th>Search (p50)</th>
+              <th>Memory</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Rust</td><td>667ns</td><td>696.44ms</td><td>125ns</td><td>381.79us</td><td>162.8MB</td></tr>
+            <tr><td>TypeScript (NAPI)</td><td>6.29us</td><td>734.49ms</td><td>7.33us</td><td>375.38us</td><td>263.0MB</td></tr>
+            <tr><td>Python</td><td>42.21us</td><td>893.95ms</td><td>167ns</td><td>248.60ms</td><td>1,188MB</td></tr>
+          </tbody>
+        </table>
+
+        <h2 id="running">Running Benchmarks</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Command</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td><code>bun run bench/benchmark-napi-vector.ts</code></td><td>NAPI vector index benchmark</td></tr>
+            <tr><td><code>cargo run --release --example vector_bench --no-default-features</code></td><td>Rust vector index benchmark</td></tr>
+            <tr><td><code>python benchmark_vector.py</code></td><td>Python vector index benchmark</td></tr>
           </tbody>
         </table>
       </DocPage>

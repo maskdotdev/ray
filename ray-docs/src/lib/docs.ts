@@ -46,6 +46,7 @@ export const docsStructure: DocSection[] = [
       { title: 'Overview', description: 'Performance benchmarks overview', slug: 'benchmarks' },
       { title: 'Graph Benchmarks', description: 'Graph database performance', slug: 'benchmarks/graph' },
       { title: 'Vector Benchmarks', description: 'Vector search performance', slug: 'benchmarks/vector' },
+      { title: 'Cross-Language', description: 'Bindings performance comparison', slug: 'benchmarks/cross-language' },
     ],
   },
   {

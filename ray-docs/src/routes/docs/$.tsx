@@ -70,6 +70,10 @@ function DocPageContent(props: { slug: string }) {
             <a href="/docs/benchmarks/vector"><strong>Vector Benchmarks</strong></a> – 
             Vector search performance including IVF, PQ, and IVF-PQ indexes
           </li>
+          <li>
+            <a href="/docs/benchmarks/cross-language"><strong>Cross-Language Benchmarks</strong></a> –
+            Compare bindings (TypeScript, Python, Rust)
+          </li>
         </ul>
 
         <h2 id="test-environment">Test Environment</h2>
