@@ -1,6 +1,6 @@
 import type { Component } from "solid-js";
 import { createSignal, createResource, Suspense, Show, For, createMemo } from "solid-js";
-import { Check, Copy, Terminal } from "lucide-solid";
+import { Check, Copy } from "lucide-solid";
 import { highlightCode } from "~/lib/highlighter";
 
 interface CodeBlockProps {
@@ -30,8 +30,8 @@ export const CodeBlock: Component<CodeBlockProps> = (props) => {
 
 	// Calculate line numbers
 	const lineCount = createMemo(() => props.code.split('\n').length);
-	const showLines = () => props.showLineNumbers ?? !props.inline; // Default to true unless inline
-	const showHeader = () => props.showHeader ?? !props.inline; // Default to true unless inline
+	const showLines = () => props.showLineNumbers ?? !props.inline;
+	const showHeader = () => props.showHeader ?? !props.inline;
 
 	const copyToClipboard = async () => {
 		try {
@@ -43,21 +43,13 @@ export const CodeBlock: Component<CodeBlockProps> = (props) => {
 		}
 	};
 
-	// Inline mode - minimal styling with just Shiki highlighting
-	if (props.inline) {
-		return (
-			<div class={`group relative ${props.class ?? ""}`}>
-				<Suspense
-					fallback={
-						<pre class="text-sm leading-relaxed p-4 rounded-lg bg-[#0d1117] overflow-x-auto">
-							<code class="font-mono text-slate-300 whitespace-pre">
-								{props.code}
-							</code>
-						</pre>
-					}
-				>
-					<Show
-						when={highlightedHtml()}
+	return (
+		<Show
+			when={!props.inline}
+			fallback={
+				// Inline mode - minimal styling with just Shiki highlighting
+				<div class={`group relative ${props.class ?? ""}`}>
+					<Suspense
 						fallback={
 							<pre class="text-sm leading-relaxed p-4 rounded-lg bg-[#0d1117] overflow-x-auto">
 								<code class="font-mono text-slate-300 whitespace-pre">
@@ -66,92 +58,91 @@ export const CodeBlock: Component<CodeBlockProps> = (props) => {
 							</pre>
 						}
 					>
-						<div
-							class="shiki-wrapper [&_pre]:text-sm [&_pre]:leading-relaxed [&_pre]:p-4 [&_pre]:rounded-lg [&_pre]:overflow-x-auto [&_code]:font-mono"
-							innerHTML={highlightedHtml() ?? undefined}
-						/>
-					</Show>
-				</Suspense>
-			</div>
-		);
-	}
-
-	return (
-		<div
-			class={`group relative console-container overflow-hidden ${props.class ?? ""}`}
-		>
-			<div class="console-scanlines opacity-5" aria-hidden="true" />
-
-			{/* Console-style header */}
-			<Show when={showHeader() && (props.filename || props.language)}>
-				<div class="relative flex items-center justify-between px-4 py-2.5 bg-[#0a1628] border-b border-[#1a2a42]">
-					<div class="flex items-center gap-3">
-						{/* Terminal dots */}
-						<div class="flex gap-1.5" aria-hidden="true">
-							<div class="w-2.5 h-2.5 rounded-full bg-[#ff5f57]" />
-							<div class="w-2.5 h-2.5 rounded-full bg-[#febc2e]" />
-							<div class="w-2.5 h-2.5 rounded-full bg-[#28c840]" />
-						</div>
-						<Show when={props.filename}>
-							<span class="text-xs font-mono text-slate-400">
-								{props.filename}
-							</span>
-						</Show>
-						<Show when={props.language && !props.filename}>
-							<span class="text-xs font-mono text-slate-500 uppercase tracking-wider">
-								{props.language}
-							</span>
-						</Show>
-					</div>
-					<button
-						type="button"
-						onClick={copyToClipboard}
-						class="flex items-center gap-1.5 px-2 py-1 text-xs font-mono rounded text-slate-500 hover:text-[#00d4ff] bg-[#1a2a42]/50 hover:bg-[#1a2a42] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00d4ff]"
-						aria-label={copied() ? "Copied!" : "Copy code to clipboard"}
-					>
 						<Show
-							when={copied()}
-							fallback={<Copy size={12} aria-hidden="true" />}
-						>
-							<Check size={12} class="text-[#28c840]" aria-hidden="true" />
-						</Show>
-						<span>{copied() ? "copied" : "copy"}</span>
-					</button>
-				</div>
-			</Show>
-
-			{/* Code content with Shiki highlighting */}
-			<div class="relative overflow-x-auto scrollbar-thin">
-				<div class="flex">
-					{/* Line numbers column */}
-					<Show when={showLines()}>
-						<div 
-							class="flex-shrink-0 select-none py-4 pl-4 pr-3 text-right border-r border-[#1a2a42]/50"
-							aria-hidden="true"
-						>
-							<For each={Array.from({ length: lineCount() }, (_, i) => i + 1)}>
-								{(lineNum) => (
-									<div class="text-sm leading-relaxed font-mono text-slate-600">
-										{lineNum}
-									</div>
-								)}
-							</For>
-						</div>
-					</Show>
-					
-					{/* Code content */}
-					<div class="flex-1 min-w-0">
-						<Suspense
+							when={highlightedHtml()}
 							fallback={
-								<pre class={`text-sm leading-relaxed border-0 ${showLines() ? 'py-4 pr-4 pl-3' : 'p-4'}`}>
+								<pre class="text-sm leading-relaxed p-4 rounded-lg bg-[#0d1117] overflow-x-auto">
 									<code class="font-mono text-slate-300 whitespace-pre">
 										{props.code}
 									</code>
 								</pre>
 							}
 						>
+							<div
+								class="shiki-wrapper [&_pre]:text-sm [&_pre]:leading-relaxed [&_pre]:p-4 [&_pre]:rounded-lg [&_pre]:overflow-x-auto [&_code]:font-mono"
+								innerHTML={highlightedHtml() ?? undefined}
+							/>
+						</Show>
+					</Suspense>
+				</div>
+			}
+		>
+			{/* Full mode with console styling */}
+			<div
+				class={`group relative console-container overflow-hidden ${props.class ?? ""}`}
+			>
+				<div class="console-scanlines opacity-5" aria-hidden="true" />
+
+				{/* Console-style header */}
+				<Show when={showHeader() && (props.filename || props.language)}>
+					<div class="relative flex items-center justify-between px-4 py-2.5 bg-[#0a1628] border-b border-[#1a2a42]">
+						<div class="flex items-center gap-3">
+							{/* Terminal dots */}
+							<div class="flex gap-1.5" aria-hidden="true">
+								<div class="w-2.5 h-2.5 rounded-full bg-[#ff5f57]" />
+								<div class="w-2.5 h-2.5 rounded-full bg-[#febc2e]" />
+								<div class="w-2.5 h-2.5 rounded-full bg-[#28c840]" />
+							</div>
+							<Show when={props.filename}>
+								<span class="text-xs font-mono text-slate-400">
+									{props.filename}
+								</span>
+							</Show>
+							<Show when={props.language && !props.filename}>
+								<span class="text-xs font-mono text-slate-500 uppercase tracking-wider">
+									{props.language}
+								</span>
+							</Show>
+						</div>
+						<button
+							type="button"
+							onClick={copyToClipboard}
+							class="flex items-center gap-1.5 px-2 py-1 text-xs font-mono rounded text-slate-500 hover:text-[#00d4ff] bg-[#1a2a42]/50 hover:bg-[#1a2a42] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00d4ff]"
+							aria-label={copied() ? "Copied!" : "Copy code to clipboard"}
+						>
 							<Show
-								when={highlightedHtml()}
+								when={copied()}
+								fallback={<Copy size={12} aria-hidden="true" />}
+							>
+								<Check size={12} class="text-[#28c840]" aria-hidden="true" />
+							</Show>
+							<span>{copied() ? "copied" : "copy"}</span>
+						</button>
+					</div>
+				</Show>
+
+				{/* Code content with Shiki highlighting */}
+				<div class="relative overflow-x-auto scrollbar-thin">
+					<div class="flex">
+						{/* Line numbers column */}
+						<Show when={showLines()}>
+							<div 
+								class="flex-shrink-0 select-none py-4 pl-4 pr-3 text-right border-r border-[#1a2a42]/50"
+								aria-hidden="true"
+							>
+								<For each={Array.from({ length: lineCount() }, (_, i) => i + 1)}>
+									{(lineNum) => (
+										<div class="text-sm leading-relaxed font-mono text-slate-600">
+											{lineNum}
+										</div>
+									)}
+								</For>
+							</div>
+						</Show>
+						
+						{/* Code content */}
+						<div class="flex-1 min-w-0">
+							<Suspense
 								fallback={
 									<pre class={`text-sm leading-relaxed border-0 ${showLines() ? 'py-4 pr-4 pl-3' : 'p-4'}`}>
 										<code class="font-mono text-slate-300 whitespace-pre">
@@ -160,33 +151,44 @@ export const CodeBlock: Component<CodeBlockProps> = (props) => {
 									</pre>
 								}
 							>
-								<div
-									class={`shiki-wrapper [&_pre]:text-sm [&_pre]:leading-relaxed [&_pre]:bg-transparent! [&_pre]:border-0 [&_code]:font-mono ${showLines() ? '[&_pre]:py-4 [&_pre]:pr-4 [&_pre]:pl-3' : '[&_pre]:p-4'}`}
-									innerHTML={highlightedHtml() ?? undefined}
-								/>
-							</Show>
-						</Suspense>
+								<Show
+									when={highlightedHtml()}
+									fallback={
+										<pre class={`text-sm leading-relaxed border-0 ${showLines() ? 'py-4 pr-4 pl-3' : 'p-4'}`}>
+											<code class="font-mono text-slate-300 whitespace-pre">
+												{props.code}
+											</code>
+										</pre>
+									}
+								>
+									<div
+										class={`shiki-wrapper [&_pre]:text-sm [&_pre]:leading-relaxed [&_pre]:bg-transparent! [&_pre]:border-0 [&_code]:font-mono ${showLines() ? '[&_pre]:py-4 [&_pre]:pr-4 [&_pre]:pl-3' : '[&_pre]:p-4'}`}
+										innerHTML={highlightedHtml() ?? undefined}
+									/>
+								</Show>
+							</Suspense>
+						</div>
 					</div>
 				</div>
-			</div>
 
-			{/* Copy button overlay for blocks without header */}
-			<Show when={showHeader() && !props.filename && !props.language}>
-				<button
-					type="button"
-					onClick={copyToClipboard}
-					class="absolute top-3 right-3 p-2 rounded text-slate-500 hover:text-[#00d4ff] bg-[#1a2a42]/80 hover:bg-[#1a2a42] transition-all duration-150 opacity-0 group-hover:opacity-100 focus:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00d4ff]"
-					aria-label={copied() ? "Copied!" : "Copy code to clipboard"}
-				>
-					<Show
-						when={copied()}
-						fallback={<Copy size={14} aria-hidden="true" />}
+				{/* Copy button overlay for blocks without header */}
+				<Show when={showHeader() && !props.filename && !props.language}>
+					<button
+						type="button"
+						onClick={copyToClipboard}
+						class="absolute top-3 right-3 p-2 rounded text-slate-500 hover:text-[#00d4ff] bg-[#1a2a42]/80 hover:bg-[#1a2a42] transition-all duration-150 opacity-0 group-hover:opacity-100 focus:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00d4ff]"
+						aria-label={copied() ? "Copied!" : "Copy code to clipboard"}
 					>
-						<Check size={14} class="text-[#28c840]" aria-hidden="true" />
-					</Show>
-				</button>
-			</Show>
-		</div>
+						<Show
+							when={copied()}
+							fallback={<Copy size={14} aria-hidden="true" />}
+						>
+							<Check size={14} class="text-[#28c840]" aria-hidden="true" />
+						</Show>
+					</button>
+				</Show>
+			</div>
+		</Show>
 	);
 };
 

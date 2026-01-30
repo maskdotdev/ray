@@ -2,7 +2,7 @@ import type { Component } from 'solid-js'
 import { Menu, Search } from 'lucide-solid'
 import { Link } from '@tanstack/solid-router'
 import Logo from './logo'
-import ThemeToggle from './theme-toggle'
+import { LanguageSwitcher } from './language-switcher'
 
 interface DocHeaderProps {
   onMenuClick: () => void
@@ -46,7 +46,7 @@ export const DocHeader: Component<DocHeaderProps> = (props) => {
           </kbd>
         </button>
 
-        <ThemeToggle />
+        <LanguageSwitcher />
 
         <a
           href="https://github.com/maskdotdev/ray"

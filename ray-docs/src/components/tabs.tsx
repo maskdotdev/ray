@@ -1,6 +1,6 @@
 import type { Component } from 'solid-js'
 import { createSignal, createUniqueId, For, Show } from 'solid-js'
-import { ChevronDown, Check, Copy } from 'lucide-solid'
+import { ChevronDown, Check } from 'lucide-solid'
 import CodeBlock from './code-block'
 import { LANGUAGES, selectedLanguage, setSelectedLanguage } from '~/lib/language-store'
 
@@ -89,6 +89,12 @@ export const Tabs: Component<TabsProps> = (props) => {
           </button>
           
           <Show when={langDropdownOpen()}>
+            {/* Backdrop to close on click outside */}
+            <div
+              class="fixed inset-0 z-40"
+              onClick={() => setLangDropdownOpen(false)}
+              aria-hidden="true"
+            />
             <div 
               class="absolute right-0 top-full mt-1 z-50 min-w-[120px] py-1 rounded-lg bg-[#0a1628] border border-[#1a2a42] shadow-xl shadow-black/50"
               role="listbox"
