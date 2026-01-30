@@ -1,11 +1,11 @@
 {
   "name": "@ray-db/core",
   "version": "0.1.7",
-  "description": "Template project for writing node package with napi-rs",
+  "description": "RayDB is a fast, lightweight, and embedded graph database for Rust Python and TS",
   "main": "index.js",
   "repository": {
     "type": "git",
-    "url": "git+ssh://git@github.com/napi-rs/package-template.git"
+    "url": "https://github.com/maskdotdev/ray"
   },
   "license": "MIT",
   "browser": "browser.js",
