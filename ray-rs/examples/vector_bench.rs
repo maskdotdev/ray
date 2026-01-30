@@ -16,9 +16,9 @@
 //!   --no-output        Disable file output
 
 use rand::{rngs::StdRng, Rng, SeedableRng};
-use raydb_core::api::vector_search::{SimilarOptions, VectorIndex, VectorIndexOptions};
-use raydb_core::types::NodeId;
-use raydb_core::vector::DistanceMetric;
+use raydb::api::vector_search::{SimilarOptions, VectorIndex, VectorIndexOptions};
+use raydb::types::NodeId;
+use raydb::vector::DistanceMetric;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
