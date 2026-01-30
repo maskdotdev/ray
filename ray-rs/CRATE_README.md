@@ -1,4 +1,4 @@
-# RayDB Core (Rust)
+# RayDB
 
 RayDB is a high-performance embedded graph database with built-in vector search.
 This crate provides the Rust core and the high-level Ray API.
@@ -16,17 +16,17 @@ This crate provides the Rust core and the high-level Ray API.
 
 ```toml
 [dependencies]
-raydb-core = "0.1"
+raydb = "0.1"
 ```
 
 ## Quick start (Ray API)
 
 ```rust
-use raydb_core::api::ray::{EdgeDef, NodeDef, PropDef, Ray, RayOptions};
-use raydb_core::types::PropValue;
+use raydb::api::ray::{EdgeDef, NodeDef, PropDef, Ray, RayOptions};
+use raydb::types::PropValue;
 use std::collections::HashMap;
 
-fn main() -> raydb_core::error::Result<()> {
+fn main() -> raydb::error::Result<()> {
   let user = NodeDef::new("User", "user:")
     .prop(PropDef::string("name").required());
   let knows = EdgeDef::new("KNOWS");
@@ -49,8 +49,8 @@ fn main() -> raydb_core::error::Result<()> {
 
 ## Lower-level API
 
-If you want direct access to graph primitives, use `raydb_core::graph::db::open_graph_db`
-and the modules under `raydb_core::graph`, `raydb_core::vector`, and `raydb_core::core`.
+If you want direct access to graph primitives, use `raydb::graph::db::open_graph_db`
+and the modules under `raydb::graph`, `raydb::vector`, and `raydb::core`.
 
 ## Documentation
 
