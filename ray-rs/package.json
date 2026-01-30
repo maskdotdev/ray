@@ -1,6 +1,6 @@
 {
   "name": "@ray-db/core",
-  "version": "1.0.0",
+  "version": "0.1.6",
   "description": "Template project for writing node package with napi-rs",
   "main": "index.js",
   "repository": {
@@ -115,5 +115,12 @@
     "singleQuote": true,
     "arrowParens": "always"
   },
-  "packageManager": "yarn@4.12.0"
+  "packageManager": "yarn@4.12.0",
+  "optionalDependencies": {
+    "@ray-db/core-win32-x64-msvc": "0.1.6",
+    "@ray-db/core-darwin-x64": "0.1.6",
+    "@ray-db/core-linux-x64-gnu": "0.1.6",
+    "@ray-db/core-darwin-arm64": "0.1.6",
+    "@ray-db/core-wasm32-wasi": "0.1.6"
+  }
 }

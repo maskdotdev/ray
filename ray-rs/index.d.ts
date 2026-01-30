@@ -245,11 +245,16 @@ export declare class Database {
   /**
    * Optimize (compact) the database
    *
-   * This is an alias for `checkpoint()` to match the TypeScript API.
-   * For single-file databases, optimization means merging the WAL into
-   * the snapshot, which reduces file size and improves read performance.
+   * For single-file databases, this compacts the WAL into a new snapshot
+   * (equivalent to optimizeSingleFile in the TypeScript API).
    */
   optimize(): void
+  /** Optimize (compact) a single-file database with options */
+  optimizeSingleFile(options?: SingleFileOptimizeOptions | undefined | null): void
+  /** Vacuum a single-file database to reclaim free space */
+  vacuum(options?: VacuumOptions | undefined | null): void
+  /** Vacuum a single-file database to reclaim free space */
+  vacuumSingleFile(options?: VacuumOptions | undefined | null): void
   /** Get database statistics */
   stats(): DbStats
   /** Check database integrity */
@@ -547,7 +552,7 @@ export declare class Ray {
   setEdgeProp(src: number, edgeType: string, dst: number, propName: string, value: unknown): void
   /** Delete an edge property */
   delEdgeProp(src: number, edgeType: string, dst: number, propName: string): void
-  /** Create an update builder for edge properties */
+  /** Update edge properties with a builder */
   updateEdge(src: number, edgeType: string, dst: number): RayUpdateEdgeBuilder
   /** List all nodes of a type (returns array of node objects) */
   all(nodeType: string): Array<object>
@@ -559,7 +564,7 @@ export declare class Ray {
   allEdges(edgeType?: string | undefined | null): Array<JsFullEdge>
   /** Check if a path exists between two nodes */
   hasPath(source: number, target: number, edgeType?: string | undefined | null): boolean
-  /** Get all nodes reachable from a source within max depth */
+  /** Get all nodes reachable within a maximum depth */
   reachableFrom(source: number, maxDepth: number, edgeType?: string | undefined | null): Array<number>
   /** Get all node type names */
   nodeTypes(): Array<string>
@@ -572,7 +577,7 @@ export declare class Ray {
   /** Check database integrity */
   check(): CheckResult
   /** Execute a batch of operations atomically */
-  batch(ops: Array<RayBatchOp>): Array<RayBatchResult>
+  batch(ops: Array<object>): Array<object>
   /** Begin a traversal from a node ID */
   from(nodeId: number): RayTraversal
   /** Begin a traversal from multiple nodes */
@@ -615,8 +620,8 @@ export declare class RayPath {
 }
 
 export declare class RayTraversal {
-  whereEdge(predicate: (edge: Record<string, unknown>) => boolean): void
-  whereNode(predicate: (node: Record<string, unknown>) => boolean): void
+  whereEdge(func: unknown): void
+  whereNode(func: unknown): void
   out(edgeType?: string | undefined | null): void
   in(edgeType?: string | undefined | null): void
   both(edgeType?: string | undefined | null): void
@@ -644,41 +649,10 @@ export declare class RayUpdateEdgeBuilder {
   set(propName: string, value: unknown): void
   /** Remove an edge property */
   unset(propName: string): void
-  /** Set multiple properties at once */
+  /** Set multiple edge properties at once */
   setAll(props: object): void
-  /** Execute the update */
+  /** Execute the edge update */
   execute(): void
-}
-
-export interface RayBatchOp {
-  op:
-    | "createNode"
-    | "deleteNode"
-    | "link"
-    | "unlink"
-    | "setProp"
-    | "delProp"
-  nodeType?: string
-  key?: unknown
-  props?: object | null
-  nodeId?: number
-  src?: number
-  dst?: number
-  edgeType?: string
-  propName?: string
-  value?: unknown
-}
-
-export interface RayBatchResult {
-  type:
-    | "nodeCreated"
-    | "nodeDeleted"
-    | "edgeCreated"
-    | "edgeRemoved"
-    | "propSet"
-    | "propDeleted"
-  node?: object
-  deleted?: boolean
 }
 
 /** High-level vector index for similarity search */
@@ -757,6 +731,18 @@ export interface CheckResult {
 
 export declare function collectMetrics(db: Database): DatabaseMetrics
 
+/** Compression options */
+export interface CompressionOptions {
+  /** Enable compression (default false) */
+  enabled?: boolean
+  /** Compression algorithm */
+  type?: JsCompressionType
+  /** Minimum section size to compress */
+  minSize?: number
+  /** Compression level */
+  level?: number
+}
+
 /** Create a backup from an open database handle */
 export declare function createBackup(db: Database, backupPath: string, options?: BackupOptions | undefined | null): BackupResult
 
@@ -808,16 +794,6 @@ export interface DbStats {
   walBytes: number
   recommendCompact: boolean
   mvccStats?: MvccStats
-}
-
-export interface MvccStats {
-  activeTransactions: number
-  minActiveTs: number
-  versionsPruned: number
-  gcRuns: number
-  lastGcTime: number
-  committedWritesSize: number
-  committedWritesPruned: number
 }
 
 /** Page of edges */
@@ -911,6 +887,14 @@ export interface JsCacheStats {
   queryCacheHits: number
   queryCacheMisses: number
   queryCacheSize: number
+}
+
+/** Compression type for snapshot building */
+export declare const enum JsCompressionType {
+  None = 'None',
+  Zstd = 'Zstd',
+  Gzip = 'Gzip',
+  Deflate = 'Deflate'
 }
 
 /** Distance metric for vector similarity */
@@ -1181,6 +1165,17 @@ export interface MvccMetrics {
   committedWritesPruned: number
 }
 
+/** MVCC stats (from stats()) */
+export interface MvccStats {
+  activeTransactions: number
+  minActiveTs: number
+  versionsPruned: number
+  gcRuns: number
+  lastGcTime: number
+  committedWritesSize: number
+  committedWritesPruned: number
+}
+
 /** Page of node IDs */
 export interface NodePage {
   items: Array<number>
@@ -1311,6 +1306,12 @@ export interface SimilarOptions {
   nProbe?: number
 }
 
+/** Options for optimizing a single-file database */
+export interface SingleFileOptimizeOptions {
+  /** Compression options for the new snapshot */
+  compression?: CompressionOptions
+}
+
 /** Options for streaming node/edge batches */
 export interface StreamOptions {
   /** Number of items per batch (default: 1000) */
@@ -1325,6 +1326,14 @@ export interface StreamOptions {
  * @returns Traversal step object
  */
 export declare function traversalStep(direction: JsTraversalDirection, edgeType?: number | undefined | null): JsTraversalStep
+
+/** Options for vacuuming a single-file database */
+export interface VacuumOptions {
+  /** Shrink WAL region if empty */
+  shrinkWal?: boolean
+  /** Minimum WAL size to keep (bytes) */
+  minWalSize?: number
+}
 
 /** Options for creating a vector index */
 export interface VectorIndexOptions {
