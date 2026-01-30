@@ -60,7 +60,7 @@ impl<'a> TxHandle<'a> {
 // ============================================================================
 
 /// Begin a new transaction
-pub fn begin_tx(db: &GraphDB) -> Result<TxHandle> {
+pub fn begin_tx(db: &GraphDB) -> Result<TxHandle<'_>> {
   if db.read_only {
     return Err(RayError::ReadOnly);
   }
@@ -93,7 +93,7 @@ pub fn begin_tx(db: &GraphDB) -> Result<TxHandle> {
 }
 
 /// Begin a read-only transaction
-pub fn begin_read_tx(db: &GraphDB) -> Result<TxHandle> {
+pub fn begin_read_tx(db: &GraphDB) -> Result<TxHandle<'_>> {
   let (txid, snapshot_ts) = if let Some(mvcc) = db.mvcc.as_ref() {
     let (txid, snapshot_ts) = {
       let mut tx_mgr = mvcc.tx_manager.lock();
@@ -126,7 +126,10 @@ pub fn commit(handle: &mut TxHandle) -> Result<()> {
   // MVCC: conflict detection + commit timestamp
   if let Some(mvcc) = handle.db.mvcc.as_ref() {
     let mut tx_mgr = mvcc.tx_manager.lock();
-    if let Err(err) = mvcc.conflict_detector.validate_commit(&tx_mgr, handle.tx.txid) {
+    if let Err(err) = mvcc
+      .conflict_detector
+      .validate_commit(&tx_mgr, handle.tx.txid)
+    {
       return Err(RayError::Conflict {
         txid: err.txid,
         keys: err.conflicting_keys,
@@ -164,14 +167,28 @@ pub fn commit(handle: &mut TxHandle) -> Result<()> {
       // Edge additions
       for (src, patches) in &handle.tx.pending_out_add {
         for patch in patches {
-          vc.append_edge_version(*src, patch.etype, patch.other, true, handle.tx.txid, commit_ts);
+          vc.append_edge_version(
+            *src,
+            patch.etype,
+            patch.other,
+            true,
+            handle.tx.txid,
+            commit_ts,
+          );
         }
       }
 
       // Edge deletions
       for (src, patches) in &handle.tx.pending_out_del {
         for patch in patches {
-          vc.append_edge_version(*src, patch.etype, patch.other, false, handle.tx.txid, commit_ts);
+          vc.append_edge_version(
+            *src,
+            patch.etype,
+            patch.other,
+            false,
+            handle.tx.txid,
+            commit_ts,
+          );
         }
       }
 
@@ -180,19 +197,11 @@ pub fn commit(handle: &mut TxHandle) -> Result<()> {
         let is_new = handle.tx.pending_created_nodes.contains_key(node_id);
         for (key_id, value) in props {
           if !is_new && vc.get_node_prop_version(*node_id, *key_id).is_none() {
-            if let Some(old_value) =
-              nodes::get_node_prop_committed(handle.db, *node_id, *key_id)
-            {
+            if let Some(old_value) = nodes::get_node_prop_committed(handle.db, *node_id, *key_id) {
               vc.append_node_prop_version(*node_id, *key_id, Some(old_value), 0, 0);
             }
           }
-          vc.append_node_prop_version(
-            *node_id,
-            *key_id,
-            value.clone(),
-            handle.tx.txid,
-            commit_ts,
-          );
+          vc.append_node_prop_version(*node_id, *key_id, value.clone(), handle.tx.txid, commit_ts);
         }
       }
 
@@ -206,15 +215,7 @@ pub fn commit(handle: &mut TxHandle) -> Result<()> {
             if let Some(old_value) =
               edges::get_edge_prop_committed(handle.db, *src, *etype, *dst, *key_id)
             {
-              vc.append_edge_prop_version(
-                *src,
-                *etype,
-                *dst,
-                *key_id,
-                Some(old_value),
-                0,
-                0,
-              );
+              vc.append_edge_prop_version(*src, *etype, *dst, *key_id, Some(old_value), 0, 0);
             }
           }
           vc.append_edge_prop_version(
