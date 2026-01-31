@@ -137,9 +137,9 @@
   },
   "packageManager": "bun@1.2.4",
   "optionalDependencies": {
-    "kitedb-darwin-arm64": "0.2.1",
-    "kitedb-darwin-x64": "0.2.1",
-    "kitedb-linux-x64-gnu": "0.2.1",
-    "kitedb-win32-x64-msvc": "0.2.1"
+    "@kitedb/core-win32-x64-msvc": "0.2.2",
+    "@kitedb/core-darwin-x64": "0.2.2",
+    "@kitedb/core-linux-x64-gnu": "0.2.2",
+    "@kitedb/core-darwin-arm64": "0.2.2"
   }
 }
