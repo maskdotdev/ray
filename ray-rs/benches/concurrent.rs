@@ -1,4 +1,4 @@
-//! Concurrent access benchmarks for RayDB
+//! Concurrent access benchmarks for KiteDB
 //!
 //! Run with: cargo bench --bench concurrent
 //!

@@ -1,4 +1,4 @@
-"""Type stubs for raydb._raydb native module."""
+"""Type stubs for kitedb._kitedb native module."""
 
 from typing import Optional, List, Any, Tuple
 

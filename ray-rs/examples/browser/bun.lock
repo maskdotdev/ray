@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "raydb-browser-demo",
+      "name": "kitedb-browser-demo",
       "devDependencies": {
         "typescript": "^5.9.2",
         "vite": "^5.4.0",

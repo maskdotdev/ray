@@ -13,7 +13,7 @@ if (!existsSync(wasmCjs)) {
 const ray = require(wasmCjs)
 const { Database, pathConfig } = ray
 
-const db = Database.open('/tmp/raydb-wasm-smoke.raydb')
+const db = Database.open('/tmp/kitedb-wasm-smoke.kitedb')
 
 db.begin()
 const a = db.createNode('a')

@@ -17,7 +17,7 @@ class TestDatabase:
     def test_create_and_close(self):
         """Test database creation and closing."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            path = os.path.join(tmpdir, "test.raydb")
+            path = os.path.join(tmpdir, "test.kitedb")
             db = Database(path)
             assert db.is_open
             db.close()
@@ -26,7 +26,7 @@ class TestDatabase:
     def test_context_manager(self):
         """Test database as context manager."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            path = os.path.join(tmpdir, "test.raydb")
+            path = os.path.join(tmpdir, "test.kitedb")
             with Database(path) as db:
                 assert db.is_open
             assert not db.is_open
@@ -34,7 +34,7 @@ class TestDatabase:
     def test_create_node(self):
         """Test node creation."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            path = os.path.join(tmpdir, "test.raydb")
+            path = os.path.join(tmpdir, "test.kitedb")
             with Database(path) as db:
                 db.begin()
                 node_id = db.create_node()
@@ -45,7 +45,7 @@ class TestDatabase:
     def test_create_node_with_key(self):
         """Test node creation with key."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            path = os.path.join(tmpdir, "test.raydb")
+            path = os.path.join(tmpdir, "test.kitedb")
             with Database(path) as db:
                 db.begin()
                 node_id = db.create_node("user:alice")
@@ -57,7 +57,7 @@ class TestDatabase:
     def test_node_properties(self):
         """Test node properties."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            path = os.path.join(tmpdir, "test.raydb")
+            path = os.path.join(tmpdir, "test.kitedb")
             with Database(path) as db:
                 db.begin()
                 node_id = db.create_node()
@@ -83,7 +83,7 @@ class TestDatabase:
     def test_edges(self):
         """Test edge operations."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            path = os.path.join(tmpdir, "test.raydb")
+            path = os.path.join(tmpdir, "test.kitedb")
             with Database(path) as db:
                 db.begin()
                 
@@ -111,7 +111,7 @@ class TestDatabase:
     def test_transaction_rollback(self):
         """Test transaction rollback."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            path = os.path.join(tmpdir, "test.raydb")
+            path = os.path.join(tmpdir, "test.kitedb")
             with Database(path) as db:
                 db.begin()
                 node_id = db.create_node("temp")
@@ -124,7 +124,7 @@ class TestDatabase:
     def test_statistics(self):
         """Test database statistics."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            path = os.path.join(tmpdir, "test.raydb")
+            path = os.path.join(tmpdir, "test.kitedb")
             with Database(path) as db:
                 db.begin()
                 db.create_node()
@@ -137,7 +137,7 @@ class TestDatabase:
     def test_check(self):
         """Test database integrity check."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            path = os.path.join(tmpdir, "test.raydb")
+            path = os.path.join(tmpdir, "test.kitedb")
             with Database(path) as db:
                 db.begin()
                 alice = db.create_node("user:alice")
@@ -153,7 +153,7 @@ class TestDatabase:
     def test_labels(self):
         """Test node labels."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            path = os.path.join(tmpdir, "test.raydb")
+            path = os.path.join(tmpdir, "test.kitedb")
             with Database(path) as db:
                 db.begin()
                 node_id = db.create_node()
@@ -175,7 +175,7 @@ class TestTraversal:
     def test_traverse_out(self):
         """Test outgoing traversal."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            path = os.path.join(tmpdir, "test.raydb")
+            path = os.path.join(tmpdir, "test.kitedb")
             with Database(path) as db:
                 db.begin()
                 
@@ -198,7 +198,7 @@ class TestTraversal:
     def test_traverse_in(self):
         """Test incoming traversal."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            path = os.path.join(tmpdir, "test.raydb")
+            path = os.path.join(tmpdir, "test.kitedb")
             with Database(path) as db:
                 db.begin()
                 
@@ -217,7 +217,7 @@ class TestTraversal:
     def test_variable_depth_traverse(self):
         """Test variable depth traversal."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            path = os.path.join(tmpdir, "test.raydb")
+            path = os.path.join(tmpdir, "test.kitedb")
             with Database(path) as db:
                 db.begin()
                 
@@ -249,7 +249,7 @@ class TestPathfinding:
     def test_bfs_path(self):
         """Test BFS shortest path."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            path = os.path.join(tmpdir, "test.raydb")
+            path = os.path.join(tmpdir, "test.kitedb")
             with Database(path) as db:
                 db.begin()
                 
@@ -273,7 +273,7 @@ class TestPathfinding:
     def test_dijkstra_path(self):
         """Test Dijkstra shortest path."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            path = os.path.join(tmpdir, "test.raydb")
+            path = os.path.join(tmpdir, "test.kitedb")
             with Database(path) as db:
                 db.begin()
                 
@@ -296,7 +296,7 @@ class TestPathfinding:
     def test_no_path(self):
         """Test when no path exists."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            path = os.path.join(tmpdir, "test.raydb")
+            path = os.path.join(tmpdir, "test.kitedb")
             with Database(path) as db:
                 db.begin()
                 
@@ -311,7 +311,7 @@ class TestPathfinding:
     def test_has_path(self):
         """Test has_path check."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            path = os.path.join(tmpdir, "test.raydb")
+            path = os.path.join(tmpdir, "test.kitedb")
             with Database(path) as db:
                 db.begin()
                 
@@ -330,7 +330,7 @@ class TestPathfinding:
     def test_reachable_nodes(self):
         """Test reachable_nodes."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            path = os.path.join(tmpdir, "test.raydb")
+            path = os.path.join(tmpdir, "test.kitedb")
             with Database(path) as db:
                 db.begin()
                 

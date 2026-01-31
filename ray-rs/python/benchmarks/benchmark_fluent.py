@@ -27,7 +27,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
-# Add parent directory to path for raydb import
+# Add parent directory to path for kitedb import
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 try:
@@ -36,7 +36,7 @@ try:
     # Fluent API
     from kitedb import ray, define_node, define_edge, prop, optional
 except ImportError as e:
-    print(f"Error: raydb module not found ({e}). Make sure to build the Python bindings first:")
+    print(f"Error: kitedb module not found ({e}). Make sure to build the Python bindings first:")
     print("  cd ray-rs && maturin develop --features python")
     sys.exit(1)
 
@@ -341,14 +341,14 @@ def run_benchmarks(config: BenchConfig):
         print("\n[1/6] Setting up databases...")
         
         # Low-level database setup
-        low_level_db = Database(os.path.join(low_level_dir, "test.raydb"))
+        low_level_db = Database(os.path.join(low_level_dir, "test.kitedb"))
         knows_etype = low_level_db.get_or_create_etype("knows")
         name_key = low_level_db.get_or_create_propkey("name")
         email_key = low_level_db.get_or_create_propkey("email")
         age_key = low_level_db.get_or_create_propkey("age")
         
         # Fluent database setup
-        fluent_db = ray(os.path.join(fluent_dir, "test.raydb"), 
+        fluent_db = ray(os.path.join(fluent_dir, "test.kitedb"), 
                        nodes=[user], edges=[knows])
         
         # =================================================================

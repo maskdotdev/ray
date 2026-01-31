@@ -43,7 +43,7 @@ try:
       NodeRef,
   )
 except ImportError:
-  print("Error: raydb module not found. Build the Python bindings first:")
+  print("Error: kitedb module not found. Build the Python bindings first:")
   print("  cd ray-rs && maturin develop --features python")
   sys.exit(1)
 

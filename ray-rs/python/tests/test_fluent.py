@@ -37,7 +37,7 @@ def test_traversal_select_edges():
     user, knows = _build_schema()
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        path = os.path.join(tmpdir, "fluent.raydb")
+        path = os.path.join(tmpdir, "fluent.kitedb")
         with ray(path, nodes=[user], edges=[knows]) as db:
             alice = db.insert(user).values(key="alice", name="Alice", age=30).returning()
             bob = db.insert(user).values(key="bob", name="Bob", age=25).returning()
@@ -68,7 +68,7 @@ def test_traverse_variable_depth():
     user, knows = _build_schema()
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        path = os.path.join(tmpdir, "fluent.raydb")
+        path = os.path.join(tmpdir, "fluent.kitedb")
         with ray(path, nodes=[user], edges=[knows]) as db:
             a = db.insert(user).values(key="a", name="A", age=1).returning()
             b = db.insert(user).values(key="b", name="B", age=2).returning()
@@ -93,7 +93,7 @@ def test_traverse_options_filters():
     user, knows = _build_schema()
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        path = os.path.join(tmpdir, "fluent.raydb")
+        path = os.path.join(tmpdir, "fluent.kitedb")
         with ray(path, nodes=[user], edges=[knows]) as db:
             a = db.insert(user).values(key="a", name="A", age=1).returning()
             b = db.insert(user).values(key="b", name="B", age=2).returning()
@@ -133,7 +133,7 @@ def test_raw_edges():
     user, knows = _build_schema()
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        path = os.path.join(tmpdir, "fluent.raydb")
+        path = os.path.join(tmpdir, "fluent.kitedb")
         with ray(path, nodes=[user], edges=[knows]) as db:
             a = db.insert(user).values(key="a", name="A", age=1).returning()
             b = db.insert(user).values(key="b", name="B", age=2).returning()
@@ -149,7 +149,7 @@ def test_pathfinding_weight_and_a_star():
     user, knows = _build_schema()
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        path = os.path.join(tmpdir, "fluent.raydb")
+        path = os.path.join(tmpdir, "fluent.kitedb")
         with ray(path, nodes=[user], edges=[knows]) as db:
             a = db.insert(user).values(key="a", name="A", age=1).returning()
             b = db.insert(user).values(key="b", name="B", age=2).returning()
@@ -173,7 +173,7 @@ def test_to_any_and_all_edges():
     user, knows = _build_schema()
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        path = os.path.join(tmpdir, "fluent.raydb")
+        path = os.path.join(tmpdir, "fluent.kitedb")
         with ray(path, nodes=[user], edges=[knows]) as db:
             a = db.insert(user).values(key="a", name="A", age=1).returning()
             b = db.insert(user).values(key="b", name="B", age=2).returning()
@@ -194,7 +194,7 @@ def test_fluent_check():
     user, knows = _build_schema()
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        path = os.path.join(tmpdir, "fluent.raydb")
+        path = os.path.join(tmpdir, "fluent.kitedb")
         with ray(path, nodes=[user], edges=[knows]) as db:
             alice = db.insert(user).values(key="alice", name="Alice", age=30).returning()
             bob = db.insert(user).values(key="bob", name="Bob", age=25).returning()
@@ -209,7 +209,7 @@ def test_vector_index_search():
     user, knows = _build_schema()
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        path = os.path.join(tmpdir, "fluent.raydb")
+        path = os.path.join(tmpdir, "fluent.kitedb")
         with ray(path, nodes=[user], edges=[knows]) as db:
             alice = db.insert(user).values(key="alice", name="Alice", age=30).returning()
             bob = db.insert(user).values(key="bob", name="Bob", age=25).returning()
@@ -233,7 +233,7 @@ def test_insert_values_list():
     user, knows = _build_schema()
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        path = os.path.join(tmpdir, "fluent.raydb")
+        path = os.path.join(tmpdir, "fluent.kitedb")
         with ray(path, nodes=[user], edges=[knows]) as db:
             results = db.insert(user).values([
                 {"key": "alice", "name": "Alice", "age": 30},

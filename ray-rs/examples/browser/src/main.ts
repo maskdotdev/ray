@@ -22,7 +22,7 @@ const log = (message: string) => {
   logEl.scrollTop = logEl.scrollHeight
 }
 
-const DB_PATH = '/demo.raydb'
+const DB_PATH = '/demo.kitedb'
 const EDGE_TYPE = 'connects'
 
 const state = {

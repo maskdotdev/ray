@@ -28,13 +28,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 
-# Add parent directory to path for raydb import
+# Add parent directory to path for kitedb import
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 try:
     from kitedb import Database, PropValue
 except ImportError:
-    print("Error: raydb module not found. Make sure to build the Python bindings first:")
+    print("Error: kitedb module not found. Make sure to build the Python bindings first:")
     print("  cd ray-rs && maturin develop --features python")
     sys.exit(1)
 
@@ -788,7 +788,7 @@ def run_benchmarks(config: BenchConfig):
     
     # Create temporary database file
     tmp_dir = tempfile.mkdtemp(prefix="ray-python-bench-")
-    db_path = os.path.join(tmp_dir, "benchmark.raydb")
+    db_path = os.path.join(tmp_dir, "benchmark.kitedb")
     
     try:
         logger.log("\n[1/12] Opening database...")

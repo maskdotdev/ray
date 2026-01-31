@@ -253,7 +253,7 @@ function optionsToNative(options: RayOptions): JsRayOptions {
  *
  * @example
  * ```typescript
- * const db = await ray('./my.raydb', {
+ * const db = await ray('./my.kitedb', {
  *   nodes: [User, Post],
  *   edges: [follows, authored],
  * })
@@ -277,7 +277,7 @@ export async function ray(path: string, options: RayOptions): Promise<NativeRay>
  *
  * @example
  * ```typescript
- * const db = raySync('./my.raydb', {
+ * const db = raySync('./my.kitedb', {
  *   nodes: [User],
  *   edges: [knows],
  * })

@@ -1,5 +1,5 @@
 {
-  "name": "raydb-browser-demo",
+  "name": "kitedb-browser-demo",
   "private": true,
   "type": "module",
   "scripts": {

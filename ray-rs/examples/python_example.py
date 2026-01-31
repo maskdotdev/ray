@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-RayDB Python Example
+KiteDB Python Example
 
-This example demonstrates the main features of the RayDB Python bindings:
+This example demonstrates the main features of the KiteDB Python bindings:
 - Creating and managing a graph database
 - Node and edge operations
 - Property storage
@@ -12,16 +12,16 @@ This example demonstrates the main features of the RayDB Python bindings:
 
 import os
 import tempfile
-from raydb import Database, PropValue
+from kitedb import Database, PropValue
 
 
 def main():
     # Create a temporary database for this example
     with tempfile.TemporaryDirectory() as tmpdir:
-        db_path = os.path.join(tmpdir, "social_network.raydb")
+        db_path = os.path.join(tmpdir, "social_network.kitedb")
         
         print("=" * 60)
-        print("RayDB Python Example - Social Network")
+        print("KiteDB Python Example - Social Network")
         print("=" * 60)
         
         # Open database using context manager for automatic cleanup

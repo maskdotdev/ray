@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Fluent Query Example for RayDB Python API
+Fluent Query Example for KiteDB Python API
 
-This example demonstrates the new fluent API for RayDB,
+This example demonstrates the new fluent API for KiteDB,
 matching the TypeScript example in example/fluent-query.ts.
 
 Usage:
@@ -11,7 +11,7 @@ Usage:
 
 import tempfile
 import shutil
-from raydb import ray, define_node, define_edge, prop, optional
+from kitedb import ray, define_node, define_edge, prop, optional
 
 
 # =============================================================================
@@ -55,7 +55,7 @@ works_at = define_edge("worksAt", {
 def main():
     # Create a temporary directory for the database
     dir = tempfile.mkdtemp(prefix="ray-example-")
-    db_path = f"{dir}/example.raydb"
+    db_path = f"{dir}/example.kitedb"
     
     try:
         # Open database with schema

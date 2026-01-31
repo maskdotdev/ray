@@ -234,9 +234,9 @@ pub const MAGIC_SNAPSHOT: u32 = 0x31534447; // "GDS1"
 pub const MAGIC_WAL: u32 = 0x31574447;      // "GDW1"
 
 // Single-file magic: "KiteDB format 1\0"
-pub const MAGIC_RAYDB: [u8; 16] = [
-    0x52, 0x61, 0x79, 0x44, 0x42, 0x20, 0x66, 0x6f,
-    0x72, 0x6d, 0x61, 0x74, 0x20, 0x31, 0x00, 0x00,
+pub const MAGIC_KITEDB: [u8; 16] = [
+    0x4b, 0x69, 0x74, 0x65, 0x44, 0x42, 0x20, 0x66,
+    0x6f, 0x72, 0x6d, 0x61, 0x74, 0x20, 0x31, 0x00,
 ];
 
 // Versions
@@ -274,7 +274,7 @@ pub const INITIAL_TX_ID: TxId = 1;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-pub enum RayError {
+pub enum KiteError {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
@@ -309,7 +309,7 @@ pub enum RayError {
     Compression(String),
 }
 
-pub type Result<T> = std::result::Result<T, RayError>;
+pub type Result<T> = std::result::Result<T, KiteError>;
 ```
 
 ### 1.4 Utilities (`src/util/`)
@@ -404,7 +404,7 @@ pub fn xxhash64(data: &[u8]) -> u64 {
 ```rust
 //! Compression support (zstd, gzip, deflate)
 
-use crate::error::{RayError, Result};
+use crate::error::{KiteError, Result};
 
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -421,21 +421,21 @@ pub fn compress(data: &[u8], compression: CompressionType, level: i32) -> Result
         CompressionType::None => Ok(data.to_vec()),
         CompressionType::Zstd => {
             zstd::encode_all(data, level)
-                .map_err(|e| RayError::Compression(e.to_string()))
+                .map_err(|e| KiteError::Compression(e.to_string()))
         }
         CompressionType::Gzip => {
             use flate2::write::GzEncoder;
             use flate2::Compression;
             let mut encoder = GzEncoder::new(Vec::new(), Compression::new(level as u32));
             encoder.write_all(data)?;
-            encoder.finish().map_err(|e| RayError::Compression(e.to_string()))
+            encoder.finish().map_err(|e| KiteError::Compression(e.to_string()))
         }
         CompressionType::Deflate => {
             use flate2::write::DeflateEncoder;
             use flate2::Compression;
             let mut encoder = DeflateEncoder::new(Vec::new(), Compression::new(level as u32));
             encoder.write_all(data)?;
-            encoder.finish().map_err(|e| RayError::Compression(e.to_string()))
+            encoder.finish().map_err(|e| KiteError::Compression(e.to_string()))
         }
     }
 }
@@ -446,7 +446,7 @@ pub fn decompress(data: &[u8], compression: CompressionType) -> Result<Vec<u8>> 
         CompressionType::None => Ok(data.to_vec()),
         CompressionType::Zstd => {
             zstd::decode_all(data)
-                .map_err(|e| RayError::Compression(e.to_string()))
+                .map_err(|e| KiteError::Compression(e.to_string()))
         }
         CompressionType::Gzip => {
             use flate2::read::GzDecoder;
@@ -953,9 +953,9 @@ impl DbHeader {
         assert!(data.len() >= DB_HEADER_SIZE);
         
         // Verify magic
-        if &data[0..16] != MAGIC_RAYDB {
-            return Err(RayError::InvalidMagic {
-                expected: u32::from_le_bytes(MAGIC_RAYDB[0..4].try_into().unwrap()),
+        if &data[0..16] != MAGIC_KITEDB {
+            return Err(KiteError::InvalidMagic {
+                expected: u32::from_le_bytes(MAGIC_KITEDB[0..4].try_into().unwrap()),
                 got: u32::from_le_bytes(data[0..4].try_into().unwrap()),
             });
         }
@@ -964,7 +964,7 @@ impl DbHeader {
         let header_crc = u32::from_le_bytes(data[176..180].try_into().unwrap());
         let computed_header_crc = crc32c(&data[0..176]);
         if header_crc != computed_header_crc {
-            return Err(RayError::CrcMismatch {
+            return Err(KiteError::CrcMismatch {
                 stored: header_crc,
                 computed: computed_header_crc,
             });
@@ -1591,7 +1591,7 @@ impl VersionChainManager {
 use std::collections::{HashMap, HashSet};
 use parking_lot::RwLock;
 use crate::types::*;
-use crate::error::{RayError, Result};
+use crate::error::{KiteError, Result};
 
 /// Conflict detector
 pub struct ConflictDetector {
@@ -1626,7 +1626,7 @@ impl ConflictDetector {
         if conflicts.is_empty() {
             Ok(())
         } else {
-            Err(RayError::Conflict {
+            Err(KiteError::Conflict {
                 txid: 0, // Will be filled by caller
                 keys: conflicts,
             })
@@ -2276,7 +2276,7 @@ impl Ray {
         let src = src.into();
         let dst = dst.into();
         let etype = self.etype_ids.get(E::NAME)
-            .ok_or_else(|| RayError::KeyNotFound(E::NAME.to_string()))?;
+            .ok_or_else(|| KiteError::KeyNotFound(E::NAME.to_string()))?;
         
         let mut tx = begin_tx(&self.db);
         add_edge(&mut tx, src.id, *etype, dst.id);

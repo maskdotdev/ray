@@ -44,7 +44,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 try:
   from kitedb import Database, OpenOptions
 except ImportError:
-  print("Error: raydb module not found. Build the Python bindings first:")
+  print("Error: kitedb module not found. Build the Python bindings first:")
   print("  cd ray-rs && maturin develop --features python")
   sys.exit(1)
 
@@ -367,7 +367,7 @@ def run_benchmarks(config: BenchConfig):
   logger.log("=" * 120)
 
   tmp_dir = tempfile.mkdtemp(prefix="ray-python-raw-")
-  db_path = os.path.join(tmp_dir, "benchmark.raydb")
+  db_path = os.path.join(tmp_dir, "benchmark.kitedb")
 
   db: Optional[Database] = None
   try:
