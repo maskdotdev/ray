@@ -16,16 +16,55 @@ yarn add @ray-db/core
 
 This package ships prebuilt binaries for major platforms. If a prebuild isn't available for your target, you'll need a Rust toolchain to build from source.
 
-## Quickstart (graph basics)
+## Quickstart (fluent API)
+
+The fluent API provides a high-level, type-safe interface for schema-driven workflows:
 
 ```ts
-import {
-  Database,
-  JsTraversalDirection,
-  PropType,
-  pathConfig,
-  traversalStep,
-} from '@ray-db/core'
+import { ray, node, edge, prop, optional } from '@ray-db/core'
+
+// Define your schema
+const User = node('user', {
+  key: (id: string) => `user:${id}`,
+  props: {
+    name: prop.string('name'),
+    email: prop.string('email'),
+    age: optional(prop.int('age')),
+  },
+})
+
+const Knows = edge('knows', {
+  since: prop.int('since'),
+})
+
+// Open database (async)
+const db = await ray('./social.raydb', {
+  nodes: [User],
+  edges: [Knows],
+})
+
+// Insert nodes
+const alice = db.insert(User).values({ key: 'alice', name: 'Alice', email: 'alice@example.com' }).returning()
+const bob = db.insert(User).values({ key: 'bob', name: 'Bob', email: 'bob@example.com' }).returning()
+
+// Create edges
+db.link(alice, Knows, bob, { since: 2024 })
+
+// Traverse
+const friends = db.from(alice).out(Knows).toArray()
+
+// Pathfinding
+const path = db.shortestPath(alice).via(Knows).to(bob).dijkstra()
+
+db.close()
+```
+
+## Quickstart (low-level API)
+
+For direct control, use the low-level `Database` class:
+
+```ts
+import { Database, JsTraversalDirection, PropType, pathConfig, traversalStep } from '@ray-db/core'
 
 const db = Database.open('example.raydb', { createIfMissing: true })
 
@@ -52,10 +91,7 @@ const oneHop = db.traverseSingle([alice], JsTraversalDirection.Out, knows)
 console.log(oneHop)
 
 // Multi-hop traversal
-const steps = [
-  traversalStep(JsTraversalDirection.Out, knows),
-  traversalStep(JsTraversalDirection.Out, knows),
-]
+const steps = [traversalStep(JsTraversalDirection.Out, knows), traversalStep(JsTraversalDirection.Out, knows)]
 const twoHop = db.traverse([alice], steps)
 console.log(twoHop)
 
@@ -111,3 +147,4 @@ https://ray-kwaf.vercel.app/docs
 ## License
 
 MIT
+# trigger
