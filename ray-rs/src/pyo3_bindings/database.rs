@@ -39,8 +39,8 @@ use super::types::{
 // ============================================================================
 
 pub(crate) enum DatabaseInner {
-  SingleFile(RustSingleFileDB),
-  Graph(RustGraphDB),
+  SingleFile(Box<RustSingleFileDB>),
+  Graph(Box<RustGraphDB>),
 }
 
 // ============================================================================
@@ -166,7 +166,7 @@ impl PyDatabase {
       let db = open_multi_file(&path_buf, graph_opts)
         .map_err(|e| PyRuntimeError::new_err(format!("Failed to open database: {e}")))?;
       return Ok(PyDatabase {
-        inner: RwLock::new(Some(DatabaseInner::Graph(db))),
+        inner: RwLock::new(Some(DatabaseInner::Graph(Box::new(db)))),
         graph_tx: std::sync::Mutex::new(None),
       });
     }
@@ -181,7 +181,7 @@ impl PyDatabase {
     let db = open_single_file(&db_path, opts)
       .map_err(|e| PyRuntimeError::new_err(format!("Failed to open database: {e}")))?;
     Ok(PyDatabase {
-      inner: RwLock::new(Some(DatabaseInner::SingleFile(db))),
+      inner: RwLock::new(Some(DatabaseInner::SingleFile(Box::new(db)))),
       graph_tx: std::sync::Mutex::new(None),
     })
   }
@@ -193,9 +193,9 @@ impl PyDatabase {
       .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
     if let Some(db) = guard.take() {
       match db {
-        DatabaseInner::SingleFile(db) => close_single_file(db)
+        DatabaseInner::SingleFile(db) => close_single_file(*db)
           .map_err(|e| PyRuntimeError::new_err(format!("Failed to close: {e}")))?,
-        DatabaseInner::Graph(db) => close_graph_db(db)
+        DatabaseInner::Graph(db) => close_graph_db(*db)
           .map_err(|e| PyRuntimeError::new_err(format!("Failed to close: {e}")))?,
       }
     }
@@ -385,7 +385,7 @@ impl PyDatabase {
           }
         }
       }
-      Some(DatabaseInner::Graph(db)) => transaction::with_graph_tx(&db, &self.graph_tx, |h| {
+      Some(DatabaseInner::Graph(db)) => transaction::with_graph_tx(db, &self.graph_tx, |h| {
         let mut ids = Vec::with_capacity(input_nodes.len());
         for (key, props) in &input_nodes {
           let id = nodes::create_node_graph(h, Some(key.clone()))?;
@@ -423,7 +423,7 @@ impl PyDatabase {
       }
       Some(DatabaseInner::Graph(db)) => {
         let etype = db.get_or_create_etype(etype_name);
-        transaction::with_graph_tx(&db, &self.graph_tx, |h| {
+        transaction::with_graph_tx(db, &self.graph_tx, |h| {
           edges::add_edge_graph(h, src as NodeId, etype as ETypeId, dst as NodeId)
         })
       }
@@ -535,7 +535,7 @@ impl PyDatabase {
       }
       Some(DatabaseInner::Graph(db)) => {
         let key_id = db.get_or_create_propkey(key_name);
-        transaction::with_graph_tx(&db, &self.graph_tx, |h| {
+        transaction::with_graph_tx(db, &self.graph_tx, |h| {
           properties::set_node_prop_graph(
             h,
             node_id as NodeId,
@@ -624,7 +624,7 @@ impl PyDatabase {
       ),
       Some(DatabaseInner::Graph(db)) => {
         let key_id = db.get_or_create_propkey(key_name);
-        transaction::with_graph_tx(&db, &self.graph_tx, |h| {
+        transaction::with_graph_tx(db, &self.graph_tx, |h| {
           properties::set_edge_prop_graph(
             h,
             src as NodeId,
@@ -819,7 +819,7 @@ impl PyDatabase {
       }
       Some(DatabaseInner::Graph(db)) => {
         let label_id = db.get_or_create_label(label_name);
-        transaction::with_graph_tx(&db, &self.graph_tx, |h| {
+        transaction::with_graph_tx(db, &self.graph_tx, |h| {
           labels::add_node_label_graph(h, node_id as NodeId, label_id)
         })
       }

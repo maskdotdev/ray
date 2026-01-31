@@ -1,6 +1,6 @@
 {
   "name": "@ray-db/core",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "RayDB - A fast, lightweight, embedded graph database for Node.js",
   "author": "mask <mask@mask.dev>",
   "homepage": "https://github.com/maskdotdev/ray",

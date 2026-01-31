@@ -28,12 +28,6 @@ pub trait TransactionOps {
   fn has_transaction_impl(&self) -> PyResult<bool>;
 }
 
-/// Internal database type enum
-pub enum DatabaseInner {
-  SingleFile(RustSingleFileDB),
-  Graph(RustGraphDB),
-}
-
 /// Helper for transaction operations on graph databases
 pub fn with_graph_tx<F, R>(
   db: &RustGraphDB,

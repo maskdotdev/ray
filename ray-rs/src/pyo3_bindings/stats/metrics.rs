@@ -234,13 +234,16 @@ impl MemoryMetrics {
   fn human_readable(&self) -> String {
     let bytes = self.total_estimate_bytes;
     if bytes < 1024 {
-      format!("{} B", bytes)
+      format!("{bytes} B")
     } else if bytes < 1024 * 1024 {
-      format!("{:.1} KB", bytes as f64 / 1024.0)
+      let kb = bytes as f64 / 1024.0;
+      format!("{kb:.1} KB")
     } else if bytes < 1024 * 1024 * 1024 {
-      format!("{:.1} MB", bytes as f64 / (1024.0 * 1024.0))
+      let mb = bytes as f64 / (1024.0 * 1024.0);
+      format!("{mb:.1} MB")
     } else {
-      format!("{:.2} GB", bytes as f64 / (1024.0 * 1024.0 * 1024.0))
+      let gb = bytes as f64 / (1024.0 * 1024.0 * 1024.0);
+      format!("{gb:.2} GB")
     }
   }
 

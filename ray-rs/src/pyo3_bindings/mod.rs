@@ -13,6 +13,11 @@
 //! - `traversal` - Traversal result types
 //! - `vector` - Vector index types
 
+// PyO3's #[pymethods] macro generates code that triggers false positives
+// for clippy::useless_conversion on PyResult return types.
+// See: https://github.com/PyO3/pyo3/issues/4759
+#![cfg_attr(feature = "python", allow(clippy::useless_conversion))]
+
 #[cfg(feature = "python")]
 pub mod database;
 #[cfg(feature = "python")]

@@ -511,6 +511,36 @@ export declare class JsIvfPqIndex {
   static deserialize(data: Buffer): JsIvfPqIndex
 }
 
+/**
+ * High-level Ray database handle for Node.js/Bun.
+ *
+ * # Thread Safety and Concurrent Access
+ *
+ * Ray uses an internal RwLock to support concurrent operations:
+ *
+ * - **Read operations** (get, exists, neighbors, traversals) use a shared read lock,
+ *   allowing multiple concurrent reads without blocking each other.
+ * - **Write operations** (insert, update, link, delete) use an exclusive write lock,
+ *   blocking all other operations until complete.
+ *
+ * This means you can safely call multiple read methods concurrently:
+ *
+ * ```javascript
+ * // These execute concurrently - reads don't block each other
+ * const [user1, user2, user3] = await Promise.all([
+ *   db.get("User", "alice"),
+ *   db.get("User", "bob"),
+ *   db.get("User", "charlie"),
+ * ]);
+ * ```
+ *
+ * Write operations will wait for in-progress reads and block new operations:
+ *
+ * ```javascript
+ * // This will wait for any in-progress reads, then block new reads
+ * await db.insert("User").key("david").set("name", "David").execute();
+ * ```
+ */
 export declare class Ray {
   /** Open a Ray database */
   static open(path: string, options: JsRayOptions): Ray
