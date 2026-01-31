@@ -87,6 +87,14 @@ harness = false
 name = "graph"
 harness = false
 
+[[bench]]
+name = "single_file"
+harness = false
+
+[[bench]]
+name = "concurrent"
+harness = false
+
 [features]
 default = ["napi"]
 napi = ["dep:napi", "dep:napi-derive", "dep:napi-build"]

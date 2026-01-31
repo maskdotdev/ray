@@ -52,6 +52,39 @@ fn main() -> raydb::error::Result<()> {
 If you want direct access to graph primitives, use `raydb::graph::db::open_graph_db`
 and the modules under `raydb::graph`, `raydb::vector`, and `raydb::core`.
 
+## Concurrent Access
+
+RayDB supports concurrent reads when wrapped in a `RwLock`. Multiple threads can read simultaneously:
+
+```rust
+use std::sync::Arc;
+use parking_lot::RwLock;
+use raydb::api::ray::{Ray, RayOptions, NodeDef};
+
+// Wrap Ray in RwLock for concurrent access
+let ray = Ray::open("graph.raydb", RayOptions::new().node(NodeDef::new("User", "user:")))?;
+let db = Arc::new(RwLock::new(ray));
+
+// Multiple threads can read concurrently
+let db_clone = Arc::clone(&db);
+std::thread::spawn(move || {
+    let guard = db_clone.read();  // Shared read lock
+    let user = guard.get("User", "alice");
+});
+
+// Writes require exclusive access
+{
+    let mut guard = db.write();  // Exclusive write lock
+    guard.create_node("User", "bob", HashMap::new())?;
+}
+```
+
+**Concurrency model:**
+
+- **Reads (`&self`)**: `get()`, `exists()`, `neighbors_out()`, `from()`, traversals - concurrent via `RwLock::read()`
+- **Writes (`&mut self`)**: `create_node()`, `link()`, `set_prop()` - exclusive via `RwLock::write()`
+- The internal data structures use `RwLock` for thread-safe access to delta state and schema mappings
+
 ## Documentation
 
 ```text

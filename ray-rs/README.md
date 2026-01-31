@@ -138,6 +138,29 @@ This package exposes a WASI-compatible build via the `browser` export for bundle
 import { Database } from '@ray-db/core-wasm32-wasi'
 ```
 
+## Concurrent Access
+
+RayDB supports concurrent read operations. Multiple async calls can read from the database simultaneously without blocking each other:
+
+```ts
+// These execute concurrently - reads don't block each other
+const [user1, user2, user3] = await Promise.all([db.get(User, 'alice'), db.get(User, 'bob'), db.get(User, 'charlie')])
+
+// Traversals can also run concurrently
+const [aliceFriends, bobFriends] = await Promise.all([
+  db.from(alice).out(Knows).toArray(),
+  db.from(bob).out(Knows).toArray(),
+])
+```
+
+**Concurrency model:**
+
+- **Reads are concurrent**: Multiple `get()`, `from()`, `traverse()`, etc. can run in parallel
+- **Writes are exclusive**: Write operations (`insert()`, `link()`, `update()`) require exclusive access
+- **Read-write interaction**: A write will wait for in-progress reads to complete, then block new reads until done
+
+This is implemented using a read-write lock (RwLock) internally, providing good read scalability while maintaining data consistency.
+
 ## API surface
 
 The Node bindings expose both low-level graph primitives (`Database`) and higher-level APIs (Ray) for schema-driven workflows, plus metrics, backups, traversal, and vector search. For full API details and guides, see the docs:
@@ -147,4 +170,5 @@ https://ray-kwaf.vercel.app/docs
 ## License
 
 MIT
+
 # trigger

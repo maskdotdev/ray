@@ -18,8 +18,9 @@ use crate::api::traversal::{
 use crate::backup as core_backup;
 use crate::core::single_file::{
   close_single_file, is_single_file_path, open_single_file, SingleFileDB as RustSingleFileDB,
-  SingleFileOpenOptions as RustOpenOptions, SyncMode as RustSyncMode,
-  SingleFileOptimizeOptions as RustSingleFileOptimizeOptions, VacuumOptions as RustVacuumOptions,
+  SingleFileOpenOptions as RustOpenOptions,
+  SingleFileOptimizeOptions as RustSingleFileOptimizeOptions, SyncMode as RustSyncMode,
+  VacuumOptions as RustVacuumOptions,
 };
 use crate::export as ray_export;
 use crate::graph::db::{
@@ -2779,10 +2780,7 @@ impl Database {
 
   /// Optimize (compact) a single-file database with options
   #[napi(js_name = "optimizeSingleFile")]
-  pub fn optimize_single_file(
-    &mut self,
-    options: Option<SingleFileOptimizeOptions>,
-  ) -> Result<()> {
+  pub fn optimize_single_file(&mut self, options: Option<SingleFileOptimizeOptions>) -> Result<()> {
     match self.inner.as_mut() {
       Some(DatabaseInner::SingleFile(db)) => db
         .optimize_single_file(options.map(Into::into))
@@ -3409,11 +3407,7 @@ fn graph_stats(db: &RustGraphDB) -> DbStats {
       (0, 0, 0, 0)
     };
 
-  let wal_segment = db
-    .manifest
-    .as_ref()
-    .map(|m| m.active_wal_seg)
-    .unwrap_or(0);
+  let wal_segment = db.manifest.as_ref().map(|m| m.active_wal_seg).unwrap_or(0);
 
   let mvcc_stats = db.mvcc.as_ref().map(|mvcc| {
     let tx_mgr = mvcc.tx_manager.lock();
@@ -3586,13 +3580,11 @@ pub fn create_backup(
   let backup_path = PathBuf::from(backup_path);
 
   match db.inner.as_ref() {
-    Some(DatabaseInner::SingleFile(db)) => core_backup::create_backup_single_file(
-      db,
-      &backup_path,
-      core_options,
-    )
-    .map(BackupResult::from)
-    .map_err(|e| Error::from_reason(format!("Failed to create backup: {e}"))),
+    Some(DatabaseInner::SingleFile(db)) => {
+      core_backup::create_backup_single_file(db, &backup_path, core_options)
+        .map(BackupResult::from)
+        .map_err(|e| Error::from_reason(format!("Failed to create backup: {e}")))
+    }
     Some(DatabaseInner::Graph(db)) => {
       core_backup::create_backup_graph(db, &backup_path, core_options)
         .map(BackupResult::from)

@@ -58,6 +58,10 @@ pub mod streaming;
 // High-level API modules (Phase 6)
 pub mod api;
 
+// Concurrent access tests (test-only)
+#[cfg(test)]
+mod concurrent_tests;
+
 // NAPI bindings module
 #[cfg(feature = "napi")]
 pub mod napi_bindings;
@@ -67,14 +71,17 @@ pub mod napi_bindings;
 pub mod pyo3_bindings;
 
 // Re-export commonly used items
-pub use error::{RayError, Result};
 pub use check::{check_snapshot, quick_check};
+pub use error::{RayError, Result};
 
 // Re-export schema builders for convenience
 pub use api::schema::{
-  define_edge, define_node, prop, DatabaseSchema, EdgeSchema, NodeSchema, PropDef, SchemaType,
-  ValidationError,
+  edge, node, prop, DatabaseSchema, EdgeSchema, NodeSchema, PropDef, SchemaType, ValidationError,
 };
+
+// Deprecated aliases for backwards compatibility
+#[allow(deprecated)]
+pub use api::schema::{define_edge, define_node};
 
 // ============================================================================
 // NAPI Exports

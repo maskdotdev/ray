@@ -6,7 +6,7 @@
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::RwLock;
 
 use crate::backup as core_backup;
 use crate::core::single_file::{
@@ -48,11 +48,12 @@ pub(crate) enum DatabaseInner {
 // ============================================================================
 
 /// Dispatch to single-file or graph implementation (immutable, returns PyResult)
+/// Uses read lock for concurrent read access
 macro_rules! dispatch {
   ($self:expr, |$sf:ident| $sf_expr:expr, |$gf:ident| $gf_expr:expr) => {{
     let guard = $self
       .inner
-      .lock()
+      .read()
       .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
     match guard.as_ref() {
       Some(DatabaseInner::SingleFile($sf)) => $sf_expr,
@@ -63,11 +64,12 @@ macro_rules! dispatch {
 }
 
 /// Dispatch returning Ok-wrapped value (immutable)
+/// Uses read lock for concurrent read access
 macro_rules! dispatch_ok {
   ($self:expr, |$sf:ident| $sf_expr:expr, |$gf:ident| $gf_expr:expr) => {{
     let guard = $self
       .inner
-      .lock()
+      .read()
       .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
     match guard.as_ref() {
       Some(DatabaseInner::SingleFile($sf)) => Ok($sf_expr),
@@ -78,11 +80,12 @@ macro_rules! dispatch_ok {
 }
 
 /// Dispatch to mutable single-file or graph implementation
+/// Uses write lock for exclusive access
 macro_rules! dispatch_mut {
   ($self:expr, |$sf:ident| $sf_expr:expr, |$gf:ident| $gf_expr:expr) => {{
     let mut guard = $self
       .inner
-      .lock()
+      .write()
       .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
     match guard.as_mut() {
       Some(DatabaseInner::SingleFile($sf)) => $sf_expr,
@@ -93,11 +96,12 @@ macro_rules! dispatch_mut {
 }
 
 /// Dispatch with graph transaction (for write operations on graph db)
+/// Uses read lock since transaction state is managed separately
 macro_rules! dispatch_tx {
   ($self:expr, |$sf:ident| $sf_expr:expr, |$handle:ident| $gf_expr:expr) => {{
     let guard = $self
       .inner
-      .lock()
+      .read()
       .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
     match guard.as_ref() {
       Some(DatabaseInner::SingleFile($sf)) => $sf_expr,
@@ -113,11 +117,36 @@ macro_rules! dispatch_tx {
 // Database Python Wrapper
 // ============================================================================
 
-/// Graph database handle (single-file or multi-file)
+/// Graph database handle (single-file or multi-file).
+///
+/// # Thread Safety and Concurrent Access
+///
+/// The Database class uses an internal RwLock to support concurrent operations:
+///
+/// - **Read operations** (`get_node_by_key`, `node_exists`, `get_neighbors`, etc.)
+///   use a shared read lock, allowing multiple threads to read concurrently.
+/// - **Write operations** (`create_node`, `add_edge`, `set_node_prop`, etc.)
+///   use an exclusive write lock, blocking all other operations.
+///
+/// Example of concurrent reads from multiple threads:
+///
+/// ```python
+/// from concurrent.futures import ThreadPoolExecutor
+///
+/// def read_node(key):
+///     return db.get_node_by_key(key)
+///
+/// # These execute concurrently
+/// with ThreadPoolExecutor(max_workers=4) as executor:
+///     results = list(executor.map(read_node, ["user:1", "user:2", "user:3"]))
+/// ```
+///
+/// Note: Python's GIL is released during Rust operations, enabling true
+/// parallelism for database I/O operations.
 #[pyclass(name = "Database")]
 pub struct PyDatabase {
-  pub(crate) inner: Mutex<Option<DatabaseInner>>,
-  pub(crate) graph_tx: Mutex<Option<GraphTxState>>,
+  pub(crate) inner: RwLock<Option<DatabaseInner>>,
+  pub(crate) graph_tx: std::sync::Mutex<Option<GraphTxState>>,
 }
 
 #[pymethods]
@@ -137,8 +166,8 @@ impl PyDatabase {
       let db = open_multi_file(&path_buf, graph_opts)
         .map_err(|e| PyRuntimeError::new_err(format!("Failed to open database: {e}")))?;
       return Ok(PyDatabase {
-        inner: Mutex::new(Some(DatabaseInner::Graph(db))),
-        graph_tx: Mutex::new(None),
+        inner: RwLock::new(Some(DatabaseInner::Graph(db))),
+        graph_tx: std::sync::Mutex::new(None),
       });
     }
 
@@ -152,15 +181,15 @@ impl PyDatabase {
     let db = open_single_file(&db_path, opts)
       .map_err(|e| PyRuntimeError::new_err(format!("Failed to open database: {e}")))?;
     Ok(PyDatabase {
-      inner: Mutex::new(Some(DatabaseInner::SingleFile(db))),
-      graph_tx: Mutex::new(None),
+      inner: RwLock::new(Some(DatabaseInner::SingleFile(db))),
+      graph_tx: std::sync::Mutex::new(None),
     })
   }
 
   fn close(&self) -> PyResult<()> {
     let mut guard = self
       .inner
-      .lock()
+      .write()
       .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
     if let Some(db) = guard.take() {
       match db {
@@ -194,7 +223,7 @@ impl PyDatabase {
     Ok(
       self
         .inner
-        .lock()
+        .read()
         .map_err(|e| PyRuntimeError::new_err(e.to_string()))?
         .is_some(),
     )
@@ -324,7 +353,7 @@ impl PyDatabase {
   ) -> PyResult<Vec<i64>> {
     let guard = self
       .inner
-      .lock()
+      .read()
       .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
     match guard.as_ref() {
       Some(DatabaseInner::SingleFile(db)) => {
@@ -356,7 +385,7 @@ impl PyDatabase {
           }
         }
       }
-      Some(DatabaseInner::Graph(db)) => transaction::with_graph_tx(db, &self.graph_tx, |h| {
+      Some(DatabaseInner::Graph(db)) => transaction::with_graph_tx(&db, &self.graph_tx, |h| {
         let mut ids = Vec::with_capacity(input_nodes.len());
         for (key, props) in &input_nodes {
           let id = nodes::create_node_graph(h, Some(key.clone()))?;
@@ -386,7 +415,7 @@ impl PyDatabase {
   fn add_edge_by_name(&self, src: i64, etype_name: &str, dst: i64) -> PyResult<()> {
     let guard = self
       .inner
-      .lock()
+      .read()
       .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
     match guard.as_ref() {
       Some(DatabaseInner::SingleFile(db)) => {
@@ -394,7 +423,7 @@ impl PyDatabase {
       }
       Some(DatabaseInner::Graph(db)) => {
         let etype = db.get_or_create_etype(etype_name);
-        transaction::with_graph_tx(db, &self.graph_tx, |h| {
+        transaction::with_graph_tx(&db, &self.graph_tx, |h| {
           edges::add_edge_graph(h, src as NodeId, etype as ETypeId, dst as NodeId)
         })
       }
@@ -498,7 +527,7 @@ impl PyDatabase {
   fn set_node_prop_by_name(&self, node_id: i64, key_name: &str, value: PropValue) -> PyResult<()> {
     let guard = self
       .inner
-      .lock()
+      .read()
       .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
     match guard.as_ref() {
       Some(DatabaseInner::SingleFile(db)) => {
@@ -506,7 +535,7 @@ impl PyDatabase {
       }
       Some(DatabaseInner::Graph(db)) => {
         let key_id = db.get_or_create_propkey(key_name);
-        transaction::with_graph_tx(db, &self.graph_tx, |h| {
+        transaction::with_graph_tx(&db, &self.graph_tx, |h| {
           properties::set_node_prop_graph(
             h,
             node_id as NodeId,
@@ -582,7 +611,7 @@ impl PyDatabase {
   ) -> PyResult<()> {
     let guard = self
       .inner
-      .lock()
+      .read()
       .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
     match guard.as_ref() {
       Some(DatabaseInner::SingleFile(db)) => properties::set_edge_prop_by_name_single(
@@ -595,7 +624,7 @@ impl PyDatabase {
       ),
       Some(DatabaseInner::Graph(db)) => {
         let key_id = db.get_or_create_propkey(key_name);
-        transaction::with_graph_tx(db, &self.graph_tx, |h| {
+        transaction::with_graph_tx(&db, &self.graph_tx, |h| {
           properties::set_edge_prop_graph(
             h,
             src as NodeId,
@@ -782,7 +811,7 @@ impl PyDatabase {
   fn add_node_label_by_name(&self, node_id: i64, label_name: &str) -> PyResult<()> {
     let guard = self
       .inner
-      .lock()
+      .read()
       .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
     match guard.as_ref() {
       Some(DatabaseInner::SingleFile(db)) => {
@@ -790,7 +819,7 @@ impl PyDatabase {
       }
       Some(DatabaseInner::Graph(db)) => {
         let label_id = db.get_or_create_label(label_name);
-        transaction::with_graph_tx(db, &self.graph_tx, |h| {
+        transaction::with_graph_tx(&db, &self.graph_tx, |h| {
           labels::add_node_label_graph(h, node_id as NodeId, label_id)
         })
       }
@@ -1074,12 +1103,7 @@ impl PyDatabase {
   }
 
   #[pyo3(signature = (source, max_depth, etype=None))]
-  fn reachable_nodes(
-    &self,
-    source: i64,
-    max_depth: u32,
-    etype: Option<u32>,
-  ) -> PyResult<Vec<i64>> {
+  fn reachable_nodes(&self, source: i64, max_depth: u32, etype: Option<u32>) -> PyResult<Vec<i64>> {
     let min_depth = Some(1);
     let direction = Some("out".to_string());
     let unique = Some(true);
@@ -1422,7 +1446,7 @@ pub fn open_database(path: String, options: Option<OpenOptions>) -> PyResult<PyD
 pub fn collect_metrics(db: &PyDatabase) -> PyResult<DatabaseMetrics> {
   let guard = db
     .inner
-    .lock()
+    .read()
     .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
   match guard.as_ref() {
     Some(DatabaseInner::SingleFile(d)) => Ok(DatabaseMetrics::from(
@@ -1439,7 +1463,7 @@ pub fn collect_metrics(db: &PyDatabase) -> PyResult<DatabaseMetrics> {
 pub fn health_check(db: &PyDatabase) -> PyResult<HealthCheckResult> {
   let guard = db
     .inner
-    .lock()
+    .read()
     .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
   match guard.as_ref() {
     Some(DatabaseInner::SingleFile(d)) => Ok(HealthCheckResult::from(
@@ -1463,7 +1487,7 @@ pub fn create_backup(
   let path = PathBuf::from(backup_path);
   let guard = db
     .inner
-    .lock()
+    .read()
     .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
   match guard.as_ref() {
     Some(DatabaseInner::SingleFile(d)) => core_backup::create_backup_single_file(d, &path, opts)

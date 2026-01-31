@@ -3,7 +3,7 @@
 use napi::bindgen_prelude::*;
 use napi::UnknownRef;
 use napi_derive::napi;
-use parking_lot::Mutex;
+use parking_lot::RwLock;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
@@ -662,23 +662,55 @@ fn get_neighbors(
 // Ray Handle
 // =============================================================================
 
+/// High-level Ray database handle for Node.js/Bun.
+///
+/// # Thread Safety and Concurrent Access
+///
+/// Ray uses an internal RwLock to support concurrent operations:
+///
+/// - **Read operations** (get, exists, neighbors, traversals) use a shared read lock,
+///   allowing multiple concurrent reads without blocking each other.
+/// - **Write operations** (insert, update, link, delete) use an exclusive write lock,
+///   blocking all other operations until complete.
+///
+/// This means you can safely call multiple read methods concurrently:
+///
+/// ```javascript
+/// // These execute concurrently - reads don't block each other
+/// const [user1, user2, user3] = await Promise.all([
+///   db.get("User", "alice"),
+///   db.get("User", "bob"),
+///   db.get("User", "charlie"),
+/// ]);
+/// ```
+///
+/// Write operations will wait for in-progress reads and block new operations:
+///
+/// ```javascript
+/// // This will wait for any in-progress reads, then block new reads
+/// await db.insert("User").key("david").set("name", "David").execute();
+/// ```
 #[napi]
 pub struct Ray {
-  inner: Arc<Mutex<Option<RustRay>>>,
+  inner: Arc<RwLock<Option<RustRay>>>,
   node_specs: Arc<HashMap<String, KeySpec>>,
 }
 
 impl Ray {
+  /// Execute a read operation with a shared lock.
+  /// Multiple read operations can execute concurrently.
   fn with_ray<R>(&self, f: impl FnOnce(&RustRay) -> Result<R>) -> Result<R> {
-    let guard = self.inner.lock();
+    let guard = self.inner.read();
     let ray = guard
       .as_ref()
       .ok_or_else(|| Error::from_reason("Ray is closed"))?;
     f(ray)
   }
 
+  /// Execute a write operation with an exclusive lock.
+  /// This blocks all other operations until complete.
   fn with_ray_mut<R>(&self, f: impl FnOnce(&mut RustRay) -> Result<R>) -> Result<R> {
-    let mut guard = self.inner.lock();
+    let mut guard = self.inner.write();
     let ray = guard
       .as_mut()
       .ok_or_else(|| Error::from_reason("Ray is closed"))?;
@@ -732,7 +764,7 @@ impl Ray {
     let ray = RustRay::open(path, ray_opts).map_err(|e| Error::from_reason(e.to_string()))?;
 
     Ok(Ray {
-      inner: Arc::new(Mutex::new(Some(ray))),
+      inner: Arc::new(RwLock::new(Some(ray))),
       node_specs: Arc::new(node_specs),
     })
   }
@@ -740,7 +772,7 @@ impl Ray {
   /// Close the database
   #[napi]
   pub fn close(&self) -> Result<()> {
-    let mut guard = self.inner.lock();
+    let mut guard = self.inner.write();
     if let Some(ray) = guard.take() {
       ray.close().map_err(|e| Error::from_reason(e.to_string()))?;
     }
@@ -1450,7 +1482,7 @@ impl napi::Task for OpenRayTask {
       .take()
       .ok_or_else(|| Error::from_reason("Task result not available"))?;
     Ok(Ray {
-      inner: Arc::new(Mutex::new(Some(ray))),
+      inner: Arc::new(RwLock::new(Some(ray))),
       node_specs: Arc::new(node_specs),
     })
   }
@@ -1473,7 +1505,7 @@ pub fn ray(path: String, options: JsRayOptions) -> AsyncTask<OpenRayTask> {
 
 #[napi]
 pub struct RayInsertBuilder {
-  ray: Arc<Mutex<Option<RustRay>>>,
+  ray: Arc<RwLock<Option<RustRay>>>,
   node_type: String,
   key_prefix: String,
   key_spec: KeySpec,
@@ -1523,7 +1555,7 @@ impl RayInsertBuilder {
 
 #[napi]
 pub struct RayInsertExecutorSingle {
-  ray: Arc<Mutex<Option<RustRay>>>,
+  ray: Arc<RwLock<Option<RustRay>>>,
   node_type: String,
   full_key: String,
   props: HashMap<String, PropValue>,
@@ -1554,7 +1586,7 @@ impl RayInsertExecutorSingle {
 
 #[napi]
 pub struct RayInsertExecutorMany {
-  ray: Arc<Mutex<Option<RustRay>>>,
+  ray: Arc<RwLock<Option<RustRay>>>,
   node_type: String,
   entries: Vec<(String, HashMap<String, PropValue>)>,
 }
@@ -1590,12 +1622,12 @@ impl RayInsertExecutorMany {
 }
 
 fn insert_single(
-  ray: &Arc<Mutex<Option<RustRay>>>,
+  ray: &Arc<RwLock<Option<RustRay>>>,
   node_type: &str,
   full_key: &str,
   props: &HashMap<String, PropValue>,
 ) -> Result<(NodeId, Option<HashMap<String, PropValue>>)> {
-  let mut guard = ray.lock();
+  let mut guard = ray.write();
   let ray = guard
     .as_mut()
     .ok_or_else(|| Error::from_reason("Ray is closed"))?;
@@ -1645,7 +1677,7 @@ fn insert_single(
 
 #[napi]
 pub struct RayUpdateBuilder {
-  ray: Arc<Mutex<Option<RustRay>>>,
+  ray: Arc<RwLock<Option<RustRay>>>,
   node_id: NodeId,
   updates: HashMap<String, Option<PropValue>>,
 }
@@ -1680,7 +1712,7 @@ impl RayUpdateBuilder {
   /// Execute the update
   #[napi]
   pub fn execute(&self) -> Result<()> {
-    let mut guard = self.ray.lock();
+    let mut guard = self.ray.write();
     let ray = guard
       .as_mut()
       .ok_or_else(|| Error::from_reason("Ray is closed"))?;
@@ -1718,7 +1750,7 @@ impl RayUpdateBuilder {
 
 #[napi]
 pub struct RayUpdateEdgeBuilder {
-  ray: Arc<Mutex<Option<RustRay>>>,
+  ray: Arc<RwLock<Option<RustRay>>>,
   src: NodeId,
   etype_id: ETypeId,
   dst: NodeId,
@@ -1755,7 +1787,7 @@ impl RayUpdateEdgeBuilder {
   /// Execute the edge update
   #[napi]
   pub fn execute(&self) -> Result<()> {
-    let mut guard = self.ray.lock();
+    let mut guard = self.ray.write();
     let ray = guard
       .as_mut()
       .ok_or_else(|| Error::from_reason("Ray is closed"))?;
@@ -1808,7 +1840,7 @@ impl RayUpdateEdgeBuilder {
 
 #[napi]
 pub struct RayTraversal {
-  ray: Arc<Mutex<Option<RustRay>>>,
+  ray: Arc<RwLock<Option<RustRay>>>,
   builder: TraversalBuilder,
   where_edge: Option<UnknownRef<false>>,
   where_node: Option<UnknownRef<false>>,
@@ -1903,7 +1935,7 @@ impl RayTraversal {
 
     let items = {
       let ray = self.ray.clone();
-      let guard = ray.lock();
+      let guard = ray.read();
       let ray = guard
         .as_ref()
         .ok_or_else(|| Error::from_reason("Ray is closed"))?;
@@ -1968,7 +2000,7 @@ impl RayTraversal {
 
     let items = {
       let ray = self.ray.clone();
-      let guard = ray.lock();
+      let guard = ray.read();
       let ray = guard
         .as_ref()
         .ok_or_else(|| Error::from_reason("Ray is closed"))?;
@@ -2039,7 +2071,7 @@ impl RayTraversal {
 
     let items = {
       let ray = self.ray.clone();
-      let guard = ray.lock();
+      let guard = ray.read();
       let ray = guard
         .as_ref()
         .ok_or_else(|| Error::from_reason("Ray is closed"))?;
@@ -2098,7 +2130,7 @@ impl RayTraversal {
       Some(edge_type) => edge_type,
       None => return Ok(None),
     };
-    let guard = self.ray.lock();
+    let guard = self.ray.read();
     let ray = guard
       .as_ref()
       .ok_or_else(|| Error::from_reason("Ray is closed"))?;
@@ -2118,7 +2150,7 @@ impl RayTraversal {
 
 #[napi]
 pub struct RayPath {
-  ray: Arc<Mutex<Option<RustRay>>>,
+  ray: Arc<RwLock<Option<RustRay>>>,
   source: NodeId,
   targets: HashSet<NodeId>,
   allowed_etypes: HashSet<ETypeId>,
@@ -2127,7 +2159,7 @@ pub struct RayPath {
 }
 
 impl RayPath {
-  fn new(ray: Arc<Mutex<Option<RustRay>>>, source: NodeId, targets: Vec<NodeId>) -> Self {
+  fn new(ray: Arc<RwLock<Option<RustRay>>>, source: NodeId, targets: Vec<NodeId>) -> Self {
     Self {
       ray,
       source,
@@ -2143,7 +2175,7 @@ impl RayPath {
 impl RayPath {
   #[napi]
   pub fn via(&mut self, edge_type: String) -> Result<()> {
-    let guard = self.ray.lock();
+    let guard = self.ray.read();
     let ray = guard
       .as_ref()
       .ok_or_else(|| Error::from_reason("Ray is closed"))?;
@@ -2182,7 +2214,7 @@ impl RayPath {
 
   #[napi]
   pub fn find(&self) -> Result<JsPathResult> {
-    let guard = self.ray.lock();
+    let guard = self.ray.read();
     let ray = guard
       .as_ref()
       .ok_or_else(|| Error::from_reason("Ray is closed"))?;
@@ -2203,7 +2235,7 @@ impl RayPath {
 
   #[napi]
   pub fn find_bfs(&self) -> Result<JsPathResult> {
-    let guard = self.ray.lock();
+    let guard = self.ray.read();
     let ray = guard
       .as_ref()
       .ok_or_else(|| Error::from_reason("Ray is closed"))?;
@@ -2222,7 +2254,7 @@ impl RayPath {
 
   #[napi]
   pub fn find_k_shortest(&self, k: i64) -> Result<Vec<JsPathResult>> {
-    let guard = self.ray.lock();
+    let guard = self.ray.read();
     let ray = guard
       .as_ref()
       .ok_or_else(|| Error::from_reason("Ray is closed"))?;
