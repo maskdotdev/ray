@@ -1,11 +1,14 @@
 [package]
 name = "kitedb"
-version = "0.2.2"
+version = "0.2.3"
 edition = "2021"
 authors = ["KiteDB Contributors"]
 description = "High-performance embedded graph database"
 license = "MIT"
 readme = "CRATE_README.md"
+documentation = "https://docs.rs/kitedb"
+homepage = "https://github.com/maskdotdev/kitedb"
+repository = "https://github.com/maskdotdev/kitedb"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
