@@ -448,19 +448,19 @@ db.link(doc, discusses, topic, relevance=0.95)
 
 							<div class="p-6 sm:p-8 space-y-4 font-mono">
 								{/* ASCII Art Logo */}
-								<pre
-									class="ascii-art text-center hidden sm:block select-none"
-									aria-hidden="true"
-								>
-									{`
-  ██████╗  █████╗ ██╗   ██╗██████╗ ██████╗ 
-  ██╔══██╗██╔══██╗╚██╗ ██╔╝██╔══██╗██╔══██╗
-  ██████╔╝███████║ ╚████╔╝ ██║  ██║██████╔╝
-  ██╔══██╗██╔══██║  ╚██╔╝  ██║  ██║██╔══██╗
-  ██║  ██║██║  ██║   ██║   ██████╔╝██████╔╝
-  ╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝   ╚═════╝ ╚═════╝ 
-                                            `}
-								</pre>
+							<pre
+								class="ascii-art text-center hidden sm:block select-none"
+								aria-hidden="true"
+							>
+								{`
+  ██╗  ██╗██╗████████╗███████╗██████╗ ██████╗ 
+  ██║ ██╔╝██║╚══██╔══╝██╔════╝██╔══██╗██╔══██╗
+  █████╔╝ ██║   ██║   █████╗  ██║  ██║██████╔╝
+  ██╔═██╗ ██║   ██║   ██╔══╝  ██║  ██║██╔══██╗
+  ██║  ██╗██║   ██║   ███████╗██████╔╝██████╔╝
+  ╚═╝  ╚═╝╚═╝   ╚═╝   ╚══════╝╚═════╝ ╚═════╝ 
+                                               `}
+							</pre>
 
 								{/* Mobile logo */}
 								<div class="sm:hidden text-center">

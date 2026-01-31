@@ -11,37 +11,63 @@ export const Logo: Component<LogoProps> = (props) => {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 128 128"
+      viewBox="0 0 200 240"
       fill="none"
       class={props.class}
       width={size()}
-      height={size()}
+      height={size() * 1.2}
       aria-hidden="true"
     >
-      <defs>
-        <linearGradient id="neonGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" style="stop-color:#00d4ff" />
-          <stop offset="50%" style="stop-color:#2aa7ff" />
-          <stop offset="100%" style="stop-color:#0d8bf5" />
-        </linearGradient>
-        <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
-          <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
-          <feMerge>
-            <feMergeNode in="coloredBlur"/>
-            <feMergeNode in="SourceGraphic"/>
-          </feMerge>
-        </filter>
-      </defs>
-      <circle cx="64" cy="64" r="60" fill="url(#neonGradient)" />
-      <g filter="url(#glow)">
-        <circle cx="64" cy="40" r="10" fill="white" />
-        <circle cx="40" cy="75" r="10" fill="white" />
-        <circle cx="88" cy="75" r="10" fill="white" />
-        <line x1="64" y1="50" x2="40" y2="65" stroke="white" stroke-width="3" stroke-linecap="round" />
-        <line x1="64" y1="50" x2="88" y2="65" stroke="white" stroke-width="3" stroke-linecap="round" />
-        <line x1="50" y1="75" x2="78" y2="75" stroke="white" stroke-width="3" stroke-linecap="round" />
+      {/* Strong Neon Background Glow */}
+      <circle cx="108" cy="115" r="70" fill="url(#neonGlow)" fill-opacity="0.25" />
+
+      {/* The Kite Fill (Subtle Blue Tint) */}
+      <path d="M100 20L175 90L115 210L35 105L100 20Z" fill="url(#kiteFill)" fill-opacity="0.15"/>
+      
+      {/* Edges (Outer Boundary) */}
+      <g stroke="url(#edgeGradient)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M100 20L175 90" />
+        <path d="M175 90L115 210" />
+        <path d="M115 210L35 105" />
+        <path d="M35 105L100 20" />
+        
+        {/* Edges (Internal Hub) */}
+        <path d="M100 20L108 108" />
+        <path d="M175 90L108 108" />
+        <path d="M115 210L108 108" />
+        <path d="M35 105L108 108" />
       </g>
-      <circle cx="64" cy="62" r="6" fill="white" opacity="0.9" />
+      
+      {/* Vertices (Nodes) - Glowing Dots */}
+      <circle cx="100" cy="20" r="5" fill="#06B6D4" stroke="white" stroke-width="1.5" />
+      <circle cx="175" cy="90" r="5" fill="#06B6D4" stroke="white" stroke-width="1.5" />
+      <circle cx="115" cy="210" r="5" fill="#3B82F6" stroke="white" stroke-width="1.5" />
+      <circle cx="35" cy="105" r="5" fill="#06B6D4" stroke="white" stroke-width="1.5" />
+      
+      {/* Center Node (The "Hub") */}
+      <circle cx="108" cy="108" r="7" fill="white" />
+      {/* Outer ring for center node */}
+      <circle cx="108" cy="108" r="14" stroke="#00F0FF" stroke-width="1.5" stroke-opacity="0.6" stroke-dasharray="4 2" />
+
+      <defs>
+        {/* Electric Blue Gradient for Lines */}
+        <linearGradient id="edgeGradient" x1="100" y1="20" x2="115" y2="210" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#00F0FF"/>
+          <stop offset="1" stop-color="#2563EB"/>
+        </linearGradient>
+        
+        {/* Subtle Fill Gradient */}
+        <linearGradient id="kiteFill" x1="100" y1="20" x2="115" y2="210" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#22D3EE"/>
+          <stop offset="1" stop-color="#1E40AF"/>
+        </linearGradient>
+        
+        {/* Central Glow */}
+        <radialGradient id="neonGlow">
+          <stop offset="0%" stop-color="#00F0FF" />
+          <stop offset="100%" stop-color="transparent" />
+        </radialGradient>
+      </defs>
     </svg>
   )
 }
