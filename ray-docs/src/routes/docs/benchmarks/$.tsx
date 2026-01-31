@@ -50,6 +50,189 @@ function DocNotFound(props: { slug: string }) {
 function DocPageContent(props: { slug: string }) {
   const slug = props.slug
 
+  // Benchmarks Overview page (root level)
+  if (slug === 'benchmarks') {
+    return (
+      <DocPage slug={slug}>
+        <p>
+          Performance benchmarks for RayDB across graph operations, vector
+          search, and multi-language bindings.
+        </p>
+
+        <h2 id="benchmark-categories">Benchmark Categories</h2>
+        <ul>
+          <li>
+            <a href="/docs/benchmarks/graph">
+              <strong>Graph Benchmarks</strong>
+            </a>{" "}
+            – Graph database operations compared against Memgraph (up to 150x
+            faster)
+          </li>
+          <li>
+            <a href="/docs/benchmarks/vector">
+              <strong>Vector Benchmarks</strong>
+            </a>{" "}
+            – Vector search performance including IVF, PQ, and IVF-PQ indexes
+          </li>
+          <li>
+            <a href="/docs/benchmarks/cross-language">
+              <strong>Cross-Language Benchmarks</strong>
+            </a>{" "}
+            – Compare bindings (TypeScript, Python, Rust)
+          </li>
+        </ul>
+
+        <h2 id="test-environment">Test Environment</h2>
+        <ul>
+          <li>macOS (Apple Silicon)</li>
+          <li>Bun 1.3.5</li>
+          <li>Python 3.12.8</li>
+          <li>Rust 1.88.0</li>
+          <li>RayDB 0.1.0</li>
+        </ul>
+
+        <h2 id="highlights">Performance Highlights</h2>
+
+        <h3 id="graph-highlights">Graph Operations</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th>RayDB vs Memgraph</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Key Lookups</td>
+              <td>100-780x faster</td>
+            </tr>
+            <tr>
+              <td>1-Hop Traversals</td>
+              <td>48-71x faster</td>
+            </tr>
+            <tr>
+              <td>Multi-Hop (3-hop)</td>
+              <td>51-730x faster</td>
+            </tr>
+            <tr>
+              <td>Batch Writes</td>
+              <td>1.5-19x faster</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>
+          <a href="/docs/benchmarks/graph">View detailed graph benchmarks →</a>
+        </p>
+
+        <h3 id="vector-highlights">Vector Operations</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Operation</th>
+              <th>Performance</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Distance Functions</td>
+              <td>500k-1.6M ops/sec</td>
+            </tr>
+            <tr>
+              <td>Vector Store Insert</td>
+              <td>487k vectors/sec</td>
+            </tr>
+            <tr>
+              <td>IVF Search (k=10)</td>
+              <td>2.2-11k ops/sec</td>
+            </tr>
+            <tr>
+              <td>IVF-PQ Memory Savings</td>
+              <td>15x compression</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>
+          <a href="/docs/benchmarks/vector">
+            View detailed vector benchmarks →
+          </a>
+        </p>
+
+        <h2 id="bindings">Binding Performance (Read p50)</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Language</th>
+              <th>10k/50k</th>
+              <th>100k/500k</th>
+              <th>250k/1.25M</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Rust</td>
+              <td>83ns</td>
+              <td>291ns</td>
+              <td>417ns</td>
+            </tr>
+            <tr>
+              <td>TypeScript</td>
+              <td>167ns</td>
+              <td>459ns</td>
+              <td>542ns</td>
+            </tr>
+            <tr>
+              <td>Python</td>
+              <td>250ns</td>
+              <td>375ns</td>
+              <td>458ns</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>
+          <a href="/docs/benchmarks/cross-language">
+            View cross-language benchmarks →
+          </a>
+        </p>
+
+        <h2 id="running">Running Benchmarks</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Command</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <code>bun run bench/benchmark.ts</code>
+              </td>
+              <td>Main benchmark (RayDB only)</td>
+            </tr>
+            <tr>
+              <td>
+                <code>bun run bench:memgraph</code>
+              </td>
+              <td>Graph comparison vs Memgraph</td>
+            </tr>
+            <tr>
+              <td>
+                <code>bun run bench/benchmark-vector.ts</code>
+              </td>
+              <td>Vector search benchmarks</td>
+            </tr>
+            <tr>
+              <td>
+                <code>bun run bench:mvcc:v2</code>
+              </td>
+              <td>MVCC performance testing</td>
+            </tr>
+          </tbody>
+        </table>
+      </DocPage>
+    )
+  }
+
   // Graph Benchmarks page
   if (slug === 'benchmarks/graph') {
     return (

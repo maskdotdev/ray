@@ -802,6 +802,242 @@ if db.has_transaction():
     )
   }
 
+  if (slug === 'guides/concurrency') {
+    return (
+      <DocPage slug={slug}>
+        <p>
+          RayDB supports concurrent access from multiple threads, enabling
+          parallel reads for improved throughput in multi-threaded applications.
+        </p>
+
+        <h2 id="concurrency-model">Concurrency Model</h2>
+        <p>
+          RayDB uses a <strong>readers-writer lock</strong> pattern:
+        </p>
+        <ul>
+          <li>
+            <strong>Multiple concurrent readers</strong> – Any number of threads
+            can read simultaneously
+          </li>
+          <li>
+            <strong>Exclusive writer</strong> – Write operations acquire
+            exclusive access
+          </li>
+          <li>
+            <strong>MVCC isolation</strong> – Transactions see consistent
+            snapshots
+          </li>
+        </ul>
+
+        <MultiLangCode
+          typescript={`// Concurrent reads from multiple async operations
+const results = await Promise.all([
+  db.get(user, 'alice'),
+  db.get(user, 'bob'),
+  db.get(user, 'charlie'),
+  db.from(user).out('follows').toArray(),
+]);
+
+// With worker threads, share the db path (each worker opens independently)
+// Workers can read concurrently from the same database file`}
+          rust={`use std::sync::{Arc, RwLock};
+use std::thread;
+
+let db = Arc::new(RwLock::new(Ray::open("./data.raydb")?));
+
+let handles: Vec<_> = (0..4).map(|i| {
+    let db = Arc::clone(&db);
+    thread::spawn(move || {
+        // Multiple threads can acquire read locks simultaneously
+        let guard = db.read().unwrap();
+        guard.get_node(format!("user:{}", i))
+    })
+}).collect();
+
+// Collect results
+let results: Vec<_> = handles.into_iter()
+    .map(|h| h.join().unwrap())
+    .collect();`}
+          python={`import threading
+
+db = ray("./data.raydb", nodes=[user])
+results = {}
+
+def read_user(user_id: str):
+    """Each thread can read concurrently"""
+    results[user_id] = db.get(user, user_id)
+
+# Spawn multiple reader threads
+threads = [
+    threading.Thread(target=read_user, args=(uid,))
+    for uid in ["alice", "bob", "charlie", "dave"]
+]
+
+for t in threads:
+    t.start()
+for t in threads:
+    t.join()
+
+# All reads completed in parallel
+print(results)`}
+        />
+
+        <h2 id="performance">Performance Scaling</h2>
+        <p>
+          Benchmarks show ~1.5-1.8x throughput improvement with 4-8 reader
+          threads:
+        </p>
+        <table>
+          <thead>
+            <tr>
+              <th>Threads</th>
+              <th>Relative Throughput</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>1</td>
+              <td>1.0x (baseline)</td>
+              <td>Single-threaded</td>
+            </tr>
+            <tr>
+              <td>2</td>
+              <td>~1.3x</td>
+              <td>Good scaling</td>
+            </tr>
+            <tr>
+              <td>4</td>
+              <td>~1.5-1.6x</td>
+              <td>Sweet spot for most workloads</td>
+            </tr>
+            <tr>
+              <td>8</td>
+              <td>~1.6-1.8x</td>
+              <td>Diminishing returns</td>
+            </tr>
+            <tr>
+              <td>16</td>
+              <td>~1.7-1.9x</td>
+              <td>Lock contention increases</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h2 id="best-practices">Best Practices</h2>
+        <ul>
+          <li>
+            <strong>Batch writes</strong> – Group multiple writes into single
+            operations to minimize exclusive lock time
+          </li>
+          <li>
+            <strong>Use transactions for consistency</strong> – MVCC ensures
+            readers see consistent snapshots even during concurrent writes
+          </li>
+          <li>
+            <strong>Profile your workload</strong> – The optimal thread count
+            depends on your read/write ratio and data access patterns
+          </li>
+          <li>
+            <strong>Avoid long-held locks</strong> – Keep critical sections
+            short; do processing outside the lock
+          </li>
+        </ul>
+
+        <h2 id="mvcc">MVCC and Snapshot Isolation</h2>
+        <p>
+          RayDB uses Multi-Version Concurrency Control (MVCC) to provide
+          snapshot isolation:
+        </p>
+        <ul>
+          <li>Readers never block writers</li>
+          <li>Writers never block readers</li>
+          <li>
+            Each transaction sees a consistent snapshot from its start time
+          </li>
+          <li>Write conflicts are detected and one transaction is aborted</li>
+        </ul>
+
+        <MultiLangCode
+          typescript={`// Transaction isolation example
+const tx1 = db.beginTransaction();
+const tx2 = db.beginTransaction();
+
+// tx1 reads value
+const value1 = tx1.get(user, 'alice');
+
+// tx2 modifies same value
+tx2.update(user, 'alice', { name: 'Alice Updated' });
+tx2.commit();
+
+// tx1 still sees original value (snapshot isolation)
+const value2 = tx1.get(user, 'alice');
+console.log(value1.name === value2.name); // true`}
+          rust={`// Transaction isolation example
+let tx1 = db.begin_transaction()?;
+let tx2 = db.begin_transaction()?;
+
+// tx1 reads value
+let value1 = tx1.get("user", "alice")?;
+
+// tx2 modifies same value
+tx2.update("user", "alice", json!({"name": "Alice Updated"}))?;
+tx2.commit()?;
+
+// tx1 still sees original value (snapshot isolation)
+let value2 = tx1.get("user", "alice")?;
+assert_eq!(value1.name, value2.name); // true`}
+          python={`# Transaction isolation example
+tx1 = db.begin_transaction()
+tx2 = db.begin_transaction()
+
+# tx1 reads value
+value1 = tx1.get(user, "alice")
+
+# tx2 modifies same value
+tx2.update(user, "alice", {"name": "Alice Updated"})
+tx2.commit()
+
+# tx1 still sees original value (snapshot isolation)
+value2 = tx1.get(user, "alice")
+print(value1.name == value2.name)  # True`}
+        />
+
+        <h2 id="limitations">Limitations</h2>
+        <ul>
+          <li>
+            <strong>Single-process only</strong> – Concurrent access is within a
+            single process; multi-process access requires external coordination
+          </li>
+          <li>
+            <strong>Write serialization</strong> – All writes are serialized;
+            high-write workloads may see contention
+          </li>
+          <li>
+            <strong>Memory overhead</strong> – MVCC maintains version history,
+            using additional memory
+          </li>
+        </ul>
+
+        <h2 id="next-steps">Next Steps</h2>
+        <ul>
+          <li>
+            <a href="/docs/guides/transactions">Transactions</a> – Learn about
+            ACID guarantees
+          </li>
+          <li>
+            <a href="/docs/benchmarks">Benchmarks</a> – See detailed performance
+            numbers
+          </li>
+          <li>
+            <a href="/docs/internals/architecture">Architecture</a> – Understand
+            the internal design
+          </li>
+        </ul>
+      </DocPage>
+    )
+  }
+
   // Default fallback
   return (
     <DocPage slug={slug}>
