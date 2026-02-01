@@ -557,11 +557,15 @@ export declare class Kite {
   /** Close the database */
   close(): void
   /** Get a node by key (returns node object with props) */
-  get(nodeType: string, key: unknown): object | null
+  get(nodeType: string, key: unknown, props?: Array<string> | undefined | null): object | null
   /** Get a node by ID (returns node object with props) */
-  getById(nodeId: number): object | null
+  getById(nodeId: number, props?: Array<string> | undefined | null): object | null
   /** Get a lightweight node reference by key (no properties) */
   getRef(nodeType: string, key: unknown): object | null
+  /** Get a node ID by key (no properties) */
+  getId(nodeType: string, key: unknown): number | null
+  /** Get multiple nodes by ID (returns node objects with props) */
+  getByIds(nodeIds: Array<number>, props?: Array<string> | undefined | null): Array<object>
   /** Get a node property value */
   getProp(nodeId: number, propName: string): JsPropValue | null
   /** Set a node property value */
@@ -683,6 +687,7 @@ export declare class KiteTraversal {
   take(limit: number): KiteTraversal
   select(props: Array<string>): KiteTraversal
   nodes(): Array<number>
+  nodesWithProps(): Array<object>
   edges(): Array<JsFullEdge>
   count(): number
 }

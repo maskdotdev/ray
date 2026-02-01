@@ -471,16 +471,7 @@ fn node_filter_data(
     None => ("".to_string(), "unknown".to_string()),
   };
 
-  let mut props = HashMap::new();
-  if let Some(props_by_id) = get_node_props_db(ray.raw(), node_id) {
-    for (key_id, value) in props_by_id {
-      if let Some(name) = ray.raw().get_propkey_name(key_id) {
-        if selected_props.is_none_or(|set| set.contains(&name)) {
-          props.insert(name, value);
-        }
-      }
-    }
-  }
+  let props = get_node_props_selected(ray, node_id, selected_props);
 
   NodeFilterData {
     id: node_id,
@@ -539,22 +530,39 @@ fn call_filter(env: &Env, func_ref: &Arc<UnknownRef<false>>, arg: Object) -> Res
   result.coerce_to_bool()
 }
 
-fn get_node_props(ray: &RustKite, node_id: NodeId) -> HashMap<String, PropValue> {
+fn should_include_prop(
+  selected_props: Option<&HashSet<String>>,
+  name: &str,
+) -> bool {
+  selected_props.is_none_or(|set| set.contains(name))
+}
+
+fn get_node_props_selected(
+  ray: &RustKite,
+  node_id: NodeId,
+  selected_props: Option<&HashSet<String>>,
+) -> HashMap<String, PropValue> {
   let mut props = HashMap::new();
   if let Some(props_by_id) = get_node_props_db(ray.raw(), node_id) {
     for (key_id, value) in props_by_id {
       if let Some(name) = ray.raw().get_propkey_name(key_id) {
-        props.insert(name, value);
+        if should_include_prop(selected_props, &name) {
+          props.insert(name, value);
+        }
       }
     }
   }
   props
 }
 
-fn get_node_props_tx(
-  _ray: &RustKite,
+fn get_node_props(ray: &RustKite, node_id: NodeId) -> HashMap<String, PropValue> {
+  get_node_props_selected(ray, node_id, None)
+}
+
+fn get_node_props_tx_selected(
   handle: &TxHandle,
   node_id: NodeId,
+  selected_props: Option<&HashSet<String>>,
 ) -> HashMap<String, PropValue> {
   if handle.tx.pending_deleted_nodes.contains(&node_id) {
     return HashMap::new();
@@ -564,7 +572,9 @@ fn get_node_props_tx(
   if let Some(props_by_id) = get_node_props_db(handle.db, node_id) {
     for (key_id, value) in props_by_id {
       if let Some(name) = handle.db.get_propkey_name(key_id) {
-        props.insert(name, value);
+        if should_include_prop(selected_props, &name) {
+          props.insert(name, value);
+        }
       }
     }
   }
@@ -572,6 +582,9 @@ fn get_node_props_tx(
   if let Some(pending_props) = handle.tx.pending_node_props.get(&node_id) {
     for (key_id, value_opt) in pending_props {
       if let Some(name) = handle.db.get_propkey_name(*key_id) {
+        if !should_include_prop(selected_props, &name) {
+          continue;
+        }
         match value_opt {
           Some(value) => {
             props.insert(name, value.clone());
@@ -585,6 +598,14 @@ fn get_node_props_tx(
   }
 
   props
+}
+
+fn get_node_props_tx(
+  _ray: &RustKite,
+  handle: &TxHandle,
+  node_id: NodeId,
+) -> HashMap<String, PropValue> {
+  get_node_props_tx_selected(handle, node_id, None)
 }
 
 fn get_node_key_tx(handle: &TxHandle, node_id: NodeId) -> Option<String> {
@@ -1071,16 +1092,23 @@ impl Kite {
 
   /// Get a node by key (returns node object with props)
   #[napi]
-  pub fn get(&self, env: Env, node_type: String, key: Unknown) -> Result<Option<Object>> {
+  pub fn get(
+    &self,
+    env: Env,
+    node_type: String,
+    key: Unknown,
+    props: Option<Vec<String>>,
+  ) -> Result<Option<Object>> {
     let spec = self.key_spec(&node_type)?.clone();
     let key_suffix = key_suffix_from_js(&env, &spec, key)?;
     let full_key = format!("{}{}", spec.prefix(), key_suffix);
+    let selected_props = props.map(|props| props.into_iter().collect::<HashSet<String>>());
     if self.tx_state.lock().is_some() {
-      return with_tx_handle(&self.inner, &self.tx_state, |ray, handle| {
+      return with_tx_handle(&self.inner, &self.tx_state, |_ray, handle| {
         let node_id = graph_get_node_by_key(handle, &full_key);
         match node_id {
           Some(node_id) => {
-            let props = get_node_props_tx(ray, handle, node_id);
+            let props = get_node_props_tx_selected(handle, node_id, selected_props.as_ref());
             let obj = node_to_js(&env, node_id, Some(full_key), &node_type, props)?;
             Ok(Some(obj))
           }
@@ -1096,7 +1124,7 @@ impl Kite {
 
       match node_ref {
         Some(node_ref) => {
-          let props = get_node_props(ray, node_ref.id);
+          let props = get_node_props_selected(ray, node_ref.id, selected_props.as_ref());
           let obj = node_to_js(&env, node_ref.id, node_ref.key, &node_ref.node_type, props)?;
           Ok(Some(obj))
         }
@@ -1107,10 +1135,16 @@ impl Kite {
 
   /// Get a node by ID (returns node object with props)
   #[napi]
-  pub fn get_by_id(&self, env: Env, node_id: i64) -> Result<Option<Object>> {
+  pub fn get_by_id(
+    &self,
+    env: Env,
+    node_id: i64,
+    props: Option<Vec<String>>,
+  ) -> Result<Option<Object>> {
+    let selected_props = props.map(|props| props.into_iter().collect::<HashSet<String>>());
     if self.tx_state.lock().is_some() {
       let node_specs = self.node_specs.clone();
-      return with_tx_handle(&self.inner, &self.tx_state, |ray, handle| {
+      return with_tx_handle(&self.inner, &self.tx_state, |_ray, handle| {
         let node_id = node_id as NodeId;
         if !graph_node_exists(handle, node_id) {
           return Ok(None);
@@ -1120,7 +1154,7 @@ impl Kite {
           .as_ref()
           .and_then(|k| node_type_from_key(&node_specs, k))
           .unwrap_or_else(|| "unknown".to_string());
-        let props = get_node_props_tx(ray, handle, node_id);
+        let props = get_node_props_tx_selected(handle, node_id, selected_props.as_ref());
         let obj = node_to_js(&env, node_id, key, &node_type, props)?;
         Ok(Some(obj))
       });
@@ -1132,7 +1166,7 @@ impl Kite {
         .map_err(|e| Error::from_reason(e.to_string()))?;
       match node_ref {
         Some(node_ref) => {
-          let props = get_node_props(ray, node_ref.id);
+          let props = get_node_props_selected(ray, node_ref.id, selected_props.as_ref());
           let obj = node_to_js(&env, node_ref.id, node_ref.key, &node_ref.node_type, props)?;
           Ok(Some(obj))
         }
@@ -1178,6 +1212,76 @@ impl Kite {
         }
         None => Ok(None),
       }
+    })
+  }
+
+  /// Get a node ID by key (no properties)
+  #[napi]
+  pub fn get_id(&self, env: Env, node_type: String, key: Unknown) -> Result<Option<i64>> {
+    let spec = self.key_spec(&node_type)?.clone();
+    let key_suffix = key_suffix_from_js(&env, &spec, key)?;
+    let full_key = format!("{}{}", spec.prefix(), key_suffix);
+    if self.tx_state.lock().is_some() {
+      return with_tx_handle(&self.inner, &self.tx_state, |_ray, handle| {
+        Ok(graph_get_node_by_key(handle, &full_key).map(|id| id as i64))
+      });
+    }
+
+    self.with_kite(move |ray| Ok(get_node_by_key_db(ray.raw(), &full_key).map(|id| id as i64)))
+  }
+
+  /// Get multiple nodes by ID (returns node objects with props)
+  #[napi]
+  pub fn get_by_ids(
+    &self,
+    env: Env,
+    node_ids: Vec<i64>,
+    props: Option<Vec<String>>,
+  ) -> Result<Vec<Object>> {
+    if node_ids.is_empty() {
+      return Ok(Vec::new());
+    }
+
+    let selected_props = props.map(|props| props.into_iter().collect::<HashSet<String>>());
+    if self.tx_state.lock().is_some() {
+      let node_specs = self.node_specs.clone();
+      return with_tx_handle(&self.inner, &self.tx_state, |_ray, handle| {
+        let mut out = Vec::with_capacity(node_ids.len());
+        for node_id in &node_ids {
+          let node_id = *node_id as NodeId;
+          if !graph_node_exists(handle, node_id) {
+            continue;
+          }
+          let key = get_node_key_tx(handle, node_id);
+          let node_type = key
+            .as_ref()
+            .and_then(|k| node_type_from_key(&node_specs, k))
+            .unwrap_or_else(|| "unknown".to_string());
+          let props = get_node_props_tx_selected(handle, node_id, selected_props.as_ref());
+          out.push(node_to_js(&env, node_id, key, &node_type, props)?);
+        }
+        Ok(out)
+      });
+    }
+
+    self.with_kite(move |ray| {
+      let mut out = Vec::with_capacity(node_ids.len());
+      for node_id in node_ids {
+        let node_ref = ray
+          .get_by_id(node_id as NodeId)
+          .map_err(|e| Error::from_reason(e.to_string()))?;
+        if let Some(node_ref) = node_ref {
+          let props = get_node_props_selected(ray, node_ref.id, selected_props.as_ref());
+          out.push(node_to_js(
+            &env,
+            node_ref.id,
+            node_ref.key,
+            &node_ref.node_type,
+            props,
+          )?);
+        }
+      }
+      Ok(out)
     })
   }
 
@@ -2389,20 +2493,18 @@ impl KiteInsertExecutorMany {
   /// Execute the inserts without returning
   #[napi]
   pub fn execute(&self) -> Result<()> {
-    for (full_key, props) in &self.entries {
-      insert_single(&self.ray, &self.tx_state, &self.node_type, full_key, props)?;
-    }
+    let _ = insert_many(&self.ray, &self.tx_state, &self.node_type, &self.entries, false)?;
     Ok(())
   }
 
   /// Execute the inserts and return nodes
   #[napi]
   pub fn returning(&self, env: Env) -> Result<Vec<Object>> {
-    let mut out = Vec::with_capacity(self.entries.len());
-    for (full_key, props) in &self.entries {
-      let (node_id, _) =
-        insert_single(&self.ray, &self.tx_state, &self.node_type, full_key, props)?;
-      let props = props.clone();
+    let results =
+      insert_many(&self.ray, &self.tx_state, &self.node_type, &self.entries, true)?;
+    let mut out = Vec::with_capacity(results.len());
+    for ((full_key, _), (node_id, props)) in self.entries.iter().zip(results.into_iter()) {
+      let props = props.expect("props loaded");
       out.push(node_to_js(
         &env,
         node_id,
@@ -2491,6 +2593,108 @@ fn insert_single(
   }
 
   Ok((node_id, Some(props.clone())))
+}
+
+fn insert_many(
+  ray: &Arc<RwLock<Option<RustKite>>>,
+  tx_state: &Arc<Mutex<Option<TxState>>>,
+  node_type: &str,
+  entries: &[(String, HashMap<String, PropValue>)],
+  load_props: bool,
+) -> Result<Vec<(NodeId, Option<HashMap<String, PropValue>>)>> {
+  if entries.is_empty() {
+    return Ok(Vec::new());
+  }
+
+  if tx_state.lock().is_some() {
+    return with_tx_handle_mut(ray, tx_state, |ray, handle| {
+      let node_def = ray
+        .node_def(node_type)
+        .ok_or_else(|| Error::from_reason(format!("Unknown node type: {node_type}")))?
+        .clone();
+
+      let mut results = Vec::with_capacity(entries.len());
+      for (full_key, props) in entries {
+        let node_id = crate::graph::nodes::create_node(
+          handle,
+          crate::graph::nodes::NodeOpts::new().with_key(full_key),
+        )
+        .map_err(|e| Error::from_reason(format!("Failed to create node: {e}")))?;
+
+        for (prop_name, value) in props {
+          let prop_key_id = if let Some(&id) = node_def.prop_key_ids.get(prop_name) {
+            id
+          } else {
+            handle.db.get_or_create_propkey(prop_name)
+          };
+          crate::graph::nodes::set_node_prop(handle, node_id, prop_key_id, value.clone())
+            .map_err(|e| Error::from_reason(format!("Failed to set prop: {e}")))?;
+        }
+
+        let props = if load_props {
+          Some(props.clone())
+        } else {
+          None
+        };
+        results.push((node_id, props));
+      }
+
+      Ok(results)
+    });
+  }
+
+  let mut guard = ray.write();
+  let ray = guard
+    .as_mut()
+    .ok_or_else(|| Error::from_reason("Kite is closed"))?;
+  let node_def = ray
+    .node_def(node_type)
+    .ok_or_else(|| Error::from_reason(format!("Unknown node type: {node_type}")))?
+    .clone();
+
+  let mut handle =
+    begin_tx(ray.raw()).map_err(|e| Error::from_reason(format!("Failed to begin tx: {e}")))?;
+
+  let mut results = Vec::with_capacity(entries.len());
+  for (full_key, props) in entries {
+    let node_id = match crate::graph::nodes::create_node(
+      &mut handle,
+      crate::graph::nodes::NodeOpts::new().with_key(full_key),
+    ) {
+      Ok(id) => id,
+      Err(e) => {
+        let _ = rollback(&mut handle);
+        return Err(Error::from_reason(format!("Failed to create node: {e}")));
+      }
+    };
+
+    for (prop_name, value) in props {
+      let prop_key_id = if let Some(&id) = node_def.prop_key_ids.get(prop_name) {
+        id
+      } else {
+        handle.db.get_or_create_propkey(prop_name)
+      };
+      if let Err(e) =
+        crate::graph::nodes::set_node_prop(&mut handle, node_id, prop_key_id, value.clone())
+      {
+        let _ = rollback(&mut handle);
+        return Err(Error::from_reason(format!("Failed to set prop: {e}")));
+      }
+    }
+
+    let props = if load_props {
+      Some(props.clone())
+    } else {
+      None
+    };
+    results.push((node_id, props));
+  }
+
+  if let Err(e) = commit(&mut handle) {
+    return Err(Error::from_reason(format!("Failed to commit: {e}")));
+  }
+
+  Ok(results)
 }
 
 // =============================================================================
@@ -3405,6 +3609,78 @@ impl KiteTraversal {
       }
 
       out.push(item.node_id as i64);
+    }
+
+    Ok(out)
+  }
+
+  #[napi(js_name = "nodesWithProps")]
+  pub fn nodes_with_props(&self, env: Env) -> Result<Vec<Object>> {
+    let selected_props = self.builder.selected_properties().map(|props| {
+      props
+        .iter()
+        .cloned()
+        .collect::<std::collections::HashSet<String>>()
+    });
+
+    let items = {
+      let ray = self.ray.clone();
+      let guard = ray.read();
+      let ray = guard
+        .as_ref()
+        .ok_or_else(|| Error::from_reason("Kite is closed"))?;
+
+      let results: Vec<_> = self
+        .builder
+        .clone()
+        .execute(|node_id, dir, etype| get_neighbors(ray.raw(), node_id, dir, etype))
+        .collect();
+
+      let mut items = Vec::with_capacity(results.len());
+      for result in results {
+        let edge = result.edge.map(|edge| Edge {
+          src: edge.src,
+          etype: edge.etype,
+          dst: edge.dst,
+        });
+        let edge_info = edge.as_ref().map(|edge| edge_filter_data(ray, edge));
+        let node = node_filter_data(ray, result.node_id, selected_props.as_ref());
+        items.push(TraversalFilterItem {
+          node_id: result.node_id,
+          edge,
+          node,
+          edge_info,
+        });
+      }
+      items
+    };
+
+    let mut out = Vec::new();
+    for item in items {
+      if let Some(ref edge_filter) = self.where_edge {
+        if let Some(ref edge_info) = item.edge_info {
+          let arg = edge_filter_arg(&env, edge_info)?;
+          if !call_filter(&env, edge_filter, arg)? {
+            continue;
+          }
+        }
+      }
+
+      if let Some(ref node_filter) = self.where_node {
+        let arg = node_filter_arg(&env, &item.node)?;
+        if !call_filter(&env, node_filter, arg)? {
+          continue;
+        }
+      }
+
+      let node = item.node;
+      out.push(node_to_js(
+        &env,
+        node.id,
+        Some(node.key),
+        &node.node_type,
+        node.props,
+      )?);
     }
 
     Ok(out)

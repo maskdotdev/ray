@@ -122,6 +122,7 @@ type InsertEntry = { key: unknown; props?: Record<string, unknown> | null } & Re
 type ArrayWithToArray<T, U = T> = T[] & { toArray(): U[] }
 type NodeObject = NodeRef & Record<string, unknown>
 type NodeIdLike = number | { id: number }
+type NodePropsSelection = Array<string>
 type InsertExecutorSingle<N extends NodeSpec> = Omit<KiteInsertExecutorSingle, 'returning'> & {
   returning(): InferNode<N>
 }
@@ -313,11 +314,23 @@ export class KiteTraversal extends NativeKiteTraversal {
     if (!db) {
       return withToArray(ids)
     }
-    return withToArray(ids, () =>
-      ids
+    const loadNodes = () => {
+      const traversal = this as unknown as { nodesWithProps?: () => Array<NodeObject> }
+      if (typeof traversal.nodesWithProps === 'function') {
+        return traversal.nodesWithProps()
+      }
+      return ids
         .map((id) => db.getById(id))
-        .filter((node): node is NodeObject => Boolean(node)),
-    )
+        .filter((node): node is NodeObject => Boolean(node))
+    }
+    return withToArray(ids, loadNodes)
+  }
+
+  nodesWithProps(): Array<NodeObject> {
+    const native = NativeKiteTraversal.prototype as unknown as {
+      nodesWithProps: (this: KiteTraversal) => Array<NodeObject>
+    }
+    return native.nodesWithProps.call(this)
   }
 
   edges(): Array<JsFullEdge> {
@@ -325,6 +338,12 @@ export class KiteTraversal extends NativeKiteTraversal {
   }
 
   toArray(): ArrayWithToArray<NodeObject> {
+    const traversal = this as unknown as { nodesWithProps?: () => Array<NodeObject> }
+    if (typeof traversal.nodesWithProps === 'function') {
+      const nodes = traversal.nodesWithProps()
+      return withToArray(nodes)
+    }
+
     const ids = super.nodes()
     const db = (this as { __db?: Kite }).__db
     if (!db) {
@@ -586,12 +605,25 @@ export class Kite extends NativeKite {
     }
   }
 
-  get(nodeType: NodeLike, key: unknown): object | null {
-    return super.get(nodeName(nodeType), key)
+  get(nodeType: NodeLike, key: unknown, props?: NodePropsSelection): object | null {
+    return super.get(nodeName(nodeType), key, props)
   }
 
   getRef(nodeType: NodeLike, key: unknown): object | null {
     return super.getRef(nodeName(nodeType), key)
+  }
+
+  getId(nodeType: NodeLike, key: unknown): number | null {
+    return super.getId(nodeName(nodeType), key)
+  }
+
+  getById(nodeId: number, props?: NodePropsSelection): object | null {
+    return super.getById(nodeId, props)
+  }
+
+  getByIds(nodeIds: Array<NodeIdLike>, props?: NodePropsSelection): Array<object> {
+    const ids = nodeIds.map((id) => nodeId(id))
+    return super.getByIds(ids, props)
   }
 
   deleteByKey(nodeType: NodeLike, key: unknown): boolean {
@@ -727,8 +759,15 @@ export class Kite extends NativeKite {
 }
 
 export interface Kite {
-  get<N extends NodeSpec>(nodeType: N, key: InferNodeInsert<N>['key']): InferNode<N> | null
+  get<N extends NodeSpec>(
+    nodeType: N,
+    key: InferNodeInsert<N>['key'],
+    props?: Array<keyof InferNode<N>> | Array<string>,
+  ): InferNode<N> | null
   getRef<N extends NodeSpec>(nodeType: N, key: InferNodeInsert<N>['key']): NodeRef<N> | null
+  getId<N extends NodeSpec>(nodeType: N, key: InferNodeInsert<N>['key']): number | null
+  getById(nodeId: number, props?: Array<string>): NodeObject | null
+  getByIds(nodeIds: Array<NodeIdLike>, props?: Array<string>): Array<NodeObject>
   delete<N extends NodeSpec>(nodeType: N, key: InferNodeInsert<N>['key']): boolean
   insert<N extends NodeSpec>(nodeType: N): KiteInsertBuilder<N>
   upsert<N extends NodeSpec>(nodeType: N): KiteUpsertBuilder<N>
@@ -779,6 +818,7 @@ export interface KiteTraversal {
   take(limit: number): KiteTraversal
   select(props: Array<string>): KiteTraversal
   nodes(): ArrayWithToArray<number, NodeObject>
+  nodesWithProps(): Array<NodeObject>
   edges(): ArrayWithToArray<JsFullEdge>
   toArray(): ArrayWithToArray<NodeObject>
   count(): number
