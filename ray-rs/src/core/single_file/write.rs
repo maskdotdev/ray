@@ -138,6 +138,36 @@ impl SingleFileDB {
     Ok(())
   }
 
+  /// Upsert an edge (create if missing, otherwise update props)
+  ///
+  /// Returns a flag indicating whether the edge was created.
+  pub fn upsert_edge_with_props<I>(
+    &self,
+    src: NodeId,
+    etype: ETypeId,
+    dst: NodeId,
+    props: I,
+  ) -> Result<bool>
+  where
+    I: IntoIterator<Item = (PropKeyId, Option<PropValue>)>,
+  {
+    let created = if self.edge_exists(src, etype, dst) {
+      false
+    } else {
+      self.add_edge(src, etype, dst)?;
+      true
+    };
+
+    for (key_id, value_opt) in props {
+      match value_opt {
+        Some(value) => self.set_edge_prop(src, etype, dst, key_id, value)?,
+        None => self.delete_edge_prop(src, etype, dst, key_id)?,
+      }
+    }
+
+    Ok(created)
+  }
+
   // ========================================================================
   // Node Property Operations
   // ========================================================================

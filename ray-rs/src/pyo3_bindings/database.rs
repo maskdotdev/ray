@@ -473,6 +473,25 @@ impl PyDatabase {
     )
   }
 
+  fn upsert_edge(
+    &self,
+    src: i64,
+    etype: u32,
+    dst: i64,
+    props: Vec<(u32, Option<PropValue>)>,
+  ) -> PyResult<bool> {
+    let core_props: Vec<(PropKeyId, Option<crate::types::PropValue>)> = props
+      .into_iter()
+      .map(|(k, v)| (k as PropKeyId, v.map(|value| value.into())))
+      .collect();
+
+    dispatch_tx!(
+      self,
+      |db| edges::upsert_edge_single(db, src as NodeId, etype as ETypeId, dst as NodeId, &core_props),
+      |h| edges::upsert_edge_graph(h, src as NodeId, etype as ETypeId, dst as NodeId, &core_props)
+    )
+  }
+
   fn edge_exists(&self, src: i64, etype: u32, dst: i64) -> PyResult<bool> {
     dispatch_ok!(
       self,

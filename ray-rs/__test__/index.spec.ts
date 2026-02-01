@@ -149,6 +149,44 @@ test('db-backed upsertNodeById', (t) => {
   db.close()
 })
 
+test('db-backed upsertEdge', (t) => {
+  const db = Database.open(makeDbPath())
+
+  db.begin()
+  const a = db.createNode('a')
+  const b = db.createNode('b')
+  const knows = db.getOrCreateEtype('knows')
+  const weightKey = db.getOrCreatePropkey('weight')
+  const created = db.upsertEdge(a, knows, b, [
+    {
+      keyId: weightKey,
+      value: { propType: PropType.Int, intValue: 10 },
+    },
+  ])
+  db.commit()
+
+  t.true(created)
+  const props = db.getEdgeProps(a, knows, b) ?? []
+  const propsByKey = new Map(props.map((p) => [p.keyId, p.value]))
+  t.is(propsByKey.get(weightKey)?.intValue, 10)
+
+  db.begin()
+  const updated = db.upsertEdge(a, knows, b, [
+    {
+      keyId: weightKey,
+      value: { propType: PropType.Null },
+    },
+  ])
+  db.commit()
+
+  t.false(updated)
+  const updatedProps = db.getEdgeProps(a, knows, b) ?? []
+  const updatedByKey = new Map(updatedProps.map((p) => [p.keyId, p.value]))
+  t.true(!updatedByKey.has(weightKey))
+
+  db.close()
+})
+
 test('db-backed pathfinding APIs', (t) => {
   const db = Database.open(makeDbPath())
   db.begin()

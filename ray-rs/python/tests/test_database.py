@@ -108,6 +108,39 @@ class TestDatabase:
                 
                 db.commit()
 
+    def test_upsert_edge(self):
+        """Test edge upsert operations."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "test.kitedb")
+            with Database(path) as db:
+                db.begin()
+
+                alice = db.create_node("user:alice")
+                bob = db.create_node("user:bob")
+                knows = db.get_or_create_etype("knows")
+                since_key = db.get_or_create_propkey("since")
+
+                created = db.upsert_edge(
+                    alice,
+                    knows,
+                    bob,
+                    [(since_key, PropValue.int(2020))],
+                )
+                assert created
+                db.commit()
+
+                db.begin()
+                updated = db.upsert_edge(
+                    alice,
+                    knows,
+                    bob,
+                    [(since_key, None)],
+                )
+                assert not updated
+                db.commit()
+
+                assert db.get_edge_prop(alice, knows, bob, since_key) is None
+
     def test_transaction_rollback(self):
         """Test transaction rollback."""
         with tempfile.TemporaryDirectory() as tmpdir:

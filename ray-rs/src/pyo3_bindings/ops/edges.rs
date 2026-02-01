@@ -7,13 +7,14 @@ use crate::core::single_file::SingleFileDB as RustSingleFileDB;
 use crate::graph::db::GraphDB as RustGraphDB;
 use crate::graph::edges::{
   add_edge as graph_add_edge, delete_edge as graph_delete_edge, edge_exists_db,
+  upsert_edge_with_props as graph_upsert_edge_with_props,
 };
 use crate::graph::iterators::{
   count_edges as graph_count_edges, list_edges as graph_list_edges, list_in_edges, list_out_edges,
   ListEdgesOptions,
 };
 use crate::graph::tx::TxHandle as GraphTxHandle;
-use crate::types::{ETypeId, NodeId};
+use crate::types::{ETypeId, NodeId, PropKeyId, PropValue};
 
 use crate::pyo3_bindings::types::{Edge, FullEdge};
 
@@ -76,6 +77,18 @@ pub fn delete_edge_single(
 ) -> PyResult<()> {
   db.delete_edge(src, etype, dst)
     .map_err(|e| PyRuntimeError::new_err(format!("Failed to delete edge: {e}")))
+}
+
+/// Upsert edge on single-file database
+pub fn upsert_edge_single(
+  db: &RustSingleFileDB,
+  src: NodeId,
+  etype: ETypeId,
+  dst: NodeId,
+  props: &[(PropKeyId, Option<PropValue>)],
+) -> PyResult<bool> {
+  db.upsert_edge_with_props(src, etype, dst, props.iter().cloned())
+    .map_err(|e| PyRuntimeError::new_err(format!("Failed to upsert edge: {e}")))
 }
 
 /// Check edge exists on single-file database
@@ -163,6 +176,18 @@ pub fn delete_edge_graph(
   graph_delete_edge(handle, src, etype, dst)
     .map_err(|e| PyRuntimeError::new_err(format!("Failed to delete edge: {e}")))?;
   Ok(())
+}
+
+/// Upsert edge on graph database (requires transaction handle)
+pub fn upsert_edge_graph(
+  handle: &mut GraphTxHandle,
+  src: NodeId,
+  etype: ETypeId,
+  dst: NodeId,
+  props: &[(PropKeyId, Option<PropValue>)],
+) -> PyResult<bool> {
+  graph_upsert_edge_with_props(handle, src, etype, dst, props.iter().cloned())
+    .map_err(|e| PyRuntimeError::new_err(format!("Failed to upsert edge: {e}")))
 }
 
 /// Check edge exists on graph database

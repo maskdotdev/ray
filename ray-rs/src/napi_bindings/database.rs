@@ -31,7 +31,7 @@ use crate::graph::definitions::define_label as graph_define_label;
 use crate::graph::edges::{
   add_edge as graph_add_edge, del_edge_prop as graph_del_edge_prop,
   delete_edge as graph_delete_edge, edge_exists_db, get_edge_prop_db, get_edge_props_db,
-  set_edge_prop as graph_set_edge_prop,
+  set_edge_prop as graph_set_edge_prop, upsert_edge_with_props,
 };
 use crate::graph::iterators::{
   count_edges as graph_count_edges, count_nodes as graph_count_nodes,
@@ -1279,6 +1279,67 @@ impl Database {
           Ok(())
         })
       }
+      None => Err(Error::from_reason("Database is closed")),
+    }
+  }
+
+  /// Upsert an edge (create if missing, update props)
+  ///
+  /// Returns true if the edge was created.
+  #[napi]
+  pub fn upsert_edge(
+    &self,
+    src: i64,
+    etype: u32,
+    dst: i64,
+    props: Vec<JsNodeProp>,
+  ) -> Result<bool> {
+    match self.inner.as_ref() {
+      Some(DatabaseInner::SingleFile(db)) => {
+        let created = if db.edge_exists(src as NodeId, etype as ETypeId, dst as NodeId) {
+          false
+        } else {
+          db.add_edge(src as NodeId, etype as ETypeId, dst as NodeId)
+            .map_err(|e| Error::from_reason(format!("Failed to add edge: {e}")))?;
+          true
+        };
+
+        for prop in props {
+          let key_id = prop.key_id as PropKeyId;
+          if matches!(prop.value.prop_type, PropType::Null) {
+            db.delete_edge_prop(src as NodeId, etype as ETypeId, dst as NodeId, key_id)
+              .map_err(|e| Error::from_reason(format!("Failed to delete property: {e}")))?;
+          } else {
+            db
+              .set_edge_prop(src as NodeId, etype as ETypeId, dst as NodeId, key_id, prop.value.into())
+              .map_err(|e| Error::from_reason(format!("Failed to set property: {e}")))?;
+          }
+        }
+
+        Ok(created)
+      }
+      Some(DatabaseInner::Graph(_)) => self.with_graph_tx(|handle| {
+        let updates: Vec<(PropKeyId, Option<PropValue>)> = props
+          .into_iter()
+          .map(|prop| {
+            let value_opt = match prop.value.prop_type {
+              PropType::Null => None,
+              _ => Some(prop.value.into()),
+            };
+            (prop.key_id as PropKeyId, value_opt)
+          })
+          .collect();
+
+        let created = upsert_edge_with_props(
+          handle,
+          src as NodeId,
+          etype as ETypeId,
+          dst as NodeId,
+          updates,
+        )
+        .map_err(|e| Error::from_reason(format!("Failed to upsert edge: {e}")))?;
+        Ok(created)
+      }),
       None => Err(Error::from_reason("Database is closed")),
     }
   }

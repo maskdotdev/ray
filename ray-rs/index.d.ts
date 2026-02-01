@@ -42,6 +42,12 @@ export declare class Database {
   addEdge(src: number, etype: number, dst: number): void
   /** Add an edge by type name */
   addEdgeByName(src: number, etypeName: string, dst: number): void
+  /**
+   * Upsert an edge (create if missing, update props)
+   *
+   * Returns true if the edge was created.
+   */
+  upsertEdge(src: number, etype: number, dst: number, props: Array<JsNodeProp>): boolean
   /** Delete an edge */
   deleteEdge(src: number, etype: number, dst: number): void
   /** Check if an edge exists */
