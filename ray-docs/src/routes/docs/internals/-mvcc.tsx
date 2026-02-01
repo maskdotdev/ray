@@ -404,9 +404,10 @@ export function MVCCPage() {
 try {
   await db.transaction(async () => {
     const alice = await db.get(user, 'alice');
-    await db.update(user)
-      .set({ age: alice.age + 1 })
-      .where({ key: 'alice' });
+    await db
+      .update(user, 'alice')
+      .setAll({ age: alice.age + 1 })
+      .execute();
   });
 } catch (e) {
   if (e instanceof ConflictError) {
@@ -439,7 +440,7 @@ try {
 				code={`// Explicit transaction
 await db.transaction(async (ctx) => {
   const alice = await ctx.get(user, 'alice');
-  await ctx.update(user).set({ age: alice.age + 1 }).where({ key: 'alice' });
+  await ctx.update(user, 'alice').setAll({ age: alice.age + 1 }).execute();
   // Commits on successful return
   // Rolls back on exception
 });
@@ -447,7 +448,7 @@ await db.transaction(async (ctx) => {
 // Batch operations (single transaction)
 await db.batch([
   db.insert(user).values({ key: 'bob', name: 'Bob' }),
-  db.link(user, follows, user).from({ key: 'alice' }).to({ key: 'bob' }),
+  db.insert(user).values({ key: 'carol', name: 'Carol' }),
 ]);
 
 // Without explicit transaction: each operation is auto-committed`}

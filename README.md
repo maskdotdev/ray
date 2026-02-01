@@ -409,7 +409,7 @@ const userRef = await db.getRef(user, 'alice');
 
 // Traverse the graph
 const friends = await db.from(alice).out(knows).toArray();
-const friendCount = await db.from(alice).out(knows).count();
+const friendCount = friends.length;
 
 // Multi-hop traversal
 const friendsOfFriends = await db
@@ -431,8 +431,8 @@ const namesOnly = await db
   .select(['name'])
   .toArray();
 
-// Raw edge iteration (zero-copy)
-for (const edge of db.from(alice).out(knows).rawEdges()) {
+// Edge iteration (IDs only)
+for (const edge of db.from(alice).out(knows).edges()) {
   console.log(edge.src, '->', edge.dst);
 }
 
@@ -443,38 +443,29 @@ await db.close();
 ### Listing and Counting
 
 ```typescript
-// List all nodes of a type (lazy async generator)
-for await (const u of db.all(user)) {
+// List all nodes of a type
+const users = db.all(user);
+for (const u of users) {
   console.log(u.name, u.email);
 }
 
-// Collect to array
-const allUsers: typeof user[] = [];
-for await (const u of db.all(user)) {
-  allUsers.push(u);
+// Count nodes
+const totalNodes = db.countNodes();
+const userCount = db.countNodes(user);
+
+// List all edges (IDs only)
+for (const e of db.allEdges()) {
+  console.log(`${e.src} -> ${e.dst}`);
 }
 
-// Count all nodes in database (O(1) - fast)
-const totalNodes = await db.count();
-
-// Count nodes of specific type (requires iteration)
-const userCount = await db.count(user);
-
-// List all edges (lazy async generator)
-for await (const e of db.allEdges()) {
-  console.log(`${e.src.key} -> ${e.dst.key}`);
+// List edges of specific type
+for (const e of db.allEdges(knows)) {
+  console.log(`${e.src} knows ${e.dst}`);
 }
 
-// List edges of specific type with properties
-for await (const e of db.allEdges(knows)) {
-  console.log(`${e.src.key} knows ${e.dst.key} since ${e.props.since}`);
-}
-
-// Count all edges (O(1) - fast)
-const totalEdges = await db.countEdges();
-
-// Count edges of specific type
-const knowsCount = await db.countEdges(knows);
+// Count edges
+const totalEdges = db.countEdges();
+const knowsCount = db.countEdges(knows);
 ```
 
 ### Performance Characteristics
@@ -491,9 +482,9 @@ The fluent API is optimized for minimal overhead compared to raw graph operation
 **Performance tips:**
 
 - Use `getRef()` instead of `get()` when you only need the node reference (not properties)
-- Use `.count()` instead of `.toArray().length` for counting (optimized fast path)
+- Use `.count()` instead of `.toArray().length` when you only need counts
 - Use `.select(['prop1', 'prop2'])` to load only needed properties
-- Use `.rawEdges()` for zero-copy edge iteration when you don't need node properties
+- Use `.edges()` for edge ID iteration when you don't need node properties
 
 ### Running Benchmarks
 

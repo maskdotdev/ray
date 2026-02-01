@@ -448,7 +448,7 @@ function CheckpointTriggers() {
 			<div class="mb-4 p-3 rounded-lg bg-slate-800/50 border border-slate-700">
 				<p class="text-xs text-slate-500 mb-1">Manual checkpoint:</p>
 				<code class="text-sm text-cyan-400 font-mono">
-					await db.checkpoint();
+					await db.optimize();
 				</code>
 			</div>
 

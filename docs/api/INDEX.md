@@ -143,15 +143,15 @@ High-level overview of the entire Kite project.
 
 ### Schema Definition
 - Property types: `string()`, `int()`, `float()`, `bool()` (aliases: `prop.string()`, `prop.int()`, ...)
-- Optional: `optional(X())` (or `optional(prop.X())`) or `.optional()`
+- Optional: `optional(X())` (or `optional(prop.X())`)
 - Nodes: `defineNode(name, { key, props })`
 - Edges: `defineEdge(name, props?)`
 
 ### CRUD Operations
 - Insert: `db.insert(nodeType).values({...}).returning()`
 - Get: `db.get(nodeType, key)`
-- Update: `db.update(nodeType).set({...}).where({...}).execute()`
-- Delete: `db.delete(nodeType).where({...}).execute()`
+- Update: `db.update(nodeType, key).setAll({...}).execute()`
+- Delete: `db.delete(nodeType, key)`
 
 ### Relationships
 - Create: `db.link(src, edgeType, dst, props?)`

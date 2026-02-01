@@ -114,7 +114,7 @@ function DocPageContent(props: { slug: string }) {
 
         <h2 id="quick-example">Quick Example</h2>
         <CodeBlock
-          code={`import { kite, defineNode, defineEdge, string, vector } from '@kitedb/core';
+          code={`import { kite, defineNode, defineEdge, string, vector, createVectorIndex } from '@kitedb/core';
 
 const user = defineNode('user', {
   key: (id: string) => \`user:\${id}\`,
@@ -124,10 +124,7 @@ const user = defineNode('user', {
   },
 });
 
-const follows = defineEdge('follows', {
-  from: user,
-  to: user,
-});
+const follows = defineEdge('follows');
 
 const db = await kite('./social.kitedb', {
   nodes: [user],
@@ -135,16 +132,21 @@ const db = await kite('./social.kitedb', {
 });
 
 // Create users
-await db.node(user).createMany([
-  { id: 'alice', name: 'Alice', embedding: [...] },
-  { id: 'bob', name: 'Bob', embedding: [...] },
-]);
+const [alice, bob] = await db
+  .insert(user)
+  .valuesMany([
+    { key: 'alice', name: 'Alice', embedding: [...] },
+    { key: 'bob', name: 'Bob', embedding: [...] },
+  ])
+  .returning();
 
-// Find similar users
-const similar = await db.node(user)
-  .vector('embedding')
-  .similar(queryEmbedding, { limit: 5 })
-  .all();`}
+// Vector search (standalone index)
+const index = createVectorIndex({ dimensions: 1536 });
+index.set(alice.id, alice.embedding);
+index.set(bob.id, bob.embedding);
+index.buildIndex();
+
+const similar = index.search(queryEmbedding, { k: 5 });`}
           language="typescript"
         />
 

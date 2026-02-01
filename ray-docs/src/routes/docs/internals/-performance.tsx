@@ -391,19 +391,21 @@ Speedup: 500x for bulk operations`}
 
 			<h3>Limit Traversal Depth</h3>
 			<CodeBlock
-				code={`// Dangerous: Unbounded traversal
-const all = await db.from(user)
-  .traverse().out(follows)
-  .nodes().toArray();
-// Could return millions of nodes
+				code={`// Potentially expensive: deep traversal
+const alice = await db.get(user, 'alice');
+const all = db
+  .from(alice)
+  .traverse(follows, { direction: 'out', maxDepth: 10 })
+  .nodes()
+  .toArray();
 
-// Safe: Bounded traversal
-const friends = await db.from(user)
-  .traverse().out(follows)
-  .depth({ max: 2 })
-  .limit(100)
-  .nodes().toArray();
-// Returns at most 100 nodes, max 2 hops`}
+// Safer: bounded traversal + limit
+const friends = db
+  .from(alice)
+  .traverse(follows, { direction: 'out', maxDepth: 2 })
+  .take(100)
+  .nodes()
+  .toArray();`}
 				language="typescript"
 			/>
 
@@ -412,10 +414,8 @@ const friends = await db.from(user)
 				code={`// Fast: Key lookup (O(1) hash index)
 const alice = await db.get(user, 'alice');
 
-// Slower: Property scan (O(n) nodes)
-const alice = await db.from(user)
-  .where({ name: 'Alice' })
-  .first();
+// Slower: Property scan (O(n) nodes, done in JS)
+const aliceByName = db.all(user).find((u) => u.name === 'Alice');
 
 Design keys to match your access patterns.`}
 				language="typescript"
@@ -423,17 +423,12 @@ Design keys to match your access patterns.`}
 
 			<h3>Checkpoint Timing</h3>
 			<CodeBlock
-				code={`// Default: Automatic checkpoint when WAL fills
-// Good for most workloads
-
-// For write-heavy bursts: Manual checkpoint after
+				code={`// For write-heavy bursts: Compact snapshots after large ingests
 await importLargeDataset();
-await db.checkpoint();  // Consolidate before queries
+await db.optimize();
 
-// For read-heavy: Larger WAL, less frequent checkpoints
-const db = await kite('./mydb', {
-  walSize: 256 * 1024 * 1024,  // 256MB WAL
-});`}
+// Inspect storage stats
+const stats = await db.stats();`}
 				language="typescript"
 			/>
 

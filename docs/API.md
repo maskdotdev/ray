@@ -319,10 +319,10 @@ const alice = await db
 const retrieved = await db.get(user, "alice");
 
 // Update
-await db.update(alice).set({ name: "Alice Updated" }).execute();
+await db.update(user, "alice").setAll({ name: "Alice Updated" }).execute();
 
 // Delete
-const success = await db.delete(alice);
+const success = db.delete(user, "alice");
 ```
 
 ### Relationships
@@ -375,16 +375,16 @@ const user = node("user", {
 
 // Inferred insert type
 type InsertUser = InferNodeInsert<typeof user>;
-// { key: string; name: string; age?: bigint; }
+// { key: string; name: string; age?: number; }
 
 // Inferred return type
 type User = InferNode<typeof user>;
-// { id: bigint; key: string; name: string; age?: bigint; }
+// { id: number; key: string; name: string; age?: number; }
 
 // Inferred edge props
 const knows = edge("knows", { since: int("since") });
 type KnowsProps = InferEdgeProps<typeof knows>;
-// { since: bigint; }
+// { since: number; }
 ```
 
 ## Property Types
@@ -394,7 +394,7 @@ Property builders are available as top-level exports or under `prop` (e.g. `stri
 | Type            | TypeScript | Storage | Notes            |
 | --------------- | ---------- | ------- | ---------------- |
 | `string()` | `string`   | UTF-8   | Interned strings |
-| `int()`    | `bigint`   | i64     | 64-bit signed    |
+| `int()`    | `number`   | i64     | 64-bit signed    |
 | `float()`  | `number`   | f64     | IEEE 754         |
 | `bool()`   | `boolean`  | bool    | True/false       |
 

@@ -24,7 +24,7 @@ The schema layer defines the structure of your graph:
 **Property Types:**
 ```typescript
 string('name')     // UTF-8 strings
-int('age')         // 64-bit integers (bigint)
+int('age')         // 64-bit integers (number)
 float('score')     // 64-bit floats
 bool('active')     // Booleans
 ```
@@ -62,10 +62,10 @@ The schema layer uses advanced TypeScript generics to automatically infer:
 
 ```typescript
 type InsertUser = InferNodeInsert<typeof user>;
-// Result: { key: string; name: string; email: string; age?: bigint; }
+// Result: { key: string; name: string; email: string; age?: number; }
 
 type User = InferNode<typeof user>;
-// Result: { id: bigint; key: string; name: string; email: string; age?: bigint; }
+// Result: { id: number; key: string; name: string; email: string; age?: number; }
 ```
 
 ### 2. Database Context (`kite.ts`)
@@ -121,20 +121,18 @@ Direct methods on Kite (no builder needed)
 
 **Design Notes:**
 
-- Builders are immutable and return new instances
-- The `_toBatchOp()` method allows operations to be batched
-- Batch operations receive a `TxHandle` for transaction context
-- Where conditions support both `id` and `key` lookups
+- Builders are chainable and return new instances
+- Batch operations execute a list of builder operations synchronously
 
 ### 4. Traversal (`traversal.ts`)
 
-Traversal uses a **lazy async iterable** pattern:
+Traversal returns arrays (with `.toArray()` helper methods):
 
 **Builder Chaining:**
 ```
 from(node) → out(edge) → whereNode() → take(n) → nodes()
                                                  ↓
-                                      AsyncTraversalResult
+                                           Array results
 ```
 
 **Step Types:**
@@ -149,16 +147,15 @@ from(node) → out(edge) → whereNode() → take(n) → nodes()
 - `take(limit)` - Limit results
 
 **Results:**
-- `nodes()` - Return nodes as async iterable
-- `edges()` - Return edges as async iterable
-- `first()` - Get first result
+- `nodes()` - Return nodes as an array (with `.toArray()` helper)
+- `edges()` - Return edges as an array (IDs only)
 - `count()` - Count results
-- `toArray()` - Collect all results
+- `toArray()` - Collect node results
 
 **Implementation Details:**
 
 - Uses BFS (breadth-first search) for variable-depth traversal
-- Generators for memory efficiency
+- Arrays for in-process traversal results
 - Optional deduplication with `unique` flag
 - Supports early termination with limit/take
 
@@ -205,7 +202,7 @@ createTraversalBuilder() sets up execution state
 Kite Type           TypeScript Type    Storage        Tag
 ─────────────────────────────────────────────────────────
 string()      string             String         4
-int()         bigint             i64            2
+int()         number             i64            2
 float()       number             f64            3
 bool()        boolean            bool           1
 ```
@@ -215,7 +212,7 @@ When inserting:
 await db.insert(user).values({
   key: 'alice',
   name: 'Alice',        // string → stored as STRING
-  age: 30,              // number → converted to bigint → stored as I64
+  age: 30,              // number (use bigint for lossless i64)
   score: 95.5,          // number → stored as F64
   active: true,         // boolean → stored as BOOL
 });
@@ -225,7 +222,7 @@ When reading:
 ```typescript
 const alice = await db.get(user, 'alice');
 typeof alice.name;      // 'string'
-typeof alice.age;       // 'bigint'
+typeof alice.age;       // 'number'
 typeof alice.score;     // 'number'
 typeof alice.active;    // 'boolean'
 ```

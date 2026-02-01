@@ -142,32 +142,21 @@ if (!alice) {
 ### Update Node
 
 ```typescript
-// By reference
-const updated = await db
-  .update(alice)
-  .set({ name: 'Alice Updated', age: 31 })
+// By key
+await db
+  .update(user, 'alice')
+  .setAll({ name: 'Alice Updated', age: 31 })
   .execute();
 
-// Or by key
-await db
-  .update(user)
-  .set({ email: 'newemail@example.com' })
-  .where({ key: 'user:alice' })
-  .execute();
+// Single-field update
+db.update(user, 'alice').set('email', 'newemail@example.com').execute();
 ```
 
 ### Delete Node
 
 ```typescript
-// By reference
-const deleted = await db.delete(alice);
+const deleted = db.delete(user, 'alice');
 // Returns: true if deleted, false if not found
-
-// Or by key
-const deleted = await db
-  .delete(user)
-  .where({ key: 'user:alice' })
-  .execute();
 ```
 
 ### Create Relationships (Edges)
@@ -246,14 +235,9 @@ const knowsEdges = await db
   .edges()
   .toArray();
 
-// Lazy iteration
-for await (const friend of db.from(alice).out(knows).nodes()) {
-  console.log(friend.name);
-}
-
 // First/count
-const firstFriend = await db.from(alice).out(knows).first();
-const friendCount = await db.from(alice).out(knows).count();
+const firstFriend = db.from(alice).out(knows).toArray()[0];
+const friendCount = db.from(alice).out(knows).count();
 ```
 
 ### Transactions
@@ -303,7 +287,7 @@ const [result1, result2, result3] = await db.batch([
 Property builders are available as top-level exports or under `prop`:
 
 - `string()` / `prop.string()` → `string`
-- `int()` / `prop.int()` → `bigint` (64-bit signed)
+- `int()` / `prop.int()` → `number` (stored as 64-bit signed)
 - `float()` / `prop.float()` → `number` (f64)
 - `bool()` / `prop.bool()` → `boolean`
 
@@ -311,8 +295,6 @@ Optional properties:
 
 ```typescript
 const age = optional(int('age'));
-// or
-const age = int('age').optional();
 ```
 
 ### Keys
@@ -488,16 +470,16 @@ const user = defineNode('user', {
 
 // Insert type (what you pass to .values())
 type InsertUser = InferNodeInsert<typeof user>;
-// { key: string; name: string; age?: bigint; }
+// { key: string; name: string; age?: number; }
 
 // Return type (what you get back)
 type User = InferNode<typeof user>;
-// { id: bigint; key: string; name: string; age?: bigint; }
+// { id: number; key: string; name: string; age?: number; }
 
 // Edge props
 const knows = defineEdge('knows', { since: int('since') });
 type KnowsProps = InferEdgeProps<typeof knows>;
-// { since: bigint; }
+// { since: number; }
 ```
 
 ## Troubleshooting
@@ -506,10 +488,10 @@ type KnowsProps = InferEdgeProps<typeof knows>;
 A: Make sure you passed all edge definitions to `kite()` options
 
 **Q: Node not found in updates**
-A: WHERE clause throws if node doesn't exist. Use `get()` first if unsure
+A: Updates by key throw if the node doesn't exist. Use `get()` first if unsure
 
 **Q: Type errors with properties**
-A: Properties are stored as `bigint` (int), `number` (float), `string`, or `boolean`. No `Date` objects
+A: Properties are stored as `number` (int/float), `string`, or `boolean`. No `Date` objects
 
 **Q: Traversal seems slow**
 A: Call `optimize()` to compact snapshots. Check `stats()` to see if you need compaction

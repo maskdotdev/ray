@@ -286,7 +286,7 @@ const doc = db.insert('document')
 db.link(doc.id, 'discusses', topic.id, { relevance: 0.95 });
 
 // Update properties
-db.updateById(doc.id)
+db.update('document', 'doc-1')
   .set('title', 'Updated Title')
   .execute();`,
 		rust: `// Insert with returning

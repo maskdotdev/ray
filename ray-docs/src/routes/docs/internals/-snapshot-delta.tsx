@@ -489,7 +489,7 @@ function CheckpointProcess() {
 					<div class="flex items-center gap-2">
 						<span class="w-2 h-2 rounded-full bg-violet-400" />
 						<span class="text-slate-400">
-							Manual: <code class="text-violet-400">db.checkpoint()</code>
+							Manual: <code class="text-violet-400">db.optimize()</code>
 						</span>
 					</div>
 				</div>

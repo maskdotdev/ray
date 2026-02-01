@@ -41,7 +41,7 @@ const company = node("company", {
 // Define edge types
 const knows = edge("knows", {
   since: int("since"),
-  strength: float("strength").optional(),
+  strength: optional(float("strength")),
 });
 
 const worksAt = edge("worksAt", {
@@ -60,10 +60,10 @@ The API uses advanced TypeScript inference to automatically derive types:
 
 ```typescript
 type InsertUser = InferNodeInsert<typeof user>;
-// Result: { key: string; name: string; email: string; age?: bigint; }
+// Result: { key: string; name: string; email: string; age?: number; }
 
 type ReturnedUser = InferNode<typeof user>;
-// Result: { id: bigint; key: string; name: string; email: string; age?: bigint; }
+// Result: { id: number; key: string; name: string; email: string; age?: number; }
 ```
 
 ## Module Reference
@@ -101,36 +101,34 @@ The main database context with methods for CRUD operations, transactions, and ma
 
 - `insert<N>(node: N): InsertBuilder<N>` - Insert one or more nodes
 - `upsert<N>(node: N): UpsertBuilder<N>` - Insert or update nodes by key
-- `update<N>(node: N): UpdateBuilder<N>` - Update nodes by definition with WHERE
-- `update<N>(nodeRef: NodeRef<N>): UpdateByRefBuilder<N>` - Update a specific node
-- `delete<N>(node: N): DeleteBuilder<N>` - Delete nodes by definition
-- `delete<N>(nodeRef: NodeRef<N>): Promise<boolean>` - Delete a specific node
-- `get<N>(node: N, key: any): Promise<NodeRef<N> & InferNode<N> | null>` - Look up node by key
-- `exists(nodeRef: NodeRef): Promise<boolean>` - Check if node exists
-- `all<N>(nodeDef: N): AsyncGenerator<NodeRef<N> & InferNode<N>>` - List all nodes of type
-- `count<N>(nodeDef?: N): Promise<number>` - Count nodes (optionally filtered by type)
+- `update<N>(node: N, key: any): UpdateBuilder` - Update a node by key
+- `delete<N>(node: N, key: any): boolean` - Delete a node by key
+- `get<N>(node: N, key: any): InferNode<N> | null` - Look up node by key
+- `getRef<N>(node: N, key: any): NodeRef<N> | null` - Lightweight reference lookup
+- `all<N>(nodeDef: N): Array<InferNode<N>>` - List all nodes of type
+- `countNodes<N>(nodeDef?: N): number` - Count nodes (optionally filtered by type)
 
 **Edge Operations:**
 
-- `link<E>(src: NodeRef, edge: E, dst: NodeRef, props?): Promise<void>` - Create edge (direct)
+- `link<E>(src: NodeRef, edge: E, dst: NodeRef, props?): void` - Create edge (direct)
 - `link(src).to(dst).via(edge).props(...).execute()` - Fluent edge builder
-- `unlink<E>(src: NodeRef, edge: E, dst: NodeRef): Promise<void>` - Delete edge
-- `hasEdge<E>(src: NodeRef, edge: E, dst: NodeRef): Promise<boolean>` - Check edge exists
+- `unlink<E>(src: NodeRef, edge: E, dst: NodeRef): boolean` - Delete edge
+- `hasEdge<E>(src: NodeRef, edge: E, dst: NodeRef): boolean` - Check edge exists
 - `updateEdge<E>(src, edge, dst): UpdateEdgeBuilder<E>` - Update edge properties
-- `allEdges<E>(edgeDef?: E): AsyncGenerator<EdgeData>` - List all edges (optionally filtered by type)
-- `countEdges<E>(edgeDef?: E): Promise<number>` - Count edges (optionally filtered by type)
+- `allEdges<E>(edgeDef?: E): Array<JsFullEdge>` - List all edges (optionally filtered by type)
+- `countEdges<E>(edgeDef?: E): number` - Count edges (optionally filtered by type)
 
 **Traversal:**
 
-- `from<N>(node: NodeRef<N>): TraversalBuilder<N>` - Start traversal from a node
+- `from<N>(node: NodeRef<N> | number): KiteTraversal` - Start traversal from a node
 
 **Batch Operations:**
 
-- `batch<T>(operations): Promise<Results>` - Execute multiple ops in single transaction
+- `batch<T>(operations): Results[]` - Execute multiple ops in a single transaction (sync only)
 
 **Transactions:**
 
-- `transaction<T>(fn): Promise<T>` - Execute operations in explicit transaction
+- `transaction<T>(fn): T | Promise<T>` - Execute operations in explicit transaction
 
 **Maintenance:**
 
@@ -146,18 +144,16 @@ The main database context with methods for CRUD operations, transactions, and ma
 
 ```typescript
 string(name: string): PropBuilder<"string">
-int(name: string): PropBuilder<"int">       // Stored as bigint
+int(name: string): PropBuilder<"int">       // Stored as 64-bit signed (number)
 float(name: string): PropBuilder<"float">   // f64
 bool(name: string): PropBuilder<"bool">
 ```
 
 Property builders are available as top-level exports or under `prop` (e.g. `string()` / `prop.string()`).
-All property builders support `.optional()` or the `optional(...)` helper:
+Use the `optional(...)` helper for optional properties:
 
 ```typescript
 const email = optional(string("email"));
-// or
-const email = string("email").optional();
 ```
 
 #### `node<Name, KeyArg, Props>(name, config): NodeDef`
@@ -233,34 +229,19 @@ const alice = await db
   .returning();
 ```
 
-#### Update by Definition
+#### Update by Key
 
 ```typescript
 await db
-  .update(user)
-  .set({ name: "Alice Updated", email: "newemail@example.com" })
-  .where({ key: "user:alice" })
+  .update(user, "alice")
+  .setAll({ name: "Alice Updated", email: "newemail@example.com" })
   .execute();
 ```
 
-#### Update by Reference
+#### Delete by Key
 
 ```typescript
-const alice = await db.get(user, "alice");
-await db.update(alice).set({ name: "Alice V2" }).execute();
-```
-
-#### Delete by Definition
-
-```typescript
-const deleted = await db.delete(user).where({ key: "user:alice" }).execute();
-```
-
-#### Delete by Reference
-
-```typescript
-const alice = await db.get(user, "alice");
-const success = await db.delete(alice);
+const deleted = db.delete(user, "alice");
 ```
 
 #### Link (Create Edge)
@@ -287,7 +268,7 @@ await db.unlink(alice, knows, bob);
 
 ```typescript
 const edge = await db.updateEdge(alice, knows, bob);
-await edge.set({ weight: 0.95 }).execute();
+await edge.setAll({ weight: 0.95 }).execute();
 ```
 
 ### `traversal.ts` - Graph Traversal
@@ -338,20 +319,12 @@ await db
 
 #### Results
 
-All traversal results are **lazy async iterables**:
+Traversal results are returned as arrays:
 
 ```typescript
-const results = db.from(alice).out(knows).nodes();
-
-// Iterate
-for await (const friend of results) {
-  console.log(friend.name);
-}
-
-// Or collect
-const all = await results.toArray();
-const first = await results.first();
-const count = await results.count();
+const all = db.from(alice).out(knows).nodes().toArray();
+const first = all[0];
+const count = db.from(alice).out(knows).count();
 ```
 
 #### Edges
@@ -361,7 +334,7 @@ Get edges instead of nodes:
 ```typescript
 const edges = await db.from(alice).out(knows).edges().toArray();
 
-// Each edge has: src, dst, etype, and properties
+// Each edge has: src, dst, etype (numeric IDs)
 for (const edge of edges) {
   console.log(`${edge.src} --${edge.etype}--> ${edge.dst}`);
 }
@@ -372,32 +345,33 @@ for (const edge of edges) {
 List and count all nodes or edges with optional type filtering:
 
 ```typescript
-// List all users (async generator - memory efficient)
-for await (const user of db.all(user)) {
-  console.log(user.name, user.key);
+// List all users
+const users = db.all(user);
+for (const u of users) {
+  console.log(u.name, u.key);
 }
 
 // Count all nodes in database (fast - O(1) when no filter)
-const totalNodes = await db.count();
+const totalNodes = db.countNodes();
 
-// Count users only (requires iteration - O(n))
-const userCount = await db.count(user);
+// Count users only
+const userCount = db.countNodes(user);
 
-// List all edges
-for await (const edge of db.allEdges()) {
-  console.log(`${edge.src.id} -> ${edge.dst.id}`);
+// List all edges (IDs only)
+for (const edge of db.allEdges()) {
+  console.log(`${edge.src} -> ${edge.dst}`);
 }
 
 // List only "knows" edges
-for await (const edge of db.allEdges(knows)) {
-  console.log(`${edge.src.key} knows ${edge.dst.key}`, edge.props);
+for (const edge of db.allEdges(knows)) {
+  console.log(`${edge.src} knows ${edge.dst}`);
 }
 
-// Count all edges (fast - O(1) when no filter)
-const totalEdges = await db.countEdges();
+// Count all edges
+const totalEdges = db.countEdges();
 
 // Count edges of specific type
-const knowsCount = await db.countEdges(knows);
+const knowsCount = db.countEdges(knows);
 ```
 
 ## Advanced Patterns
@@ -453,10 +427,10 @@ const alice = await db.get(user, "alice"); // Uses key 'user:alice' internally
 
 ### Property Type Conversion
 
-Properties are stored with type tags and converted automatically:
+Properties follow JS value types at runtime. Schema types are used for inference:
 
 - **string** → `string`
-- **int** → `bigint` (64-bit signed)
+- **int** → `number` (stored as 64-bit signed when passed as `bigint`)
 - **float** → `number` (f64)
 - **bool** → `boolean`
 
@@ -464,7 +438,7 @@ Properties are stored with type tags and converted automatically:
 const user = node("user", {
   key: (id: string) => `user:${id}`,
   props: {
-    age: int("age"), // Stored as bigint, passed as number
+    age: int("age"), // Stored as i64 when passed as bigint
     score: float("score"), // Stored as f64
   },
 });
@@ -473,12 +447,12 @@ const alice = await db
   .insert(user)
   .values({
     key: "alice",
-    age: 30, // OK: number → bigint
+    age: 30, // number (use bigint for lossless i64)
     score: 95.5,
   })
   .returning();
 
-console.log(typeof alice.age); // 'bigint'
+console.log(typeof alice.age); // 'number'
 console.log(typeof alice.score); // 'number'
 ```
 
@@ -486,8 +460,8 @@ console.log(typeof alice.score); // 'number'
 
 Most operations throw on error. Key error cases:
 
-- **Node not found** - `get()` returns `null`, but WHERE clauses throw
-- **Type mismatch** - Property type violations throw
+- **Node not found** - `get()` returns `null`, and `update(node, key)` throws if key is missing
+- **Type mismatch** - Values are stored based on JS types; schema types are not enforced at runtime
 - **Transaction rollback** - Errors in `transaction()` or `batch()` automatically rollback
 
 ```typescript

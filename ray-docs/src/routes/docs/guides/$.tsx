@@ -284,18 +284,18 @@ user_count = db.count_nodes("user")`}
 
         <h2 id="update">Updating Data</h2>
         <MultiLangCode
-          typescript={`// Update by node ID
-db.updateById(alice.id)
+          typescript={`// Update by key
+db.update(user, 'alice')
   .set('name', 'Alice C.')
   .execute();
 
 // Update multiple properties
-db.updateById(alice.id)
+db.update(user, 'alice')
   .setAll({ name: 'Alice Chen', email: 'newemail@example.com' })
   .execute();
 
 // Remove a property
-db.updateById(alice.id)
+db.update(user, 'alice')
   .unset('email')
   .execute();`}
           rust={`// Update by node ID
@@ -908,11 +908,11 @@ if db.has_transaction():
 
         <MultiLangCode
           typescript={`// Concurrent reads from multiple async operations
+const alice = await db.get(user, 'alice');
 const results = await Promise.all([
-  db.get(user, 'alice'),
   db.get(user, 'bob'),
   db.get(user, 'charlie'),
-  db.from(user).out('follows').toArray(),
+  db.from(alice).out('follows').toArray(),
 ]);
 
 // With worker threads, share the db path (each worker opens independently)

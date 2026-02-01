@@ -70,27 +70,48 @@ const db = await kite(path, options);`}
 
         <h2 id="node-methods">Node Methods</h2>
         <CodeBlock
-          code={`db.node(schema)
-  .create(data)           // Create a node
-  .createMany(data[])     // Create multiple nodes
-  .get(key)               // Get by key
-  .where(conditions)      // Filter nodes
-  .first()                // Get first match
-  .all()                  // Get all matches
-  .count()                // Count matches
-  .update(key, data)      // Update by key
-  .delete(key)            // Delete by key`}
+          code={`// Create nodes
+db.insert(user).values({ key: "alice", name: "Alice" }).returning()
+db.insert(user).valuesMany([{ key: "a" }, { key: "b" }]).execute()
+
+// Upsert by key
+db.upsert(user).values({ key: "alice", email: "a@x.com" }).execute()
+
+// Read
+db.get(user, "alice")
+db.getRef(user, "alice")
+
+// Update by key
+db.update(user, "alice").setAll({ name: "Alice V2" }).execute()
+
+// Delete by key
+db.delete(user, "alice")
+
+// List / count
+db.all(user)
+db.countNodes()
+db.countNodes(user)`}
           language="typescript"
         />
 
         <h2 id="edge-methods">Edge Methods</h2>
         <CodeBlock
-          code={`db.edge(schema)
-  .create({ from, to, ...props })  // Create edge
-  .get(from, to)                   // Get specific edge
-  .from(key)                       // Outgoing edges
-  .to(key)                         // Incoming edges
-  .delete(from, to)                // Delete edge`}
+          code={`// Create edge
+db.link(src, follows, dst, { since: 2024 })
+db.link(src).to(dst).via(follows).props({ since: 2024 }).execute()
+
+// Delete / check
+db.unlink(src, follows, dst)
+db.hasEdge(src, follows, dst)
+
+// Update edge props
+db.updateEdge(src, follows, dst).setAll({ weight: 0.8 }).execute()
+
+// List / count
+db.allEdges()
+db.allEdges(follows)
+db.countEdges()
+db.countEdges(follows)`}
           language="typescript"
         />
 
@@ -165,41 +186,34 @@ for await (const { key, value } of storage.iterator({
           code={`import { vector } from '@kitedb/core';
 
 // Define with dimensions
-embedding: vector('embedding', 1536)
-
-// With custom distance metric
-embedding: vector('embedding', 1536, {
-  metric: 'cosine' | 'euclidean' | 'dot'
-})`}
+embedding: vector('embedding', 1536)`}
           language="typescript"
         />
 
         <h2 id="similarity-methods">Similarity Search Methods</h2>
         <CodeBlock
-          code={`db.node(schema)
-  .vector('embedding')
-  .similar(queryVector, options)
-  .all()
+          code={`import { createVectorIndex } from '@kitedb/core';
 
-// Options
-{
-  limit: 10,           // Max results
-  threshold: 0.8,      // Min similarity score
-  includeScore: true,  // Include scores in results
-}`}
+const index = createVectorIndex({ dimensions: 1536 });
+
+// Add vectors
+index.set(nodeId, embedding);
+
+// Search
+const hits = index.search(queryVector, {
+  k: 10,          // Max results
+  threshold: 0.8, // Min similarity score (cosine)
+  nProbe: 10,     // IVF probe count (optional)
+});`}
           language="typescript"
         />
 
         <h2 id="indexing">Vector Indexing</h2>
         <CodeBlock
-          code={`// Build HNSW index for faster search
-await db.node(schema)
-  .vector('embedding')
-  .buildIndex({
-    type: 'hnsw',
-    m: 16,
-    efConstruction: 200,
-  });`}
+          code={`const index = createVectorIndex({ dimensions: 1536 });
+
+// Build/rebuild IVF index for faster search
+index.buildIndex();`}
           language="typescript"
         />
       </DocPage>

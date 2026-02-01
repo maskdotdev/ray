@@ -479,7 +479,7 @@ const user = defineNode('user', {
 });
 
 const follows = defineEdge('follows', {
-  props: { since: int('since') },
+  since: int('since'),
 });
 
 // Database instance
@@ -489,22 +489,22 @@ const db = await kite('./my-db', {
 });
 
 // CRUD with type inference
-await db.insert(user).values({ key: '1', name: 'Alice', age: 30 });
-await db.link(user, follows, user).from({ key: '1' }).to({ key: '2' });
+const alice = await db.insert(user).values({ key: '1', name: 'Alice', age: 30 }).returning();
+const bob = await db.insert(user).values({ key: '2', name: 'Bob', age: 28 }).returning();
+await db.link(alice, follows, bob, { since: 2024 });
 
 // Traversal
 const results = await db
-  .from(user)
-  .where({ key: '1' })
-  .traverse()
+  .from(alice)
   .out(follows)
-  .collect();
+  .toArray();
 
 // Pathfinding
-const path = await db.pathFind(user, follows)
-  .from({ key: '1' })
-  .to({ key: '10' })
-  .shortestPath();
+const path = await db
+  .shortestPath(alice)
+  .via(follows)
+  .to(bob)
+  .dijkstra();
 ```
 
 ---

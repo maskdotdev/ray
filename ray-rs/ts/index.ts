@@ -770,13 +770,18 @@ export interface Kite {
 }
 
 export interface KiteTraversal {
+  whereEdge(func: unknown): KiteTraversal
+  whereNode(func: unknown): KiteTraversal
   out(edgeType?: EdgeLike | null): KiteTraversal
   ['in'](edgeType?: EdgeLike | null): KiteTraversal
   both(edgeType?: EdgeLike | null): KiteTraversal
   traverse(edgeType: EdgeLike | undefined | null, options: JsTraverseOptions): KiteTraversal
+  take(limit: number): KiteTraversal
+  select(props: Array<string>): KiteTraversal
   nodes(): ArrayWithToArray<number, NodeObject>
   edges(): ArrayWithToArray<JsFullEdge>
   toArray(): ArrayWithToArray<NodeObject>
+  count(): number
 }
 
 // Re-export other classes with clean names
