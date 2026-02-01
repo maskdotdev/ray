@@ -56,8 +56,105 @@ import type { NodeSpec, EdgeSpec, PropSpec } from './schema'
 // Clean Type Aliases (no Js prefix)
 // =============================================================================
 
-// Re-export Kite class
-export { Kite } from '../index'
+// =============================================================================
+// Kite Wrapper (transactions + batch)
+// =============================================================================
+
+export class Kite extends NativeKite {
+  static open(path: string, options: JsKiteOptions): Kite {
+    const native = NativeKite.open(path, options)
+    Object.setPrototypeOf(native, Kite.prototype)
+    return native as Kite
+  }
+
+  transaction<T>(fn: (ctx: Kite) => T | Promise<T>): T | Promise<T> {
+    if (this.hasTransaction()) {
+      return fn(this)
+    }
+
+    this.begin()
+    try {
+      const result = fn(this)
+      if (result && typeof (result as Promise<T>).then === 'function') {
+        return (result as Promise<T>).then(
+          (value) => {
+            this.commit()
+            return value
+          },
+          (err) => {
+            this.rollback()
+            throw err
+          },
+        )
+      }
+      this.commit()
+      return result
+    } catch (err) {
+      this.rollback()
+      throw err
+    }
+  }
+
+  batch(operations: Array<any>): any[] {
+    if (operations.length === 0) {
+      return []
+    }
+
+    const nativeOps = new Set(['createNode', 'deleteNode', 'link', 'unlink', 'setProp', 'delProp'])
+    const isNativeBatch = operations.every((op) => {
+      if (!op || typeof op !== 'object') {
+        return false
+      }
+      const opName = (op as { op?: string }).op ?? (op as { type?: string }).type
+      return typeof opName === 'string' && nativeOps.has(opName)
+    })
+
+    if (isNativeBatch) {
+      return super.batch(operations as Array<object>) as unknown as any[]
+    }
+
+    const inTransaction = this.hasTransaction()
+    if (!inTransaction) {
+      this.begin()
+    }
+
+    try {
+      const results: any[] = []
+      for (const op of operations) {
+        let value
+        if (typeof op === 'function') {
+          value = op(this)
+        } else if (op && typeof op.returning === 'function') {
+          value = op.returning()
+        } else if (op && typeof op.execute === 'function') {
+          value = op.execute()
+        } else {
+          throw new Error('Unsupported batch operation')
+        }
+
+        if (value && typeof (value as Promise<unknown>).then === 'function') {
+          if (!inTransaction) {
+            this.rollback()
+          }
+          throw new Error('Batch operations must be synchronous')
+        }
+
+        results.push(value)
+      }
+
+      if (!inTransaction) {
+        this.commit()
+      }
+
+      return results
+    } catch (err) {
+      if (!inTransaction) {
+        this.rollback()
+      }
+      throw err
+    }
+  }
+}
 
 // Re-export other classes with clean names
 export {
@@ -264,10 +361,12 @@ function optionsToNative(options: KiteOptions): JsKiteOptions {
  * })
  * ```
  */
-export async function kite(path: string, options: KiteOptions): Promise<NativeKite> {
+export async function kite(path: string, options: KiteOptions): Promise<Kite> {
   const nativeOptions = optionsToNative(options)
   // Cast through unknown because NAPI-RS generates Promise<unknown> for async tasks
-  return (await nativeKite(path, nativeOptions)) as NativeKite
+  const native = (await nativeKite(path, nativeOptions)) as NativeKite
+  Object.setPrototypeOf(native, Kite.prototype)
+  return native as Kite
 }
 
 /**
@@ -288,7 +387,9 @@ export async function kite(path: string, options: KiteOptions): Promise<NativeKi
  * })
  * ```
  */
-export function kiteSync(path: string, options: KiteOptions): NativeKite {
+export function kiteSync(path: string, options: KiteOptions): Kite {
   const nativeOptions = optionsToNative(options)
-  return nativeKiteSync(path, nativeOptions)
+  const native = nativeKiteSync(path, nativeOptions)
+  Object.setPrototypeOf(native, Kite.prototype)
+  return native as Kite
 }

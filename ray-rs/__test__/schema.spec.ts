@@ -227,6 +227,76 @@ test('upsertEdge creates and updates edge props', async (t) => {
   db.close()
 })
 
+test('transaction commits and rolls back', async (t) => {
+  const User = node('user', {
+    key: (id: string) => `user:${id}`,
+    props: {
+      name: prop.string('name'),
+    },
+  })
+
+  const db = await kite(makeDbPath(), {
+    nodes: [User],
+    edges: [],
+  })
+
+  await db.transaction(async (ctx) => {
+    ctx.insert('user').values('alice', { name: 'Alice' }).execute()
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
+    ctx.insert('user').values('bob', { name: 'Bob' }).execute()
+  })
+
+  t.truthy(db.get('user', 'alice'))
+  t.truthy(db.get('user', 'bob'))
+
+  await t.throwsAsync(async () => {
+    await db.transaction(async (ctx) => {
+      ctx.insert('user').values('carol', { name: 'Carol' }).execute()
+      throw new Error('boom')
+    })
+  })
+
+  t.is(db.get('user', 'carol'), null)
+
+  db.close()
+})
+
+test('batch executes atomically', async (t) => {
+  const User = node('user', {
+    key: (id: string) => `user:${id}`,
+    props: {
+      name: prop.string('name'),
+    },
+  })
+
+  const db = await kite(makeDbPath(), {
+    nodes: [User],
+    edges: [],
+  })
+
+  const results = await db.batch([
+    db.insert('user').values('alice', { name: 'Alice' }),
+    db.insert('user').values('bob', { name: 'Bob' }),
+  ])
+
+  t.is(results.length, 2)
+  t.truthy(db.get('user', 'alice'))
+  t.truthy(db.get('user', 'bob'))
+
+  await t.throwsAsync(async () => {
+    await db.batch([
+      db.insert('user').values('carol', { name: 'Carol' }),
+      () => {
+        throw new Error('boom')
+      },
+    ])
+  })
+
+  t.is(db.get('user', 'carol'), null)
+
+  db.close()
+})
+
 test('kiteSync() opens database synchronously', (t) => {
   const User = node('user', {
     key: (id: string) => `user:${id}`,

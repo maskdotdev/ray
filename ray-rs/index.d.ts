@@ -622,6 +622,14 @@ export declare class Kite {
   describe(): string
   /** Check database integrity */
   check(): CheckResult
+  /** Begin a transaction */
+  begin(readOnly?: boolean | undefined | null): number
+  /** Commit the current transaction */
+  commit(): void
+  /** Rollback the current transaction */
+  rollback(): void
+  /** Check if there's an active transaction */
+  hasTransaction(): boolean
   /** Execute a batch of operations atomically */
   batch(ops: Array<object>): Array<object>
   /** Begin a traversal from a node ID */
