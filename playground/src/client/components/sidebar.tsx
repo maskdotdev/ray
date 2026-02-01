@@ -2,7 +2,7 @@
  * Sidebar Component
  *
  * Shows selected node details, path results, and impact analysis.
- * Ray Electric Blue Theme.
+ * Kite Electric Blue Theme.
  */
 
 import type { VisNode, VisEdge, ToolMode } from "../lib/types.ts";

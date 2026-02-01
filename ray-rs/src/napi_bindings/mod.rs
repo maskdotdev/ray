@@ -3,7 +3,7 @@
 //! Exposes SingleFileDB and related types to Node.js/Bun.
 
 pub mod database;
-pub mod ray;
+pub mod kite;
 pub mod traversal;
 pub mod vector;
 
@@ -17,10 +17,11 @@ pub use database::{
   SingleFileOptimizeOptions, StreamOptions, VacuumOptions,
 };
 
-pub use ray::{
-  ray, JsEdgeSpec, JsKeySpec, JsNodeSpec, JsPathEdge, JsPathResult, JsPropSpec, JsRayOptions, Ray,
-  RayInsertBuilder, RayInsertExecutorMany, RayInsertExecutorSingle, RayPath, RayTraversal,
-  RayUpdateBuilder, RayUpdateEdgeBuilder,
+pub use kite::{
+  kite, JsEdgeSpec, JsKeySpec, JsNodeSpec, JsPathEdge, JsPathResult, JsPropSpec, JsKiteOptions, Kite,
+  KiteInsertBuilder, KiteInsertExecutorMany, KiteInsertExecutorSingle, KitePath, KiteTraversal,
+  KiteUpdateBuilder, KiteUpdateEdgeBuilder, KiteUpsertBuilder, KiteUpsertExecutorMany,
+  KiteUpsertExecutorSingle,
 };
 
 pub use traversal::{

@@ -4,7 +4,7 @@
 //! All mutations happen within a transaction context.
 
 use crate::core::wal::record::*;
-use crate::error::{RayError, Result};
+use crate::error::{KiteError, Result};
 use crate::types::*;
 
 use super::db::GraphDB;
@@ -62,13 +62,13 @@ impl<'a> TxHandle<'a> {
 /// Begin a new transaction
 pub fn begin_tx(db: &GraphDB) -> Result<TxHandle<'_>> {
   if db.read_only {
-    return Err(RayError::ReadOnly);
+    return Err(KiteError::ReadOnly);
   }
 
   if !db.mvcc_enabled() {
     let current = db.current_tx.lock();
     if current.is_some() {
-      return Err(RayError::TransactionInProgress);
+      return Err(KiteError::TransactionInProgress);
     }
   }
 
@@ -111,7 +111,7 @@ pub fn begin_read_tx(db: &GraphDB) -> Result<TxHandle<'_>> {
 /// Commit a transaction
 pub fn commit(handle: &mut TxHandle) -> Result<()> {
   if handle.finished {
-    return Err(RayError::NoTransaction);
+    return Err(KiteError::NoTransaction);
   }
 
   if handle.tx.read_only {
@@ -130,7 +130,7 @@ pub fn commit(handle: &mut TxHandle) -> Result<()> {
       .conflict_detector
       .validate_commit(&tx_mgr, handle.tx.txid)
     {
-      return Err(RayError::Conflict {
+      return Err(KiteError::Conflict {
         txid: err.txid,
         keys: err.conflicting_keys,
       });
@@ -138,7 +138,7 @@ pub fn commit(handle: &mut TxHandle) -> Result<()> {
 
     let commit_ts = tx_mgr
       .commit_tx(handle.tx.txid)
-      .map_err(|e| RayError::Internal(e.to_string()))?;
+      .map_err(|e| KiteError::Internal(e.to_string()))?;
 
     let has_active_readers = tx_mgr.get_active_count() > 0;
     drop(tx_mgr);
@@ -520,7 +520,7 @@ pub fn commit(handle: &mut TxHandle) -> Result<()> {
 /// Rollback a transaction
 pub fn rollback(handle: &mut TxHandle) -> Result<()> {
   if handle.finished {
-    return Err(RayError::NoTransaction);
+    return Err(KiteError::NoTransaction);
   }
 
   if let Some(mvcc) = handle.db.mvcc.as_ref() {

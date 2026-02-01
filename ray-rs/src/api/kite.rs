@@ -1,6 +1,6 @@
-//! Ray - High-level API for KiteDB
+//! Kite - High-level API for KiteDB
 //!
-//! The Ray struct provides a clean, ergonomic API for graph operations.
+//! The Kite struct provides a clean, ergonomic API for graph operations.
 //! It wraps the lower-level GraphDB with schema definitions and type-safe operations.
 //!
 //! Provides:
@@ -9,9 +9,9 @@
 //! - Shortest path finding (Dijkstra, BFS, Yen's k-shortest)
 //! - Schema-based type safety
 //!
-//! Ported from src/api/ray.ts
+//! Ported from src/api/kite.ts
 
-use crate::error::{RayError, Result};
+use crate::error::{KiteError, Result};
 use crate::graph::db::{close_graph_db, open_graph_db, GraphDB, OpenOptions};
 use crate::graph::edges::{
   add_edge,
@@ -32,7 +32,7 @@ use crate::graph::iterators::{
 use crate::graph::key_index::get_node_key;
 use crate::graph::nodes::{
   create_node, del_node_prop, delete_node, get_node_by_key, get_node_by_key_db, get_node_prop,
-  get_node_prop_db, node_exists, node_exists_db, set_node_prop, NodeOpts,
+  get_node_prop_db, node_exists, node_exists_db, set_node_prop, upsert_node_with_props, NodeOpts,
 };
 use crate::graph::tx::{begin_tx, commit, rollback, TxHandle};
 use crate::types::*;
@@ -207,12 +207,12 @@ impl NodeRef {
 }
 
 // ============================================================================
-// Ray Options
+// Kite Options
 // ============================================================================
 
-/// Options for opening a Ray database
+/// Options for opening a Kite database
 #[derive(Debug, Clone, Default)]
-pub struct RayOptions {
+pub struct KiteOptions {
   /// Node type definitions
   pub nodes: Vec<NodeDef>,
   /// Edge type definitions
@@ -225,7 +225,7 @@ pub struct RayOptions {
   pub lock_file: bool,
 }
 
-impl RayOptions {
+impl KiteOptions {
   pub fn new() -> Self {
     Self {
       nodes: Vec::new(),
@@ -252,12 +252,17 @@ impl RayOptions {
   }
 }
 
+/// Convenience helper to open a KiteDB instance.
+pub fn kite<P: AsRef<Path>>(path: P, options: KiteOptions) -> Result<Kite> {
+  Kite::open(path, options)
+}
+
 // ============================================================================
-// Ray Database
+// Kite Database
 // ============================================================================
 
 /// High-level graph database API
-pub struct Ray {
+pub struct Kite {
   /// Underlying database
   db: GraphDB,
   /// Node type definitions by name
@@ -268,9 +273,9 @@ pub struct Ray {
   key_prefix_to_node: HashMap<String, String>,
 }
 
-impl Ray {
-  /// Open or create a Ray database
-  pub fn open<P: AsRef<Path>>(path: P, options: RayOptions) -> Result<Self> {
+impl Kite {
+  /// Open or create a Kite database
+  pub fn open<P: AsRef<Path>>(path: P, options: KiteOptions) -> Result<Self> {
     let db_options = OpenOptions {
       read_only: options.read_only,
       create_if_missing: options.create_if_missing,
@@ -338,7 +343,7 @@ impl Ray {
     let node_def = self
       .nodes
       .get(node_type)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown node type: {node_type}")))?
+      .ok_or_else(|| KiteError::InvalidSchema(format!("Unknown node type: {node_type}")))?
       .clone();
 
     let full_key = node_def.key(key_suffix);
@@ -376,33 +381,52 @@ impl Ray {
   ///
   /// # Example
   /// ```rust,no_run
-  /// # use kitedb::api::ray::Ray;
+  /// # use kitedb::api::kite::Kite;
   /// # use kitedb::types::PropValue;
   /// # use std::collections::HashMap;
   /// # fn main() -> kitedb::error::Result<()> {
-  /// # let mut ray: Ray = unimplemented!();
+  /// # let mut kite: Kite = unimplemented!();
   /// # let props: HashMap<String, PropValue> = HashMap::new();
   /// // Insert and get the node reference
-  /// let user = ray.insert("User")?
+  /// let user = kite.insert("User")?
   ///     .values("alice", props)?
   ///     .returning()?;
   ///
   /// // Insert without returning (slightly faster)
-  /// ray.insert("User")?
+  /// kite.insert("User")?
   ///     .values("bob", HashMap::new())?
   ///     .execute()?;
   /// # Ok(())
   /// # }
   /// ```
-  pub fn insert(&mut self, node_type: &str) -> Result<RayInsertBuilder<'_>> {
+  pub fn insert(&mut self, node_type: &str) -> Result<KiteInsertBuilder<'_>> {
     let key_prefix = self
       .nodes
       .get(node_type)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown node type: {node_type}")))?
+      .ok_or_else(|| KiteError::InvalidSchema(format!("Unknown node type: {node_type}")))?
       .key_prefix
       .clone();
 
-    Ok(RayInsertBuilder {
+    Ok(KiteInsertBuilder {
+      ray: self,
+      node_type: node_type.to_string(),
+      key_prefix,
+    })
+  }
+
+  /// Upsert a node using fluent builder API
+  ///
+  /// Creates the node if it doesn't exist, otherwise updates properties
+  /// on the existing node.
+  pub fn upsert(&mut self, node_type: &str) -> Result<KiteUpsertBuilder<'_>> {
+    let key_prefix = self
+      .nodes
+      .get(node_type)
+      .ok_or_else(|| KiteError::InvalidSchema(format!("Unknown node type: {node_type}")))?
+      .key_prefix
+      .clone();
+
+    Ok(KiteUpsertBuilder {
       ray: self,
       node_type: node_type.to_string(),
       key_prefix,
@@ -414,7 +438,7 @@ impl Ray {
     let node_def = self
       .nodes
       .get(node_type)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown node type: {node_type}")))?;
+      .ok_or_else(|| KiteError::InvalidSchema(format!("Unknown node type: {node_type}")))?;
 
     let full_key = node_def.key(key_suffix);
 
@@ -491,29 +515,29 @@ impl Ray {
   ///
   /// # Example
   /// ```rust,no_run
-  /// # use kitedb::api::ray::Ray;
+  /// # use kitedb::api::kite::Kite;
   /// # use kitedb::types::PropValue;
   /// # fn main() -> kitedb::error::Result<()> {
-  /// # let mut ray: Ray = unimplemented!();
-  /// let alice = ray.get("User", "alice")?.unwrap();
-  /// ray.update(&alice)?
+  /// # let mut kite: Kite = unimplemented!();
+  /// let alice = kite.get("User", "alice")?.unwrap();
+  /// kite.update(&alice)?
   ///     .set("name", PropValue::String("Alice Updated".into()))
   ///     .set("age", PropValue::I64(31))
   ///     .execute()?;
   /// # Ok(())
   /// # }
   /// ```
-  pub fn update(&mut self, node_ref: &NodeRef) -> Result<RayUpdateNodeBuilder<'_>> {
+  pub fn update(&mut self, node_ref: &NodeRef) -> Result<KiteUpdateNodeBuilder<'_>> {
     // Verify node exists
     let mut handle = begin_tx(&self.db)?;
     let exists = node_exists(&handle, node_ref.id);
     commit(&mut handle)?;
 
     if !exists {
-      return Err(RayError::NodeNotFound(node_ref.id));
+      return Err(KiteError::NodeNotFound(node_ref.id));
     }
 
-    Ok(RayUpdateNodeBuilder {
+    Ok(KiteUpdateNodeBuilder {
       ray: self,
       node_id: node_ref.id,
       updates: HashMap::new(),
@@ -524,28 +548,28 @@ impl Ray {
   ///
   /// # Example
   /// ```rust,no_run
-  /// # use kitedb::api::ray::Ray;
+  /// # use kitedb::api::kite::Kite;
   /// # use kitedb::types::{NodeId, PropValue};
   /// # fn main() -> kitedb::error::Result<()> {
-  /// # let mut ray: Ray = unimplemented!();
+  /// # let mut kite: Kite = unimplemented!();
   /// # let node_id: NodeId = 1;
-  /// ray.update_by_id(node_id)?
+  /// kite.update_by_id(node_id)?
   ///     .set("name", PropValue::String("Updated".into()))
   ///     .execute()?;
   /// # Ok(())
   /// # }
   /// ```
-  pub fn update_by_id(&mut self, node_id: NodeId) -> Result<RayUpdateNodeBuilder<'_>> {
+  pub fn update_by_id(&mut self, node_id: NodeId) -> Result<KiteUpdateNodeBuilder<'_>> {
     // Verify node exists
     let mut handle = begin_tx(&self.db)?;
     let exists = node_exists(&handle, node_id);
     commit(&mut handle)?;
 
     if !exists {
-      return Err(RayError::NodeNotFound(node_id));
+      return Err(KiteError::NodeNotFound(node_id));
     }
 
-    Ok(RayUpdateNodeBuilder {
+    Ok(KiteUpdateNodeBuilder {
       ray: self,
       node_id,
       updates: HashMap::new(),
@@ -556,11 +580,11 @@ impl Ray {
   ///
   /// # Example
   /// ```rust,no_run
-  /// # use kitedb::api::ray::Ray;
+  /// # use kitedb::api::kite::Kite;
   /// # use kitedb::types::PropValue;
   /// # fn main() -> kitedb::error::Result<()> {
-  /// # let mut ray: Ray = unimplemented!();
-  /// ray.update_by_key("User", "alice")?
+  /// # let mut kite: Kite = unimplemented!();
+  /// kite.update_by_key("User", "alice")?
   ///     .set("name", PropValue::String("Alice Updated".into()))
   ///     .execute()?;
   /// # Ok(())
@@ -570,19 +594,19 @@ impl Ray {
     &mut self,
     node_type: &str,
     key_suffix: &str,
-  ) -> Result<RayUpdateNodeBuilder<'_>> {
+  ) -> Result<KiteUpdateNodeBuilder<'_>> {
     let full_key = self
       .nodes
       .get(node_type)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown node type: {node_type}")))?
+      .ok_or_else(|| KiteError::InvalidSchema(format!("Unknown node type: {node_type}")))?
       .key(key_suffix);
 
     let mut handle = begin_tx(&self.db)?;
     let node_id =
-      get_node_by_key(&handle, &full_key).ok_or_else(|| RayError::KeyNotFound(full_key.clone()))?;
+      get_node_by_key(&handle, &full_key).ok_or_else(|| KiteError::KeyNotFound(full_key.clone()))?;
     commit(&mut handle)?;
 
-    Ok(RayUpdateNodeBuilder {
+    Ok(KiteUpdateNodeBuilder {
       ray: self,
       node_id,
       updates: HashMap::new(),
@@ -598,11 +622,11 @@ impl Ray {
     let edge_def = self
       .edges
       .get(edge_type)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {edge_type}")))?;
+      .ok_or_else(|| KiteError::InvalidSchema(format!("Unknown edge type: {edge_type}")))?;
 
     let etype_id = edge_def
       .etype_id
-      .ok_or_else(|| RayError::InvalidSchema("Edge type not initialized".to_string()))?;
+      .ok_or_else(|| KiteError::InvalidSchema("Edge type not initialized".to_string()))?;
 
     let mut handle = begin_tx(&self.db)?;
     add_edge(&mut handle, src, etype_id, dst)?;
@@ -614,17 +638,17 @@ impl Ray {
   ///
   /// # Example
   /// ```rust,no_run
-  /// # use kitedb::api::ray::{NodeRef, Ray};
+  /// # use kitedb::api::kite::{NodeRef, Kite};
   /// # use kitedb::types::PropValue;
   /// # use std::collections::HashMap;
   /// # fn main() -> kitedb::error::Result<()> {
-  /// # let mut ray: Ray = unimplemented!();
+  /// # let mut kite: Kite = unimplemented!();
   /// # let alice: NodeRef = unimplemented!();
   /// # let bob: NodeRef = unimplemented!();
   /// let mut props = HashMap::new();
   /// props.insert("weight".to_string(), PropValue::F64(0.5));
   /// props.insert("since".to_string(), PropValue::String("2024".into()));
-  /// ray.link_with_props(alice.id, "FOLLOWS", bob.id, props)?;
+  /// kite.link_with_props(alice.id, "FOLLOWS", bob.id, props)?;
   /// # Ok(())
   /// # }
   /// ```
@@ -638,12 +662,12 @@ impl Ray {
     let edge_def = self
       .edges
       .get(edge_type)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {edge_type}")))?
+      .ok_or_else(|| KiteError::InvalidSchema(format!("Unknown edge type: {edge_type}")))?
       .clone();
 
     let etype_id = edge_def
       .etype_id
-      .ok_or_else(|| RayError::InvalidSchema("Edge type not initialized".to_string()))?;
+      .ok_or_else(|| KiteError::InvalidSchema("Edge type not initialized".to_string()))?;
 
     let mut handle = begin_tx(&self.db)?;
     add_edge(&mut handle, src, etype_id, dst)?;
@@ -668,11 +692,11 @@ impl Ray {
     let edge_def = self
       .edges
       .get(edge_type)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {edge_type}")))?;
+      .ok_or_else(|| KiteError::InvalidSchema(format!("Unknown edge type: {edge_type}")))?;
 
     let etype_id = edge_def
       .etype_id
-      .ok_or_else(|| RayError::InvalidSchema("Edge type not initialized".to_string()))?;
+      .ok_or_else(|| KiteError::InvalidSchema("Edge type not initialized".to_string()))?;
 
     let mut handle = begin_tx(&self.db)?;
     let deleted = delete_edge(&mut handle, src, etype_id, dst)?;
@@ -685,11 +709,11 @@ impl Ray {
     let edge_def = self
       .edges
       .get(edge_type)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {edge_type}")))?;
+      .ok_or_else(|| KiteError::InvalidSchema(format!("Unknown edge type: {edge_type}")))?;
 
     let etype_id = edge_def
       .etype_id
-      .ok_or_else(|| RayError::InvalidSchema("Edge type not initialized".to_string()))?;
+      .ok_or_else(|| KiteError::InvalidSchema("Edge type not initialized".to_string()))?;
 
     // Direct read without transaction
     Ok(edge_exists_db(&self.db, src, etype_id, dst))
@@ -702,7 +726,7 @@ impl Ray {
         let edge_def = self
           .edges
           .get(name)
-          .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {name}")))?;
+          .ok_or_else(|| KiteError::InvalidSchema(format!("Unknown edge type: {name}")))?;
         edge_def.etype_id
       }
       None => None,
@@ -719,7 +743,7 @@ impl Ray {
         let edge_def = self
           .edges
           .get(name)
-          .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {name}")))?;
+          .ok_or_else(|| KiteError::InvalidSchema(format!("Unknown edge type: {name}")))?;
         edge_def.etype_id
       }
       None => None,
@@ -747,11 +771,11 @@ impl Ray {
     let edge_def = self
       .edges
       .get(edge_type)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {edge_type}")))?;
+      .ok_or_else(|| KiteError::InvalidSchema(format!("Unknown edge type: {edge_type}")))?;
 
     let etype_id = edge_def
       .etype_id
-      .ok_or_else(|| RayError::InvalidSchema("Edge type not initialized".to_string()))?;
+      .ok_or_else(|| KiteError::InvalidSchema("Edge type not initialized".to_string()))?;
 
     let prop_key_id = match self.db.get_propkey_id(prop_name) {
       Some(id) => id,
@@ -774,11 +798,11 @@ impl Ray {
     let edge_def = self
       .edges
       .get(edge_type)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {edge_type}")))?;
+      .ok_or_else(|| KiteError::InvalidSchema(format!("Unknown edge type: {edge_type}")))?;
 
     let etype_id = edge_def
       .etype_id
-      .ok_or_else(|| RayError::InvalidSchema("Edge type not initialized".to_string()))?;
+      .ok_or_else(|| KiteError::InvalidSchema("Edge type not initialized".to_string()))?;
 
     // Direct read without transaction
     let props = get_edge_props_db(&self.db, src, etype_id, dst);
@@ -810,11 +834,11 @@ impl Ray {
     let edge_def = self
       .edges
       .get(edge_type)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {edge_type}")))?;
+      .ok_or_else(|| KiteError::InvalidSchema(format!("Unknown edge type: {edge_type}")))?;
 
     let etype_id = edge_def
       .etype_id
-      .ok_or_else(|| RayError::InvalidSchema("Edge type not initialized".to_string()))?;
+      .ok_or_else(|| KiteError::InvalidSchema("Edge type not initialized".to_string()))?;
 
     let prop_key_id = self.db.get_or_create_propkey(prop_name);
 
@@ -835,16 +859,16 @@ impl Ray {
     let edge_def = self
       .edges
       .get(edge_type)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {edge_type}")))?;
+      .ok_or_else(|| KiteError::InvalidSchema(format!("Unknown edge type: {edge_type}")))?;
 
     let etype_id = edge_def
       .etype_id
-      .ok_or_else(|| RayError::InvalidSchema("Edge type not initialized".to_string()))?;
+      .ok_or_else(|| KiteError::InvalidSchema("Edge type not initialized".to_string()))?;
 
     let prop_key_id = self
       .db
       .get_propkey_id(prop_name)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown property: {prop_name}")))?;
+      .ok_or_else(|| KiteError::InvalidSchema(format!("Unknown property: {prop_name}")))?;
 
     let mut handle = begin_tx(&self.db)?;
     del_edge_prop(&mut handle, src, etype_id, dst, prop_key_id)?;
@@ -859,13 +883,13 @@ impl Ray {
   ///
   /// # Example
   /// ```rust,no_run
-  /// # use kitedb::api::ray::Ray;
+  /// # use kitedb::api::kite::Kite;
   /// # use kitedb::types::{NodeId, PropValue};
   /// # fn main() -> kitedb::error::Result<()> {
-  /// # let mut ray: Ray = unimplemented!();
+  /// # let mut kite: Kite = unimplemented!();
   /// # let alice_id: NodeId = 1;
   /// # let bob_id: NodeId = 2;
-  /// ray.update_edge(alice_id, "FOLLOWS", bob_id)?
+  /// kite.update_edge(alice_id, "FOLLOWS", bob_id)?
   ///    .set("weight", PropValue::F64(0.9))
   ///    .set("since", PropValue::String("2024".to_string()))
   ///    .execute()?;
@@ -877,17 +901,17 @@ impl Ray {
     src: NodeId,
     edge_type: &str,
     dst: NodeId,
-  ) -> Result<RayUpdateEdgeBuilder<'_>> {
+  ) -> Result<KiteUpdateEdgeBuilder<'_>> {
     let edge_def = self
       .edges
       .get(edge_type)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {edge_type}")))?;
+      .ok_or_else(|| KiteError::InvalidSchema(format!("Unknown edge type: {edge_type}")))?;
 
     let etype_id = edge_def
       .etype_id
-      .ok_or_else(|| RayError::InvalidSchema("Edge type not initialized".to_string()))?;
+      .ok_or_else(|| KiteError::InvalidSchema("Edge type not initialized".to_string()))?;
 
-    Ok(RayUpdateEdgeBuilder {
+    Ok(KiteUpdateEdgeBuilder {
       ray: self,
       src,
       etype_id,
@@ -914,7 +938,7 @@ impl Ray {
     let node_def = self
       .nodes
       .get(node_type)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown node type: {node_type}")))?;
+      .ok_or_else(|| KiteError::InvalidSchema(format!("Unknown node type: {node_type}")))?;
 
     let prefix = &node_def.key_prefix;
     let mut count = 0u64;
@@ -940,11 +964,11 @@ impl Ray {
     let edge_def = self
       .edges
       .get(edge_type)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {edge_type}")))?;
+      .ok_or_else(|| KiteError::InvalidSchema(format!("Unknown edge type: {edge_type}")))?;
 
     let etype_id = edge_def
       .etype_id
-      .ok_or_else(|| RayError::InvalidSchema("Edge type not initialized".to_string()))?;
+      .ok_or_else(|| KiteError::InvalidSchema("Edge type not initialized".to_string()))?;
 
     Ok(count_edges(&self.db, Some(etype_id)))
   }
@@ -961,10 +985,10 @@ impl Ray {
   ///
   /// # Example
   /// ```rust,no_run
-  /// # use kitedb::api::ray::Ray;
+  /// # use kitedb::api::kite::Kite;
   /// # fn main() -> kitedb::error::Result<()> {
-  /// # let ray: Ray = unimplemented!();
-  /// for node_ref in ray.all("User")? {
+  /// # let kite: Kite = unimplemented!();
+  /// for node_ref in kite.all("User")? {
   ///     println!("User: {:?}", node_ref.id);
   /// }
   /// # Ok(())
@@ -974,7 +998,7 @@ impl Ray {
     let node_def = self
       .nodes
       .get(node_type)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown node type: {node_type}")))?
+      .ok_or_else(|| KiteError::InvalidSchema(format!("Unknown node type: {node_type}")))?
       .clone();
 
     let prefix = node_def.key_prefix.clone();
@@ -1001,10 +1025,10 @@ impl Ray {
   ///
   /// # Example
   /// ```rust,no_run
-  /// # use kitedb::api::ray::Ray;
+  /// # use kitedb::api::kite::Kite;
   /// # fn main() -> kitedb::error::Result<()> {
-  /// # let ray: Ray = unimplemented!();
-  /// for edge in ray.all_edges(Some("FOLLOWS"))? {
+  /// # let kite: Kite = unimplemented!();
+  /// for edge in kite.all_edges(Some("FOLLOWS"))? {
   ///     println!("{} -> {}", edge.src, edge.dst);
   /// }
   /// # Ok(())
@@ -1016,7 +1040,7 @@ impl Ray {
         let edge_def = self
           .edges
           .get(name)
-          .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {name}")))?;
+          .ok_or_else(|| KiteError::InvalidSchema(format!("Unknown edge type: {name}")))?;
         edge_def.etype_id
       }
       None => None,
@@ -1033,10 +1057,10 @@ impl Ray {
   ///
   /// # Example
   /// ```rust,no_run
-  /// # use kitedb::api::ray::Ray;
+  /// # use kitedb::api::kite::Kite;
   /// # fn main() -> kitedb::error::Result<()> {
-  /// # let ray: Ray = unimplemented!();
-  /// let user_ref = ray.get_ref("User", "alice")?;
+  /// # let kite: Kite = unimplemented!();
+  /// let user_ref = kite.get_ref("User", "alice")?;
   /// if let Some(node) = user_ref {
   ///     // Can now use node.id for edges, traversals, etc.
   /// }
@@ -1050,13 +1074,13 @@ impl Ray {
   ///
   /// # Example
   /// ```rust,no_run
-  /// # use kitedb::api::ray::Ray;
+  /// # use kitedb::api::kite::Kite;
   /// # fn main() -> kitedb::error::Result<()> {
-  /// # let ray: Ray = unimplemented!();
+  /// # let kite: Kite = unimplemented!();
   /// // Fast: only gets reference (~85ns)
-  /// if let Some(node) = ray.get_ref("User", "alice")? {
+  /// if let Some(node) = kite.get_ref("User", "alice")? {
   ///     // Can now use node.id for edges, traversals, etc.
-  ///     let friends = ray.from(node.id).out(Some("FOLLOWS"))?.to_vec();
+  ///     let friends = kite.from(node.id).out(Some("FOLLOWS"))?.to_vec();
   /// }
   /// # Ok(())
   /// # }
@@ -1065,7 +1089,7 @@ impl Ray {
     let node_def = self
       .nodes
       .get(node_type)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown node type: {node_type}")))?;
+      .ok_or_else(|| KiteError::InvalidSchema(format!("Unknown node type: {node_type}")))?;
 
     let full_key = node_def.key(key_suffix);
 
@@ -1119,11 +1143,11 @@ impl Ray {
   /// # Example
   ///
   /// ```rust,no_run
-  /// # use kitedb::api::ray::{NodeRef, Ray};
+  /// # use kitedb::api::kite::{NodeRef, Kite};
   /// # fn main() -> kitedb::error::Result<()> {
-  /// # let ray: Ray = unimplemented!();
+  /// # let kite: Kite = unimplemented!();
   /// # let alice: NodeRef = unimplemented!();
-  /// let friends = ray
+  /// let friends = kite
   ///     .from(alice.id)
   ///     .out(Some("FOLLOWS"))?
   ///     .out(Some("FOLLOWS"))?
@@ -1131,13 +1155,13 @@ impl Ray {
   /// # Ok(())
   /// # }
   /// ```
-  pub fn from(&self, node_id: NodeId) -> RayTraversalBuilder<'_> {
-    RayTraversalBuilder::new(self, vec![node_id])
+  pub fn from(&self, node_id: NodeId) -> KiteTraversalBuilder<'_> {
+    KiteTraversalBuilder::new(self, vec![node_id])
   }
 
   /// Start a traversal from multiple nodes
-  pub fn from_nodes(&self, node_ids: Vec<NodeId>) -> RayTraversalBuilder<'_> {
-    RayTraversalBuilder::new(self, node_ids)
+  pub fn from_nodes(&self, node_ids: Vec<NodeId>) -> KiteTraversalBuilder<'_> {
+    KiteTraversalBuilder::new(self, node_ids)
   }
 
   // ========================================================================
@@ -1152,12 +1176,12 @@ impl Ray {
   /// # Example
   ///
   /// ```rust,no_run
-  /// # use kitedb::api::ray::{NodeRef, Ray};
+  /// # use kitedb::api::kite::{NodeRef, Kite};
   /// # fn main() -> kitedb::error::Result<()> {
-  /// # let ray: Ray = unimplemented!();
+  /// # let kite: Kite = unimplemented!();
   /// # let alice: NodeRef = unimplemented!();
   /// # let bob: NodeRef = unimplemented!();
-  /// let path = ray
+  /// let path = kite
   ///     .shortest_path(alice.id, bob.id)
   ///     .via("FOLLOWS")?
   ///     .max_depth(5)
@@ -1170,13 +1194,13 @@ impl Ray {
   /// # Ok(())
   /// # }
   /// ```
-  pub fn shortest_path(&self, source: NodeId, target: NodeId) -> RayPathBuilder<'_> {
-    RayPathBuilder::new(self, source, target)
+  pub fn shortest_path(&self, source: NodeId, target: NodeId) -> KitePathBuilder<'_> {
+    KitePathBuilder::new(self, source, target)
   }
 
   /// Find shortest paths to any of the target nodes
-  pub fn shortest_path_to_any(&self, source: NodeId, targets: Vec<NodeId>) -> RayPathBuilder<'_> {
-    RayPathBuilder::new_multi(self, source, targets)
+  pub fn shortest_path_to_any(&self, source: NodeId, targets: Vec<NodeId>) -> KitePathBuilder<'_> {
+    KitePathBuilder::new_multi(self, source, targets)
   }
 
   /// Check if a path exists between two nodes
@@ -1203,11 +1227,11 @@ impl Ray {
   /// # Example
   ///
   /// ```rust,no_run
-  /// # use kitedb::api::ray::{NodeRef, Ray};
+  /// # use kitedb::api::kite::{NodeRef, Kite};
   /// # fn main() -> kitedb::error::Result<()> {
-  /// # let ray: Ray = unimplemented!();
+  /// # let kite: Kite = unimplemented!();
   /// # let alice: NodeRef = unimplemented!();
-  /// let reachable = ray.reachable_from(alice.id, 3, Some("FOLLOWS"))?;
+  /// let reachable = kite.reachable_from(alice.id, 3, Some("FOLLOWS"))?;
   /// println!("Alice can reach {} nodes in 3 hops", reachable.len());
   /// # Ok(())
   /// # }
@@ -1223,7 +1247,7 @@ impl Ray {
         let edge_def = self
           .edges
           .get(name)
-          .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {name}")))?;
+          .ok_or_else(|| KiteError::InvalidSchema(format!("Unknown edge type: {name}")))?;
         edge_def.etype_id
       }
       None => None,
@@ -1484,10 +1508,10 @@ impl Ray {
   ///
   /// # Example
   /// ```rust,no_run
-  /// # use kitedb::api::ray::Ray;
+  /// # use kitedb::api::kite::Kite;
   /// # fn main() {
-  /// # let ray: Ray = unimplemented!();
-  /// println!("{}", ray.describe());
+  /// # let kite: Kite = unimplemented!();
+  /// println!("{}", kite.describe());
   /// // Output:
   /// // KiteDB at /path/to/db (multi-file format)
   /// // Schema:
@@ -1560,10 +1584,10 @@ impl Ray {
   ///
   /// # Example
   /// ```rust,no_run
-  /// # use kitedb::api::ray::Ray;
+  /// # use kitedb::api::kite::Kite;
   /// # fn main() -> kitedb::error::Result<()> {
-  /// # let ray: Ray = unimplemented!();
-  /// let result = ray.check()?;
+  /// # let kite: Kite = unimplemented!();
+  /// let result = kite.check()?;
   /// if !result.valid {
   ///     for error in &result.errors {
   ///         eprintln!("Error: {}", error);
@@ -1616,21 +1640,21 @@ impl Ray {
 }
 
 // ============================================================================
-// Traversal Builder for Ray
+// Traversal Builder for Kite
 // ============================================================================
 
 use super::traversal::{TraversalBuilder, TraversalDirection, TraversalResult, TraverseOptions};
 
-/// Traversal builder bound to a Ray database
+/// Traversal builder bound to a Kite database
 ///
 /// Provides ergonomic traversal operations using edge type names.
-pub struct RayTraversalBuilder<'a> {
-  ray: &'a Ray,
+pub struct KiteTraversalBuilder<'a> {
+  ray: &'a Kite,
   builder: TraversalBuilder,
 }
 
-impl<'a> RayTraversalBuilder<'a> {
-  fn new(ray: &'a Ray, start_nodes: Vec<NodeId>) -> Self {
+impl<'a> KiteTraversalBuilder<'a> {
+  fn new(ray: &'a Kite, start_nodes: Vec<NodeId>) -> Self {
     Self {
       ray,
       builder: TraversalBuilder::new(start_nodes),
@@ -1681,12 +1705,12 @@ impl<'a> RayTraversalBuilder<'a> {
   ///
   /// # Example
   /// ```rust,no_run
-  /// # use kitedb::api::ray::Ray;
+  /// # use kitedb::api::kite::Kite;
   /// # use kitedb::types::NodeId;
   /// # fn main() -> kitedb::error::Result<()> {
-  /// # let ray: Ray = unimplemented!();
+  /// # let kite: Kite = unimplemented!();
   /// # let user_id: NodeId = 1;
-  /// let friends = ray.from(user_id)
+  /// let friends = kite.from(user_id)
   ///     .out(Some("FOLLOWS"))?
   ///     .select(&["name", "avatar"]) // Only load name and avatar
   ///     .to_vec();
@@ -1741,12 +1765,12 @@ impl<'a> RayTraversalBuilder<'a> {
   ///
   /// # Example
   /// ```rust,no_run
-  /// # use kitedb::api::ray::Ray;
+  /// # use kitedb::api::kite::Kite;
   /// # use kitedb::types::NodeId;
   /// # fn main() -> kitedb::error::Result<()> {
-  /// # let ray: Ray = unimplemented!();
+  /// # let kite: Kite = unimplemented!();
   /// # let user_id: NodeId = 1;
-  /// let edges: Vec<_> = ray.from(user_id)
+  /// let edges: Vec<_> = kite.from(user_id)
   ///     .out(Some("FOLLOWS"))?
   ///     .edges()
   ///     .collect();
@@ -1795,7 +1819,7 @@ impl<'a> RayTraversalBuilder<'a> {
           .ray
           .edges
           .get(name)
-          .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {name}")))?;
+          .ok_or_else(|| KiteError::InvalidSchema(format!("Unknown edge type: {name}")))?;
         Ok(edge_def.etype_id)
       }
       None => Ok(None),
@@ -1804,16 +1828,16 @@ impl<'a> RayTraversalBuilder<'a> {
 }
 
 // ============================================================================
-// Path Finding Builder for Ray
+// Path Finding Builder for Kite
 // ============================================================================
 
 use super::pathfinding::{bfs, dijkstra, yen_k_shortest, PathConfig, PathResult};
 
-/// Path finding builder bound to a Ray database
+/// Path finding builder bound to a Kite database
 ///
 /// Provides ergonomic pathfinding operations using edge type names.
-pub struct RayPathBuilder<'a> {
-  ray: &'a Ray,
+pub struct KitePathBuilder<'a> {
+  ray: &'a Kite,
   source: NodeId,
   targets: HashSet<NodeId>,
   allowed_etypes: HashSet<ETypeId>,
@@ -1822,8 +1846,8 @@ pub struct RayPathBuilder<'a> {
   weights: HashMap<(NodeId, ETypeId, NodeId), f64>,
 }
 
-impl<'a> RayPathBuilder<'a> {
-  fn new(ray: &'a Ray, source: NodeId, target: NodeId) -> Self {
+impl<'a> KitePathBuilder<'a> {
+  fn new(ray: &'a Kite, source: NodeId, target: NodeId) -> Self {
     let mut targets = HashSet::new();
     targets.insert(target);
 
@@ -1838,7 +1862,7 @@ impl<'a> RayPathBuilder<'a> {
     }
   }
 
-  fn new_multi(ray: &'a Ray, source: NodeId, targets: Vec<NodeId>) -> Self {
+  fn new_multi(ray: &'a Kite, source: NodeId, targets: Vec<NodeId>) -> Self {
     Self {
       ray,
       source,
@@ -1858,7 +1882,7 @@ impl<'a> RayPathBuilder<'a> {
       .ray
       .edges
       .get(edge_type)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {edge_type}")))?;
+      .ok_or_else(|| KiteError::InvalidSchema(format!("Unknown edge type: {edge_type}")))?;
 
     if let Some(etype_id) = edge_def.etype_id {
       self.allowed_etypes.insert(etype_id);
@@ -1994,7 +2018,7 @@ pub enum BatchResult {
   PropDeleted,
 }
 
-impl Ray {
+impl Kite {
   /// Execute multiple operations atomically in a single transaction
   ///
   /// All operations succeed or fail together. If any operation fails,
@@ -2002,13 +2026,13 @@ impl Ray {
   ///
   /// # Example
   /// ```rust,no_run
-  /// # use kitedb::api::ray::{BatchOp, Ray, RayOptions};
+  /// # use kitedb::api::kite::{BatchOp, Kite, KiteOptions};
   /// # use std::collections::HashMap;
   /// # fn main() -> kitedb::error::Result<()> {
-  /// # let options = RayOptions::default();
-  /// let mut ray = Ray::open("db", options)?;
+  /// # let options = KiteOptions::default();
+  /// let mut kite = Kite::open("db", options)?;
   ///
-  /// let results = ray.batch(vec![
+  /// let results = kite.batch(vec![
   ///   BatchOp::CreateNode {
   ///     node_type: "User".into(),
   ///     key_suffix: "alice".into(),
@@ -2037,7 +2061,7 @@ impl Ray {
           let node_def = self
             .nodes
             .get(&node_type)
-            .ok_or_else(|| RayError::InvalidSchema(format!("Unknown node type: {node_type}")))?;
+            .ok_or_else(|| KiteError::InvalidSchema(format!("Unknown node type: {node_type}")))?;
 
           let full_key = node_def.key(&key_suffix);
 
@@ -2071,11 +2095,11 @@ impl Ray {
           let edge_def = self
             .edges
             .get(&edge_type)
-            .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {edge_type}")))?;
+            .ok_or_else(|| KiteError::InvalidSchema(format!("Unknown edge type: {edge_type}")))?;
 
           let etype_id = edge_def
             .etype_id
-            .ok_or_else(|| RayError::InvalidSchema("Edge type not initialized".to_string()))?;
+            .ok_or_else(|| KiteError::InvalidSchema("Edge type not initialized".to_string()))?;
 
           add_edge(&mut handle, src, etype_id, dst)?;
           BatchResult::EdgeCreated
@@ -2089,11 +2113,11 @@ impl Ray {
           let edge_def = self
             .edges
             .get(&edge_type)
-            .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {edge_type}")))?;
+            .ok_or_else(|| KiteError::InvalidSchema(format!("Unknown edge type: {edge_type}")))?;
 
           let etype_id = edge_def
             .etype_id
-            .ok_or_else(|| RayError::InvalidSchema("Edge type not initialized".to_string()))?;
+            .ok_or_else(|| KiteError::InvalidSchema("Edge type not initialized".to_string()))?;
 
           let deleted = delete_edge(&mut handle, src, etype_id, dst)?;
           BatchResult::EdgeRemoved(deleted)
@@ -2114,7 +2138,7 @@ impl Ray {
           let prop_key_id = handle
             .db
             .get_propkey_id(&prop_name)
-            .ok_or_else(|| RayError::InvalidSchema(format!("Unknown property: {prop_name}")))?;
+            .ok_or_else(|| KiteError::InvalidSchema(format!("Unknown property: {prop_name}")))?;
           del_node_prop(&mut handle, node_id, prop_key_id)?;
           BatchResult::PropDeleted
         }
@@ -2136,7 +2160,7 @@ impl Ray {
 
 /// Context for executing operations within a transaction
 ///
-/// Provides the same operations as Ray but within an explicit transaction scope.
+/// Provides the same operations as Kite but within an explicit transaction scope.
 /// All operations are committed together when the transaction closure returns Ok,
 /// or rolled back if an error is returned.
 ///
@@ -2159,7 +2183,7 @@ impl<'a> TxContext<'a> {
     let node_def = self
       .nodes
       .get(node_type)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown node type: {node_type}")))?
+      .ok_or_else(|| KiteError::InvalidSchema(format!("Unknown node type: {node_type}")))?
       .clone();
 
     let full_key = node_def.key(key_suffix);
@@ -2191,11 +2215,11 @@ impl<'a> TxContext<'a> {
     let edge_def = self
       .edges
       .get(edge_type)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {edge_type}")))?;
+      .ok_or_else(|| KiteError::InvalidSchema(format!("Unknown edge type: {edge_type}")))?;
 
     let etype_id = edge_def
       .etype_id
-      .ok_or_else(|| RayError::InvalidSchema("Edge type not initialized".to_string()))?;
+      .ok_or_else(|| KiteError::InvalidSchema("Edge type not initialized".to_string()))?;
 
     add_edge(&mut self.handle, src, etype_id, dst)?;
     Ok(())
@@ -2206,11 +2230,11 @@ impl<'a> TxContext<'a> {
     let edge_def = self
       .edges
       .get(edge_type)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {edge_type}")))?;
+      .ok_or_else(|| KiteError::InvalidSchema(format!("Unknown edge type: {edge_type}")))?;
 
     let etype_id = edge_def
       .etype_id
-      .ok_or_else(|| RayError::InvalidSchema("Edge type not initialized".to_string()))?;
+      .ok_or_else(|| KiteError::InvalidSchema("Edge type not initialized".to_string()))?;
 
     delete_edge(&mut self.handle, src, etype_id, dst)
   }
@@ -2228,7 +2252,7 @@ impl<'a> TxContext<'a> {
       .handle
       .db
       .get_propkey_id(prop_name)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown property: {prop_name}")))?;
+      .ok_or_else(|| KiteError::InvalidSchema(format!("Unknown property: {prop_name}")))?;
     del_node_prop(&mut self.handle, node_id, prop_key_id)?;
     Ok(())
   }
@@ -2243,11 +2267,11 @@ impl<'a> TxContext<'a> {
     let edge_def = self
       .edges
       .get(edge_type)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown edge type: {edge_type}")))?;
+      .ok_or_else(|| KiteError::InvalidSchema(format!("Unknown edge type: {edge_type}")))?;
 
     let etype_id = edge_def
       .etype_id
-      .ok_or_else(|| RayError::InvalidSchema("Edge type not initialized".to_string()))?;
+      .ok_or_else(|| KiteError::InvalidSchema("Edge type not initialized".to_string()))?;
 
     Ok(edge_exists(&self.handle, src, etype_id, dst))
   }
@@ -2258,7 +2282,7 @@ impl<'a> TxContext<'a> {
       .handle
       .db
       .get_propkey_id(prop_name)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown property: {prop_name}")))?;
+      .ok_or_else(|| KiteError::InvalidSchema(format!("Unknown property: {prop_name}")))?;
 
     Ok(get_node_prop(&self.handle, node_id, prop_key_id))
   }
@@ -2268,7 +2292,7 @@ impl<'a> TxContext<'a> {
     let node_def = self
       .nodes
       .get(node_type)
-      .ok_or_else(|| RayError::InvalidSchema(format!("Unknown node type: {node_type}")))?;
+      .ok_or_else(|| KiteError::InvalidSchema(format!("Unknown node type: {node_type}")))?;
 
     let full_key = node_def.key(key_suffix);
     let node_id = get_node_by_key(&self.handle, &full_key);
@@ -2280,7 +2304,7 @@ impl<'a> TxContext<'a> {
   }
 }
 
-impl Ray {
+impl Kite {
   /// Execute operations in an explicit transaction
   ///
   /// The closure receives a TxContext with access to node/edge operations.
@@ -2289,12 +2313,12 @@ impl Ray {
   ///
   /// # Example
   /// ```rust,no_run
-  /// # use kitedb::api::ray::Ray;
+  /// # use kitedb::api::kite::Kite;
   /// # use kitedb::types::PropValue;
   /// # use std::collections::HashMap;
   /// # fn main() -> kitedb::error::Result<()> {
-  /// # let mut ray: Ray = unimplemented!();
-  /// let result = ray.transaction(|ctx| {
+  /// # let mut kite: Kite = unimplemented!();
+  /// let result = kite.transaction(|ctx| {
   ///   let alice = ctx.create_node("User", "alice", HashMap::new())?;
   ///   let bob = ctx.create_node("User", "bob", HashMap::new())?;
   ///   ctx.link(alice.id, "FOLLOWS", bob.id)?;
@@ -2409,8 +2433,8 @@ impl TxBuilder {
     self
   }
 
-  /// Execute the transaction on the given Ray instance
-  pub fn execute(self, ray: &mut Ray) -> Result<Vec<BatchResult>> {
+  /// Execute the transaction on the given Kite instance
+  pub fn execute(self, ray: &mut Kite) -> Result<Vec<BatchResult>> {
     ray.batch(self.ops)
   }
 
@@ -2426,38 +2450,38 @@ impl TxBuilder {
 
 /// Fluent builder for updating node properties
 ///
-/// Created via `ray.update()`, `ray.update_by_id()`, or `ray.update_by_key()`
+/// Created via `kite.update()`, `kite.update_by_id()`, or `kite.update_by_key()`
 /// and allows chaining multiple property set/unset operations before executing
 /// in a single transaction.
 ///
 /// # Example
 /// ```rust,no_run
-/// # use kitedb::api::ray::{NodeRef, Ray};
+/// # use kitedb::api::kite::{NodeRef, Kite};
 /// # use kitedb::types::PropValue;
 /// # fn main() -> kitedb::error::Result<()> {
-/// # let mut ray: Ray = unimplemented!();
+/// # let mut kite: Kite = unimplemented!();
 /// # let alice: NodeRef = unimplemented!();
 /// // Update by node reference
-/// ray.update(&alice)?
+/// kite.update(&alice)?
 ///     .set("name", PropValue::String("Alice Updated".into()))
 ///     .set("age", PropValue::I64(31))
 ///     .unset("old_field")
 ///     .execute()?;
 ///
 /// // Update by key
-/// ray.update_by_key("User", "alice")?
+/// kite.update_by_key("User", "alice")?
 ///     .set("name", PropValue::String("New Name".into()))
 ///     .execute()?;
 /// # Ok(())
 /// # }
 /// ```
-pub struct RayUpdateNodeBuilder<'a> {
-  ray: &'a mut Ray,
+pub struct KiteUpdateNodeBuilder<'a> {
+  ray: &'a mut Kite,
   node_id: NodeId,
   updates: HashMap<String, Option<PropValue>>,
 }
 
-impl<'a> RayUpdateNodeBuilder<'a> {
+impl<'a> KiteUpdateNodeBuilder<'a> {
   /// Set a node property value
   ///
   /// The property will be set when `execute()` is called.
@@ -2522,26 +2546,26 @@ impl<'a> RayUpdateNodeBuilder<'a> {
 
 /// Fluent builder for inserting nodes
 ///
-/// Created via `ray.insert(node_type)` and provides a fluent API for creating
+/// Created via `kite.insert(node_type)` and provides a fluent API for creating
 /// nodes with the `.values().returning()` or `.values().execute()` pattern.
 ///
 /// # Example
 /// ```rust,no_run
-/// # use kitedb::api::ray::Ray;
+/// # use kitedb::api::kite::Kite;
 /// # use kitedb::types::PropValue;
 /// # use std::collections::HashMap;
 /// # fn main() -> kitedb::error::Result<()> {
-/// # let mut ray: Ray = unimplemented!();
+/// # let mut kite: Kite = unimplemented!();
 /// # let props: HashMap<String, PropValue> = HashMap::new();
 /// # let alice_props: HashMap<String, PropValue> = HashMap::new();
 /// # let bob_props: HashMap<String, PropValue> = HashMap::new();
 /// // Insert and get the node reference back
-/// let user = ray.insert("User")?
+/// let user = kite.insert("User")?
 ///     .values("alice", props)?
 ///     .returning()?;
 ///
 /// // Insert multiple nodes
-/// let users = ray.insert("User")?
+/// let users = kite.insert("User")?
 ///     .values_many(vec![
 ///         ("alice", alice_props),
 ///         ("bob", bob_props),
@@ -2550,13 +2574,13 @@ impl<'a> RayUpdateNodeBuilder<'a> {
 /// # Ok(())
 /// # }
 /// ```
-pub struct RayInsertBuilder<'a> {
-  ray: &'a mut Ray,
+pub struct KiteInsertBuilder<'a> {
+  ray: &'a mut Kite,
   node_type: String,
   key_prefix: String,
 }
 
-impl<'a> RayInsertBuilder<'a> {
+impl<'a> KiteInsertBuilder<'a> {
   /// Specify the values for a single node insert
   ///
   /// Returns an executor that can either `.execute()` (no return) or
@@ -2601,7 +2625,7 @@ impl<'a> RayInsertBuilder<'a> {
 
 /// Executor for single node insert
 pub struct InsertExecutorSingle<'a> {
-  ray: &'a mut Ray,
+  ray: &'a mut Kite,
   node_type: String,
   full_key: String,
   props: HashMap<String, PropValue>,
@@ -2638,7 +2662,7 @@ impl<'a> InsertExecutorSingle<'a> {
 
 /// Executor for multiple node insert
 pub struct InsertExecutorMultiple<'a> {
-  ray: &'a mut Ray,
+  ray: &'a mut Kite,
   node_type: String,
   entries: Vec<(String, HashMap<String, PropValue>)>,
 }
@@ -2680,23 +2704,156 @@ impl<'a> InsertExecutorMultiple<'a> {
 }
 
 // ============================================================================
+// Upsert Builder
+// ============================================================================
+
+/// Fluent builder for upserting nodes
+///
+/// Created via `kite.upsert(node_type)` and provides a fluent API for
+/// creating or updating nodes with the `.values().returning()` or
+/// `.values().execute()` pattern.
+pub struct KiteUpsertBuilder<'a> {
+  ray: &'a mut Kite,
+  node_type: String,
+  key_prefix: String,
+}
+
+impl<'a> KiteUpsertBuilder<'a> {
+  /// Specify the values for a single upsert
+  pub fn values(
+    self,
+    key_suffix: &str,
+    props: HashMap<String, PropValue>,
+  ) -> Result<UpsertExecutorSingle<'a>> {
+    let full_key = format!("{}{}", self.key_prefix, key_suffix);
+    Ok(UpsertExecutorSingle {
+      ray: self.ray,
+      node_type: self.node_type,
+      full_key,
+      props,
+    })
+  }
+
+  /// Specify values for multiple upserts
+  pub fn values_many(
+    self,
+    items: Vec<(&str, HashMap<String, PropValue>)>,
+  ) -> Result<UpsertExecutorMultiple<'a>> {
+    let entries: Vec<(String, HashMap<String, PropValue>)> = items
+      .into_iter()
+      .map(|(key_suffix, props)| {
+        let full_key = format!("{}{}", self.key_prefix, key_suffix);
+        (full_key, props)
+      })
+      .collect();
+
+    Ok(UpsertExecutorMultiple {
+      ray: self.ray,
+      node_type: self.node_type,
+      entries,
+    })
+  }
+}
+
+/// Executor for single node upsert
+pub struct UpsertExecutorSingle<'a> {
+  ray: &'a mut Kite,
+  node_type: String,
+  full_key: String,
+  props: HashMap<String, PropValue>,
+}
+
+impl<'a> UpsertExecutorSingle<'a> {
+  /// Execute the upsert and return the node reference
+  pub fn returning(self) -> Result<NodeRef> {
+    let mut handle = begin_tx(&self.ray.db)?;
+
+    let mut updates = Vec::with_capacity(self.props.len());
+    for (prop_name, value) in self.props {
+      let prop_key_id = self.ray.db.get_or_create_propkey(&prop_name);
+      let value_opt = match value {
+        PropValue::Null => None,
+        other => Some(other),
+      };
+      updates.push((prop_key_id, value_opt));
+    }
+
+    let (node_id, _) = upsert_node_with_props(&mut handle, &self.full_key, updates)?;
+
+    commit(&mut handle)?;
+
+    Ok(NodeRef::new(node_id, Some(self.full_key), &self.node_type))
+  }
+
+  /// Execute the upsert without returning the node reference
+  pub fn execute(self) -> Result<()> {
+    let _ = self.returning()?;
+    Ok(())
+  }
+}
+
+/// Executor for multiple node upserts
+pub struct UpsertExecutorMultiple<'a> {
+  ray: &'a mut Kite,
+  node_type: String,
+  entries: Vec<(String, HashMap<String, PropValue>)>,
+}
+
+impl<'a> UpsertExecutorMultiple<'a> {
+  /// Execute the upserts and return node references
+  pub fn returning(self) -> Result<Vec<NodeRef>> {
+    if self.entries.is_empty() {
+      return Ok(Vec::new());
+    }
+
+    let mut handle = begin_tx(&self.ray.db)?;
+    let mut results = Vec::with_capacity(self.entries.len());
+
+    for (full_key, props) in self.entries {
+      let mut updates = Vec::with_capacity(props.len());
+      for (prop_name, value) in props {
+        let prop_key_id = self.ray.db.get_or_create_propkey(&prop_name);
+        let value_opt = match value {
+          PropValue::Null => None,
+          other => Some(other),
+        };
+        updates.push((prop_key_id, value_opt));
+      }
+
+      let (node_id, _) = upsert_node_with_props(&mut handle, &full_key, updates)?;
+      results.push(NodeRef::new(node_id, Some(full_key), &self.node_type));
+    }
+
+    commit(&mut handle)?;
+
+    Ok(results)
+  }
+
+  /// Execute the upserts without returning node references
+  pub fn execute(self) -> Result<()> {
+    let _ = self.returning()?;
+    Ok(())
+  }
+}
+
+// ============================================================================
 // Update Edge Builder
 // ============================================================================
 
 /// Fluent builder for updating edge properties
 ///
-/// Created via `ray.update_edge(src, edge_type, dst)` and allows chaining
+/// Created via `kite.update_edge(src, edge_type, dst)` and allows chaining
 /// multiple property set/unset operations before executing in a single transaction.
 ///
 /// # Example
 /// ```rust,no_run
-/// # use kitedb::api::ray::Ray;
+/// # use kitedb::api::kite::Kite;
 /// # use kitedb::types::{NodeId, PropValue};
 /// # fn main() -> kitedb::error::Result<()> {
-/// # let mut ray: Ray = unimplemented!();
+/// # let mut kite: Kite = unimplemented!();
 /// # let alice_id: NodeId = 1;
 /// # let bob_id: NodeId = 2;
-/// ray.update_edge(alice_id, "FOLLOWS", bob_id)?
+/// kite.update_edge(alice_id, "FOLLOWS", bob_id)?
 ///    .set("weight", PropValue::F64(0.9))
 ///    .set("since", PropValue::String("2024".to_string()))
 ///    .unset("deprecated_field")
@@ -2704,15 +2861,15 @@ impl<'a> InsertExecutorMultiple<'a> {
 /// # Ok(())
 /// # }
 /// ```
-pub struct RayUpdateEdgeBuilder<'a> {
-  ray: &'a mut Ray,
+pub struct KiteUpdateEdgeBuilder<'a> {
+  ray: &'a mut Kite,
   src: NodeId,
   etype_id: ETypeId,
   dst: NodeId,
   updates: HashMap<String, Option<PropValue>>,
 }
 
-impl<'a> RayUpdateEdgeBuilder<'a> {
+impl<'a> KiteUpdateEdgeBuilder<'a> {
   /// Set an edge property value
   ///
   /// The property will be set when `execute()` is called.
@@ -2790,7 +2947,7 @@ mod tests {
   use super::*;
   use tempfile::tempdir;
 
-  fn create_test_schema() -> RayOptions {
+  fn create_test_schema() -> KiteOptions {
     let user = NodeDef::new("User", "user:")
       .prop(PropDef::string("name").required())
       .prop(PropDef::int("age"));
@@ -2802,7 +2959,7 @@ mod tests {
     let follows = EdgeDef::new("FOLLOWS");
     let authored = EdgeDef::new("AUTHORED");
 
-    RayOptions::new()
+    KiteOptions::new()
       .node(user)
       .node(post)
       .edge(follows)
@@ -2814,7 +2971,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let ray = Ray::open(temp_dir.path(), options).unwrap();
+    let ray = Kite::open(temp_dir.path(), options).unwrap();
 
     assert_eq!(ray.node_types().len(), 2);
     assert_eq!(ray.edge_types().len(), 2);
@@ -2829,7 +2986,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     // Create a user
     let mut props = HashMap::new();
@@ -2857,7 +3014,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     // Create two users
     let alice = ray.create_node("User", "alice", HashMap::new()).unwrap();
@@ -2889,7 +3046,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     // Create a user
     let mut props = HashMap::new();
@@ -2913,7 +3070,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     assert_eq!(ray.count_nodes(), 0);
 
@@ -2931,7 +3088,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     let user = ray.create_node("User", "alice", HashMap::new()).unwrap();
     assert!(ray.exists(user.id));
@@ -2947,7 +3104,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     // Create a user
     let user = ray.create_node("User", "alice", HashMap::new()).unwrap();
@@ -2971,7 +3128,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     // Create some users and posts
     ray.create_node("User", "alice", HashMap::new()).unwrap();
@@ -2994,7 +3151,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     // Create some users and posts
     ray.create_node("User", "alice", HashMap::new()).unwrap();
@@ -3014,7 +3171,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     // Create nodes and edges
     let alice = ray.create_node("User", "alice", HashMap::new()).unwrap();
@@ -3042,7 +3199,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     let alice = ray.create_node("User", "alice", HashMap::new()).unwrap();
     let bob = ray.create_node("User", "bob", HashMap::new()).unwrap();
@@ -3068,7 +3225,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     // Create a chain: alice -> bob -> charlie
     let alice = ray.create_node("User", "alice", HashMap::new()).unwrap();
@@ -3100,7 +3257,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     let alice = ray.create_node("User", "alice", HashMap::new()).unwrap();
     let bob = ray.create_node("User", "bob", HashMap::new()).unwrap();
@@ -3127,7 +3284,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     let alice = ray.create_node("User", "alice", HashMap::new()).unwrap();
     let bob = ray.create_node("User", "bob", HashMap::new()).unwrap();
@@ -3151,7 +3308,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     // Create a chain: alice -> bob -> charlie
     let alice = ray.create_node("User", "alice", HashMap::new()).unwrap();
@@ -3180,7 +3337,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     let alice = ray.create_node("User", "alice", HashMap::new()).unwrap();
     let bob = ray.create_node("User", "bob", HashMap::new()).unwrap();
@@ -3203,7 +3360,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     let alice = ray.create_node("User", "alice", HashMap::new()).unwrap();
     let bob = ray.create_node("User", "bob", HashMap::new()).unwrap();
@@ -3223,7 +3380,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     // Create: alice -> bob -> charlie -> dave
     let alice = ray.create_node("User", "alice", HashMap::new()).unwrap();
@@ -3253,7 +3410,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     // Create a diamond: alice -> bob -> dave, alice -> charlie -> dave
     let alice = ray.create_node("User", "alice", HashMap::new()).unwrap();
@@ -3292,7 +3449,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     // Create multiple nodes in a batch
     let results = ray
@@ -3331,7 +3488,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     // First batch: create nodes
     let results = ray
@@ -3379,7 +3536,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     // Create a node
     let user = ray.create_node("User", "alice", HashMap::new()).unwrap();
@@ -3415,7 +3572,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     // Create initial nodes
     let alice = ray.create_node("User", "alice", HashMap::new()).unwrap();
@@ -3462,7 +3619,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     // Create nodes and edges
     let alice = ray.create_node("User", "alice", HashMap::new()).unwrap();
@@ -3505,7 +3662,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     // Execute a transaction
     let (alice, bob) = ray
@@ -3530,7 +3687,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     // Create node with properties in transaction
     let alice = ray
@@ -3558,7 +3715,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     // Transaction that fails partway through
     let result: Result<()> = ray.transaction(|ctx| {
@@ -3583,7 +3740,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     // Create some data first
     let alice = ray.create_node("User", "alice", HashMap::new()).unwrap();
@@ -3619,7 +3776,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     // Create nodes first
     let alice = ray.create_node("User", "alice", HashMap::new()).unwrap();
@@ -3665,7 +3822,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     // Use the builder pattern
     let results = ray
@@ -3724,7 +3881,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     let alice = ray.create_node("User", "alice", HashMap::new()).unwrap();
     let bob = ray.create_node("User", "bob", HashMap::new()).unwrap();
@@ -3760,7 +3917,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     let alice = ray.create_node("User", "alice", HashMap::new()).unwrap();
     let bob = ray.create_node("User", "bob", HashMap::new()).unwrap();
@@ -3796,7 +3953,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     let alice = ray.create_node("User", "alice", HashMap::new()).unwrap();
     let bob = ray.create_node("User", "bob", HashMap::new()).unwrap();
@@ -3828,7 +3985,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     let alice = ray.create_node("User", "alice", HashMap::new()).unwrap();
     let bob = ray.create_node("User", "bob", HashMap::new()).unwrap();
@@ -3864,7 +4021,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     let alice = ray.create_node("User", "alice", HashMap::new()).unwrap();
     let bob = ray.create_node("User", "bob", HashMap::new()).unwrap();
@@ -3891,7 +4048,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     let alice = ray.create_node("User", "alice", HashMap::new()).unwrap();
     let bob = ray.create_node("User", "bob", HashMap::new()).unwrap();
@@ -3947,7 +4104,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     let alice = ray.create_node("User", "alice", HashMap::new()).unwrap();
     let bob = ray.create_node("User", "bob", HashMap::new()).unwrap();
@@ -3986,7 +4143,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     let alice = ray.create_node("User", "alice", HashMap::new()).unwrap();
     let bob = ray.create_node("User", "bob", HashMap::new()).unwrap();
@@ -4009,7 +4166,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     // Insert with returning
     let mut props = HashMap::new();
@@ -4044,7 +4201,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     // Insert without returning
     let mut props = HashMap::new();
@@ -4074,7 +4231,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     // Insert multiple nodes
     let mut alice_props = HashMap::new();
@@ -4115,7 +4272,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     // Empty insert should succeed
     let users = ray
@@ -4137,7 +4294,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let ray = Ray::open(temp_dir.path(), options).unwrap();
+    let ray = Kite::open(temp_dir.path(), options).unwrap();
 
     let result = ray.check().unwrap();
     assert!(result.valid);
@@ -4153,7 +4310,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     // Create some nodes and edges
     let alice = ray.create_node("User", "alice", HashMap::new()).unwrap();
@@ -4181,7 +4338,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     // Create nodes with properties
     let mut props = HashMap::new();
@@ -4217,7 +4374,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     // Create a node
     let mut props = HashMap::new();
@@ -4249,7 +4406,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     // Create a node
     let mut props = HashMap::new();
@@ -4281,7 +4438,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     // Create a node
     let mut props = HashMap::new();
@@ -4308,7 +4465,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     // Create a node with properties
     let mut props = HashMap::new();
@@ -4343,7 +4500,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     // Create a node
     let eve = ray.create_node("User", "eve", HashMap::new()).unwrap();
@@ -4375,7 +4532,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     // Try to update non-existent node by ID
     let result = ray.update_by_id(999999);
@@ -4393,7 +4550,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     // Create a node
     let mut props = HashMap::new();
@@ -4415,7 +4572,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     // Create some data
     let alice = ray.create_node("User", "alice", HashMap::new()).unwrap();
@@ -4445,7 +4602,7 @@ mod tests {
     let temp_dir = tempdir().unwrap();
     let options = create_test_schema();
 
-    let mut ray = Ray::open(temp_dir.path(), options).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), options).unwrap();
 
     // Create some data
     let alice = ray.create_node("User", "alice", HashMap::new()).unwrap();

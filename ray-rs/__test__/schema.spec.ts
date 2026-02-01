@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-import { ray, raySync, node, edge, prop, optional } from '../dist/index.js'
+import { kite, kiteSync, node, edge, prop, optional } from '../dist/index.js'
 
 const makeDbPath = () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kitedb-schema-'))
@@ -98,10 +98,10 @@ test('edge() without props', (t) => {
 })
 
 // =============================================================================
-// Async ray() Tests
+// Async kite() Tests
 // =============================================================================
 
-test('ray() opens database asynchronously', async (t) => {
+test('kite() opens database asynchronously', async (t) => {
   const User = node('user', {
     key: (id: string) => `user:${id}`,
     props: {
@@ -111,7 +111,7 @@ test('ray() opens database asynchronously', async (t) => {
 
   const follows = edge('follows')
 
-  const db = await ray(makeDbPath(), {
+  const db = await kite(makeDbPath(), {
     nodes: [User],
     edges: [follows],
   })
@@ -123,7 +123,35 @@ test('ray() opens database asynchronously', async (t) => {
   db.close()
 })
 
-test('raySync() opens database synchronously', (t) => {
+test('upsert inserts and updates', async (t) => {
+  const User = node('user', {
+    key: (id: string) => `user:${id}`,
+    props: {
+      name: prop.string('name'),
+      age: prop.int('age'),
+    },
+  })
+
+  const db = await kite(makeDbPath(), {
+    nodes: [User],
+    edges: [],
+  })
+
+  const created = db.upsert('user').values('alice', { name: 'Alice', age: 30 }).returning() as any
+  t.is(created.name, 'Alice')
+  t.is(created.age, 30)
+
+  const updated = db.upsert('user').values('alice', { age: 31 }).returning() as any
+  t.is(updated.age, 31)
+  t.is(updated.name, 'Alice')
+
+  const deleted = db.upsert('user').values('alice', { name: null }).returning() as any
+  t.is(deleted.name, undefined)
+
+  db.close()
+})
+
+test('kiteSync() opens database synchronously', (t) => {
   const User = node('user', {
     key: (id: string) => `user:${id}`,
     props: {
@@ -135,7 +163,7 @@ test('raySync() opens database synchronously', (t) => {
     since: prop.int('since'),
   })
 
-  const db = raySync(makeDbPath(), {
+  const db = kiteSync(makeDbPath(), {
     nodes: [User],
     edges: [knows],
   })
@@ -173,7 +201,7 @@ test('full schema-based workflow', async (t) => {
   })
 
   // Open database
-  const db = await ray(makeDbPath(), {
+  const db = await kite(makeDbPath(), {
     nodes: [Document, Topic],
     edges: [discusses],
   })
@@ -181,21 +209,21 @@ test('full schema-based workflow', async (t) => {
   // Insert nodes
   const doc = db.insert('document').values('doc1', { title: 'Hello', content: 'World' }).returning() as any
   t.truthy(doc)
-  t.is(doc.$key, 'doc:doc1')
+  t.is(doc.key, 'doc:doc1')
   t.is(doc.title, 'Hello')
 
   const topic = db.insert('topic').values('greeting', { name: 'Greetings' }).returning() as any
   t.truthy(topic)
-  t.is(topic.$key, 'topic:greeting')
+  t.is(topic.key, 'topic:greeting')
 
   // Link with edge props
-  db.link(doc.$id, 'discusses', topic.$id, { relevance: 0.95 })
+  db.link(doc.id, 'discusses', topic.id, { relevance: 0.95 })
 
   // Verify edge
-  t.true(db.hasEdge(doc.$id, 'discusses', topic.$id))
+  t.true(db.hasEdge(doc.id, 'discusses', topic.id))
 
   // Get edge prop
-  const relevance = db.getEdgeProp(doc.$id, 'discusses', topic.$id, 'relevance')
+  const relevance = db.getEdgeProp(doc.id, 'discusses', topic.id, 'relevance')
   t.truthy(relevance)
   t.is(relevance?.floatValue, 0.95)
 
@@ -209,8 +237,8 @@ test('full schema-based workflow', async (t) => {
   db.close()
 })
 
-test('async ray() is non-blocking', async (t) => {
-  // This test verifies that ray() doesn't block
+test('async kite() is non-blocking', async (t) => {
+  // This test verifies that kite() doesn't block
   // by checking that we can interleave other async operations
   const User = node('user', {
     key: (id: string) => `user:${id}`,
@@ -220,7 +248,7 @@ test('async ray() is non-blocking', async (t) => {
   const dbPath = makeDbPath()
 
   // Start opening database
-  const dbPromise = ray(dbPath, {
+  const dbPromise = kite(dbPath, {
     nodes: [User],
     edges: [],
   })

@@ -154,20 +154,14 @@ class EdgeResult:
         props = object.__getattribute__(self, "props")
         if name in props:
             return props[name]
-        if name == "$src":
-            return self.src
-        if name == "$dst":
-            return self.dst
-        if name == "$etype":
-            return self.etype
         raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
     def __getitem__(self, key: str) -> Any:
-        if key == "$src":
+        if key == "src":
             return self.src
-        if key == "$dst":
+        if key == "dst":
             return self.dst
-        if key == "$etype":
+        if key == "etype":
             return self.etype
         props = object.__getattribute__(self, "props")
         if key in props:
@@ -175,7 +169,7 @@ class EdgeResult:
         raise KeyError(key)
 
     def to_dict(self) -> Dict[str, Any]:
-        data = {"$src": self.src, "$dst": self.dst, "$etype": self.etype}
+        data = {"src": self.src, "dst": self.dst, "etype": self.etype}
         data.update(self.props)
         return data
 
@@ -830,6 +824,29 @@ class TraversalBuilder(Generic[N]):
         self._edge_filter: Optional[Callable[[EdgeResult], bool]] = None
         self._limit: Optional[int] = None
         self._prop_strategy: PropLoadStrategy = PropLoadStrategy.all()
+
+    def _fork(self) -> "TraversalBuilder[N]":
+        clone = TraversalBuilder(
+            db=self._db,
+            start_nodes=list(self._start_nodes),
+            resolve_etype_id=self._resolve_etype_id,
+            resolve_prop_key_id=self._resolve_prop_key_id,
+            get_node_def=self._get_node_def,
+        )
+        clone._steps = list(self._steps)
+        clone._node_filter = self._node_filter
+        clone._edge_filter = self._edge_filter
+        clone._limit = self._limit
+        prop_names = (
+            set(self._prop_strategy.prop_names)
+            if self._prop_strategy.prop_names is not None
+            else None
+        )
+        clone._prop_strategy = PropLoadStrategy(
+            load_all=self._prop_strategy.load_all,
+            prop_names=prop_names,
+        )
+        return clone
     
     def out(self, edge: Optional[EdgeDef] = None) -> TraversalBuilder[N]:
         """
@@ -841,8 +858,9 @@ class TraversalBuilder(Generic[N]):
         Returns:
             Self for chaining
         """
-        self._steps.append(OutStep(edge_def=edge))
-        return self
+        clone = self._fork()
+        clone._steps.append(OutStep(edge_def=edge))
+        return clone
     
     def in_(self, edge: Optional[EdgeDef] = None) -> TraversalBuilder[N]:
         """
@@ -856,8 +874,9 @@ class TraversalBuilder(Generic[N]):
         Returns:
             Self for chaining
         """
-        self._steps.append(InStep(edge_def=edge))
-        return self
+        clone = self._fork()
+        clone._steps.append(InStep(edge_def=edge))
+        return clone
     
     def both(self, edge: Optional[EdgeDef] = None) -> TraversalBuilder[N]:
         """
@@ -869,8 +888,9 @@ class TraversalBuilder(Generic[N]):
         Returns:
             Self for chaining
         """
-        self._steps.append(BothStep(edge_def=edge))
-        return self
+        clone = self._fork()
+        clone._steps.append(BothStep(edge_def=edge))
+        return clone
 
     def traverse(self, edge: EdgeDef, options: TraverseOptions) -> TraversalBuilder[N]:
         """
@@ -880,8 +900,9 @@ class TraversalBuilder(Generic[N]):
             edge: Edge definition to traverse
             options: TraverseOptions (max_depth required)
         """
-        self._steps.append(TraverseStep(edge_def=edge, options=options))
-        return self
+        clone = self._fork()
+        clone._steps.append(TraverseStep(edge_def=edge, options=options))
+        return clone
     
     def with_props(self) -> TraversalBuilder[N]:
         """
@@ -897,8 +918,9 @@ class TraversalBuilder(Generic[N]):
             >>> for f in friends:
             ...     print(f.name, f.email)
         """
-        self._prop_strategy = PropLoadStrategy.all()
-        return self
+        clone = self._fork()
+        clone._prop_strategy = PropLoadStrategy.all()
+        return clone
     
     def load_props(self, *prop_names: str) -> TraversalBuilder[N]:
         """
@@ -918,8 +940,9 @@ class TraversalBuilder(Generic[N]):
             ...     print(f.name)  # Available
             ...     print(f.email)  # Will be None
         """
-        self._prop_strategy = PropLoadStrategy.only(*prop_names)
-        return self
+        clone = self._fork()
+        clone._prop_strategy = PropLoadStrategy.only(*prop_names)
+        return clone
 
     def select(self, props: List[str]) -> TraversalBuilder[N]:
         """
@@ -927,8 +950,9 @@ class TraversalBuilder(Generic[N]):
 
         This mirrors the TypeScript `select([...])` behavior.
         """
-        self._prop_strategy = PropLoadStrategy.only(*props)
-        return self
+        clone = self._fork()
+        clone._prop_strategy = PropLoadStrategy.only(*props)
+        return clone
 
     def where_edge(self, predicate: Callable[[EdgeResult], bool]) -> TraversalBuilder[N]:
         """
@@ -937,13 +961,15 @@ class TraversalBuilder(Generic[N]):
         Args:
             predicate: Function that returns True for edges to include
         """
-        self._edge_filter = predicate
-        return self
+        clone = self._fork()
+        clone._edge_filter = predicate
+        return clone
 
     def take(self, limit: int) -> TraversalBuilder[N]:
         """Limit the number of results."""
-        self._limit = limit
-        return self
+        clone = self._fork()
+        clone._limit = limit
+        return clone
     
     def where_node(self, predicate: Callable[[NodeRef[Any]], bool]) -> TraversalBuilder[N]:
         """
@@ -966,10 +992,11 @@ class TraversalBuilder(Generic[N]):
             ...     .to_list()
             ... )
         """
-        self._node_filter = predicate
+        clone = self._fork()
+        clone._node_filter = predicate
         # Filter needs properties to work, so enable loading all
-        self._prop_strategy = PropLoadStrategy.all()
-        return self
+        clone._prop_strategy = PropLoadStrategy.all()
+        return clone
     
     def _build_result(self) -> TraversalResult[N]:
         """Build the traversal result."""

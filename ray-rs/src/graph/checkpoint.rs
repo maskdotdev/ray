@@ -11,7 +11,7 @@ use std::fs;
 use std::sync::Arc;
 
 use crate::constants::{parse_snapshot_gen, SNAPSHOTS_DIR, TRASH_DIR};
-use crate::error::{RayError, Result};
+use crate::error::{KiteError, Result};
 
 use super::db::GraphDB;
 
@@ -83,7 +83,7 @@ fn checkpoint_impl(db: &mut GraphDB, manage_status: bool) -> Result<CheckpointSt
   if manage_status {
     let mut status = db.checkpoint_status.lock();
     if !matches!(*status, CheckpointStatus::Idle) {
-      return Err(RayError::Internal("Checkpoint already running".to_string()));
+      return Err(KiteError::Internal("Checkpoint already running".to_string()));
     }
     *status = CheckpointStatus::Running;
   }

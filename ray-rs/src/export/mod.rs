@@ -9,7 +9,7 @@ use std::io::{BufReader, BufWriter, Write};
 use std::path::Path;
 
 use crate::core::single_file::SingleFileDB;
-use crate::error::{RayError, Result};
+use crate::error::{KiteError, Result};
 use crate::graph::db::GraphDB;
 use crate::graph::definitions::{define_etype, define_label, define_propkey};
 use crate::graph::edges::{add_edge, get_edge_props_db};
@@ -376,15 +376,15 @@ pub fn export_to_json<P: AsRef<Path>>(
   path: P,
   pretty: bool,
 ) -> Result<ExportResult> {
-  let file = File::create(path).map_err(RayError::Io)?;
+  let file = File::create(path).map_err(KiteError::Io)?;
   let mut writer = BufWriter::new(file);
   if pretty {
     serde_json::to_writer_pretty(&mut writer, data)
-      .map_err(|e| RayError::Serialization(e.to_string()))?;
+      .map_err(|e| KiteError::Serialization(e.to_string()))?;
   } else {
-    serde_json::to_writer(&mut writer, data).map_err(|e| RayError::Serialization(e.to_string()))?;
+    serde_json::to_writer(&mut writer, data).map_err(|e| KiteError::Serialization(e.to_string()))?;
   }
-  writer.flush().map_err(RayError::Io)?;
+  writer.flush().map_err(KiteError::Io)?;
   Ok(ExportResult {
     node_count: data.stats.node_count,
     edge_count: data.stats.edge_count,
@@ -392,7 +392,7 @@ pub fn export_to_json<P: AsRef<Path>>(
 }
 
 pub fn export_to_jsonl<P: AsRef<Path>>(data: &ExportedDatabase, path: P) -> Result<ExportResult> {
-  let file = File::create(path).map_err(RayError::Io)?;
+  let file = File::create(path).map_err(KiteError::Io)?;
   let mut writer = BufWriter::new(file);
 
   let header = JsonLine::<serde_json::Value> {
@@ -405,50 +405,50 @@ pub fn export_to_jsonl<P: AsRef<Path>>(data: &ExportedDatabase, path: P) -> Resu
   writeln!(
     writer,
     "{}",
-    serde_json::to_string(&header).map_err(|e| RayError::Serialization(e.to_string()))?
+    serde_json::to_string(&header).map_err(|e| KiteError::Serialization(e.to_string()))?
   )
-  .map_err(RayError::Io)?;
+  .map_err(KiteError::Io)?;
 
   let schema = JsonLine {
     r#type: "schema".to_string(),
     data: Some(
-      serde_json::to_value(&data.schema).map_err(|e| RayError::Serialization(e.to_string()))?,
+      serde_json::to_value(&data.schema).map_err(|e| KiteError::Serialization(e.to_string()))?,
     ),
   };
   writeln!(
     writer,
     "{}",
-    serde_json::to_string(&schema).map_err(|e| RayError::Serialization(e.to_string()))?
+    serde_json::to_string(&schema).map_err(|e| KiteError::Serialization(e.to_string()))?
   )
-  .map_err(RayError::Io)?;
+  .map_err(KiteError::Io)?;
 
   for node in &data.nodes {
     let line = JsonLine {
       r#type: "node".to_string(),
-      data: Some(serde_json::to_value(node).map_err(|e| RayError::Serialization(e.to_string()))?),
+      data: Some(serde_json::to_value(node).map_err(|e| KiteError::Serialization(e.to_string()))?),
     };
     writeln!(
       writer,
       "{}",
-      serde_json::to_string(&line).map_err(|e| RayError::Serialization(e.to_string()))?
+      serde_json::to_string(&line).map_err(|e| KiteError::Serialization(e.to_string()))?
     )
-    .map_err(RayError::Io)?;
+    .map_err(KiteError::Io)?;
   }
 
   for edge in &data.edges {
     let line = JsonLine {
       r#type: "edge".to_string(),
-      data: Some(serde_json::to_value(edge).map_err(|e| RayError::Serialization(e.to_string()))?),
+      data: Some(serde_json::to_value(edge).map_err(|e| KiteError::Serialization(e.to_string()))?),
     };
     writeln!(
       writer,
       "{}",
-      serde_json::to_string(&line).map_err(|e| RayError::Serialization(e.to_string()))?
+      serde_json::to_string(&line).map_err(|e| KiteError::Serialization(e.to_string()))?
     )
-    .map_err(RayError::Io)?;
+    .map_err(KiteError::Io)?;
   }
 
-  writer.flush().map_err(RayError::Io)?;
+  writer.flush().map_err(KiteError::Io)?;
   Ok(ExportResult {
     node_count: data.stats.node_count,
     edge_count: data.stats.edge_count,
@@ -687,9 +687,9 @@ pub fn import_from_object_single(
 }
 
 pub fn import_from_json<P: AsRef<Path>>(path: P) -> Result<ExportedDatabase> {
-  let file = File::open(path).map_err(RayError::Io)?;
+  let file = File::open(path).map_err(KiteError::Io)?;
   let reader = BufReader::new(file);
   let data: ExportedDatabase =
-    serde_json::from_reader(reader).map_err(|e| RayError::Serialization(e.to_string()))?;
+    serde_json::from_reader(reader).map_err(|e| KiteError::Serialization(e.to_string()))?;
   Ok(data)
 }

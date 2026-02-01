@@ -10,7 +10,7 @@ use crate::core::snapshot::reader::SnapshotData;
 use crate::core::snapshot::writer::{
   build_snapshot_to_memory, EdgeData, NodeData, SnapshotBuildInput,
 };
-use crate::error::{RayError, Result};
+use crate::error::{KiteError, Result};
 use crate::types::*;
 use crate::util::mmap::map_file;
 use crate::vector::store::vector_store_get;
@@ -41,12 +41,12 @@ impl SingleFileDB {
   /// 5. Clears WAL and delta
   pub fn checkpoint(&self) -> Result<()> {
     if self.read_only {
-      return Err(RayError::ReadOnly);
+      return Err(KiteError::ReadOnly);
     }
 
     // Don't checkpoint with active transaction
     if self.has_transaction() {
-      return Err(RayError::TransactionInProgress);
+      return Err(KiteError::TransactionInProgress);
     }
 
     // Collect all graph data
@@ -189,7 +189,7 @@ impl SingleFileDB {
   /// 6. Clear checkpointInProgress flag
   pub fn background_checkpoint(&self) -> Result<()> {
     if self.read_only {
-      return Err(RayError::ReadOnly);
+      return Err(KiteError::ReadOnly);
     }
 
     // Check if already running

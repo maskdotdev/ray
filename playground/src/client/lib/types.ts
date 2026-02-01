@@ -113,7 +113,7 @@ export interface AppState {
 }
 
 // ============================================================================
-// Color Scheme - Ray Electric Blue Theme
+// Color Scheme - Kite Electric Blue Theme
 // ============================================================================
 
 export const COLORS = {
@@ -124,7 +124,7 @@ export const COLORS = {
   border: "#1B2A3C",
   borderSubtle: "#223348",
   
-  // Accent - Ray Cyan
+  // Accent - Kite Cyan
   accent: "#2AF2FF",
   accentGlow: "rgba(42, 242, 255, 0.45)",
   accentBg: "rgba(42, 242, 255, 0.12)",

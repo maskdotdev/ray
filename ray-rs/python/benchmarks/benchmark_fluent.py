@@ -34,7 +34,7 @@ try:
     # Low-level API
     from kitedb import Database, PropValue
     # Fluent API
-    from kitedb import ray, define_node, define_edge, prop, optional
+    from kitedb import kite, define_node, define_edge, prop, optional
 except ImportError as e:
     print(f"Error: kitedb module not found ({e}). Make sure to build the Python bindings first:")
     print("  maturin develop --features python")
@@ -348,7 +348,7 @@ def run_benchmarks(config: BenchConfig):
         age_key = low_level_db.get_or_create_propkey("age")
         
         # Fluent database setup
-        fluent_db = ray(os.path.join(fluent_dir, "test.kitedb"), 
+        fluent_db = kite(os.path.join(fluent_dir, "test.kitedb"), 
                        nodes=[user], edges=[knows])
         
         # =================================================================

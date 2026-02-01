@@ -3,7 +3,7 @@
 //! Ported from src/core/header.ts
 
 use crate::constants::*;
-use crate::error::{RayError, Result};
+use crate::error::{KiteError, Result};
 use crate::types::DbHeaderV1;
 use crate::util::binary::*;
 use crate::util::crc::crc32c;
@@ -12,7 +12,7 @@ impl DbHeaderV1 {
   /// Parse header from page buffer
   pub fn parse(data: &[u8]) -> Result<Self> {
     if data.len() < DB_HEADER_SIZE {
-      return Err(RayError::InvalidSnapshot(format!(
+      return Err(KiteError::InvalidSnapshot(format!(
         "Header too small: {} bytes",
         data.len()
       )));
@@ -20,7 +20,7 @@ impl DbHeaderV1 {
 
     // Verify magic
     if data[0..16] != MAGIC_KITEDB {
-      return Err(RayError::InvalidMagic {
+      return Err(KiteError::InvalidMagic {
         expected: u32::from_le_bytes(MAGIC_KITEDB[0..4].try_into().unwrap()),
         got: read_u32(data, 0),
       });
@@ -30,7 +30,7 @@ impl DbHeaderV1 {
     let header_crc = read_u32(data, 176);
     let computed_header_crc = crc32c(&data[0..176]);
     if header_crc != computed_header_crc {
-      return Err(RayError::CrcMismatch {
+      return Err(KiteError::CrcMismatch {
         stored: header_crc,
         computed: computed_header_crc,
       });

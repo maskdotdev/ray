@@ -1,12 +1,12 @@
 /**
  * Database Manager Singleton
  *
- * Manages the current RayDB connection for the playground.
+ * Manages the current KiteDB connection for the playground.
  */
 
 import {
-  ray,
-  type Ray,
+  kite,
+  type Kite,
   defineNode,
   defineEdge,
   prop,
@@ -67,7 +67,7 @@ export const edges = [ImportsEdge, CallsEdge, ContainsEdge, ExtendsEdge];
 // ============================================================================
 
 interface DbState {
-  db: Ray;
+  db: Kite;
   path: string;
   isDemo: boolean;
   tempDir?: string;
@@ -82,7 +82,7 @@ export async function openDatabase(path: string): Promise<{ success: boolean; er
   try {
     await closeDatabase();
     
-    const db = await ray(path, { nodes, edges });
+    const db = await kite(path, { nodes, edges });
     currentDb = { db, path, isDemo: false };
     
     return { success: true };
@@ -105,11 +105,11 @@ export async function openFromBuffer(
     await closeDatabase();
     
     // Create temp directory and write the file
-    const tempDir = await mkdtemp(join(tmpdir(), "raydb-playground-"));
+    const tempDir = await mkdtemp(join(tmpdir(), "kitedb-playground-"));
     const tempPath = join(tempDir, filename);
     await writeFile(tempPath, buffer);
     
-    const db = await ray(tempPath, { nodes, edges });
+    const db = await kite(tempPath, { nodes, edges });
     currentDb = { db, path: tempPath, isDemo: false, tempDir };
     
     return { success: true };
@@ -129,10 +129,10 @@ export async function createDemo(): Promise<{ success: boolean; error?: string }
     await closeDatabase();
     
     // Create temp directory for demo
-    const tempDir = await mkdtemp(join(tmpdir(), "raydb-demo-"));
+    const tempDir = await mkdtemp(join(tmpdir(), "kitedb-demo-"));
     const demoPath = join(tempDir, "demo.raydb");
     
-    const db = await ray(demoPath, { nodes, edges });
+    const db = await kite(demoPath, { nodes, edges });
     
     // Populate with demo data
     await createDemoGraph(db);
@@ -171,7 +171,7 @@ export async function closeDatabase(): Promise<{ success: boolean }> {
 /**
  * Get the current database instance
  */
-export function getDb(): Ray | null {
+export function getDb(): Kite | null {
   return currentDb?.db ?? null;
 }
 

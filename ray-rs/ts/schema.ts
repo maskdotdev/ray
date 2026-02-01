@@ -184,7 +184,7 @@ export interface NodeConfig<K extends string = string> {
  *
  * @param name - The node type name (must be unique)
  * @param config - Node configuration with key function and properties
- * @returns A NodeSpec that can be passed to ray()
+ * @returns A NodeSpec that can be passed to kite()
  *
  * @example
  * ```typescript
@@ -255,7 +255,7 @@ export interface EdgeSpec {
  *
  * @param name - The edge type name (must be unique)
  * @param props - Optional property definitions
- * @returns An EdgeSpec that can be passed to ray()
+ * @returns An EdgeSpec that can be passed to kite()
  *
  * @example
  * ```typescript

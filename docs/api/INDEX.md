@@ -1,6 +1,6 @@
-# Ray API Documentation Index
+# Kite API Documentation Index
 
-Welcome to the Ray High-Level API documentation! This index will help you find what you need.
+Welcome to the Kite High-Level API documentation! This index will help you find what you need.
 
 ## Documentation Files
 
@@ -66,7 +66,7 @@ For understanding how the API is built and why.
 ---
 
 ### [../API.md](../API.md) - **Project Architecture**
-High-level overview of the entire Ray project.
+High-level overview of the entire Kite project.
 
 **Contents:**
 - Full system architecture

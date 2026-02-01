@@ -1,6 +1,6 @@
-# Ray API - Quick Start Guide
+# Kite API - Quick Start Guide
 
-Get up and running with Ray in 5 minutes.
+Get up and running with Kite in 5 minutes.
 
 ## Installation
 
@@ -13,7 +13,7 @@ npm add @ray-db/ray
 ## Basic Setup
 
 ```typescript
-import { ray, defineNode, defineEdge, prop, optional } from '@ray-db/ray';
+import { kite, defineNode, defineEdge, prop, optional } from '@ray-db/ray';
 
 // 1. Define your schema
 const user = defineNode('user', {
@@ -39,7 +39,7 @@ const knows = defineEdge('knows', {
 const worksAt = defineEdge('worksAt');
 
 // 2. Open database
-const db = await ray('./my-database', {
+const db = await kite('./my-database', {
   nodes: [user, company],
   edges: [knows, worksAt],
 });
@@ -106,7 +106,7 @@ const [user2, user3] = await db
 
 ```typescript
 const alice = await db.get(user, 'alice');
-// Returns: { $id: 1n, $key: 'user:alice', name: 'Alice', email: '...', age: 30 }
+// Returns: { id: 1n, key: 'user:alice', name: 'Alice', email: '...', age: 30 }
 
 if (!alice) {
   console.log('User not found');
@@ -126,7 +126,7 @@ const updated = await db
 await db
   .update(user)
   .set({ email: 'newemail@example.com' })
-  .where({ $key: 'user:alice' })
+  .where({ key: 'user:alice' })
   .execute();
 ```
 
@@ -140,7 +140,7 @@ const deleted = await db.delete(alice);
 // Or by key
 const deleted = await db
   .delete(user)
-  .where({ $key: 'user:alice' })
+  .where({ key: 'user:alice' })
   .execute();
 ```
 
@@ -464,7 +464,7 @@ type InsertUser = InferNodeInsert<typeof user>;
 
 // Return type (what you get back)
 type User = InferNode<typeof user>;
-// { $id: bigint; $key: string; name: string; age?: bigint; }
+// { id: bigint; key: string; name: string; age?: bigint; }
 
 // Edge props
 const knows = defineEdge('knows', { since: prop.int('since') });
@@ -475,7 +475,7 @@ type KnowsProps = InferEdgeProps<typeof knows>;
 ## Troubleshooting
 
 **Q: "Unknown edge type" error**
-A: Make sure you passed all edge definitions to `ray()` options
+A: Make sure you passed all edge definitions to `kite()` options
 
 **Q: Node not found in updates**
 A: WHERE clause throws if node doesn't exist. Use `get()` first if unsure

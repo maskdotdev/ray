@@ -512,11 +512,11 @@ export declare class JsIvfPqIndex {
 }
 
 /**
- * High-level Ray database handle for Node.js/Bun.
+ * High-level Kite database handle for Node.js/Bun.
  *
  * # Thread Safety and Concurrent Access
  *
- * Ray uses an internal RwLock to support concurrent operations:
+ * Kite uses an internal RwLock to support concurrent operations:
  *
  * - **Read operations** (get, exists, neighbors, traversals) use a shared read lock,
  *   allowing multiple concurrent reads without blocking each other.
@@ -541,9 +541,9 @@ export declare class JsIvfPqIndex {
  * await db.insert("User").key("david").set("name", "David").execute();
  * ```
  */
-export declare class Ray {
-  /** Open a Ray database */
-  static open(path: string, options: JsRayOptions): Ray
+export declare class Kite {
+  /** Open a Kite database */
+  static open(path: string, options: JsKiteOptions): Kite
   /** Close the database */
   close(): void
   /** Get a node by key (returns node object with props) */
@@ -563,11 +563,13 @@ export declare class Ray {
   /** Delete a node by key */
   deleteByKey(nodeType: string, key: unknown): boolean
   /** Create an insert builder */
-  insert(nodeType: string): RayInsertBuilder
+  insert(nodeType: string): KiteInsertBuilder
+  /** Create an upsert builder */
+  upsert(nodeType: string): KiteUpsertBuilder
   /** Create an update builder by node ID */
-  updateById(nodeId: number): RayUpdateBuilder
+  updateById(nodeId: number): KiteUpdateBuilder
   /** Create an update builder by key */
-  updateByKey(nodeType: string, key: unknown): RayUpdateBuilder
+  updateByKey(nodeType: string, key: unknown): KiteUpdateBuilder
   /** Link two nodes */
   link(src: number, edgeType: string, dst: number, props?: object | undefined | null): void
   /** Unlink two nodes */
@@ -583,7 +585,7 @@ export declare class Ray {
   /** Delete an edge property */
   delEdgeProp(src: number, edgeType: string, dst: number, propName: string): void
   /** Update edge properties with a builder */
-  updateEdge(src: number, edgeType: string, dst: number): RayUpdateEdgeBuilder
+  updateEdge(src: number, edgeType: string, dst: number): KiteUpdateEdgeBuilder
   /** List all nodes of a type (returns array of node objects) */
   all(nodeType: string): Array<object>
   /** Count nodes (optionally by type) */
@@ -609,37 +611,37 @@ export declare class Ray {
   /** Execute a batch of operations atomically */
   batch(ops: Array<object>): Array<object>
   /** Begin a traversal from a node ID */
-  from(nodeId: number): RayTraversal
+  from(nodeId: number): KiteTraversal
   /** Begin a traversal from multiple nodes */
-  fromNodes(nodeIds: Array<number>): RayTraversal
+  fromNodes(nodeIds: Array<number>): KiteTraversal
   /** Begin a path finding query */
-  path(source: number, target: number): RayPath
+  path(source: number, target: number): KitePath
   /** Begin a path finding query to multiple targets */
-  pathToAny(source: number, targets: Array<number>): RayPath
+  pathToAny(source: number, targets: Array<number>): KitePath
 }
 
-export declare class RayInsertBuilder {
+export declare class KiteInsertBuilder {
   /** Specify values for a single insert */
-  values(key: unknown, props?: object | undefined | null): RayInsertExecutorSingle
+  values(key: unknown, props?: object | undefined | null): KiteInsertExecutorSingle
   /** Specify values for multiple inserts */
-  valuesMany(entries: Array<unknown>): RayInsertExecutorMany
+  valuesMany(entries: Array<unknown>): KiteInsertExecutorMany
 }
 
-export declare class RayInsertExecutorMany {
+export declare class KiteInsertExecutorMany {
   /** Execute the inserts without returning */
   execute(): void
   /** Execute the inserts and return nodes */
   returning(): Array<object>
 }
 
-export declare class RayInsertExecutorSingle {
+export declare class KiteInsertExecutorSingle {
   /** Execute the insert without returning */
   execute(): void
   /** Execute the insert and return the node */
   returning(): object
 }
 
-export declare class RayPath {
+export declare class KitePath {
   via(edgeType: string): void
   maxDepth(depth: number): void
   direction(direction: string): void
@@ -649,21 +651,21 @@ export declare class RayPath {
   findKShortest(k: number): Array<JsPathResult>
 }
 
-export declare class RayTraversal {
-  whereEdge(func: unknown): void
-  whereNode(func: unknown): void
-  out(edgeType?: string | undefined | null): void
-  in(edgeType?: string | undefined | null): void
-  both(edgeType?: string | undefined | null): void
-  traverse(edgeType: string | undefined | null, options: JsTraverseOptions): void
-  take(limit: number): void
-  select(props: Array<string>): void
+export declare class KiteTraversal {
+  whereEdge(func: unknown): KiteTraversal
+  whereNode(func: unknown): KiteTraversal
+  out(edgeType?: string | undefined | null): KiteTraversal
+  in(edgeType?: string | undefined | null): KiteTraversal
+  both(edgeType?: string | undefined | null): KiteTraversal
+  traverse(edgeType: string | undefined | null, options: JsTraverseOptions): KiteTraversal
+  take(limit: number): KiteTraversal
+  select(props: Array<string>): KiteTraversal
   nodes(): Array<number>
   edges(): Array<JsFullEdge>
   count(): number
 }
 
-export declare class RayUpdateBuilder {
+export declare class KiteUpdateBuilder {
   /** Set a node property */
   set(propName: string, value: unknown): void
   /** Remove a node property */
@@ -674,7 +676,7 @@ export declare class RayUpdateBuilder {
   execute(): void
 }
 
-export declare class RayUpdateEdgeBuilder {
+export declare class KiteUpdateEdgeBuilder {
   /** Set an edge property */
   set(propName: string, value: unknown): void
   /** Remove an edge property */
@@ -683,6 +685,27 @@ export declare class RayUpdateEdgeBuilder {
   setAll(props: object): void
   /** Execute the edge update */
   execute(): void
+}
+
+export declare class KiteUpsertBuilder {
+  /** Specify values for a single upsert */
+  values(key: unknown, props?: object | undefined | null): KiteUpsertExecutorSingle
+  /** Specify values for multiple upserts */
+  valuesMany(entries: Array<unknown>): KiteUpsertExecutorMany
+}
+
+export declare class KiteUpsertExecutorMany {
+  /** Execute the upserts without returning */
+  execute(): void
+  /** Execute the upserts and return nodes */
+  returning(): Array<object>
+}
+
+export declare class KiteUpsertExecutorSingle {
+  /** Execute the upsert without returning */
+  execute(): void
+  /** Execute the upsert and return the node */
+  returning(): object
 }
 
 /** High-level vector index for similarity search */
@@ -999,6 +1022,14 @@ export interface JsKeySpec {
   separator?: string
 }
 
+export interface JsKiteOptions {
+  nodes: Array<JsNodeSpec>
+  edges: Array<JsEdgeSpec>
+  readOnly?: boolean
+  createIfMissing?: boolean
+  lockFile?: boolean
+}
+
 /** Node property key-value pair for JS */
 export interface JsNodeProp {
   keyId: number
@@ -1089,14 +1120,6 @@ export interface JsPropValue {
   vectorValue?: Array<number>
 }
 
-export interface JsRayOptions {
-  nodes: Array<JsNodeSpec>
-  edges: Array<JsEdgeSpec>
-  readOnly?: boolean
-  createIfMissing?: boolean
-  lockFile?: boolean
-}
-
 /** Options for vector search */
 export interface JsSearchOptions {
   /** Number of clusters to probe (overrides index default) */
@@ -1175,6 +1198,15 @@ export interface JsTraverseOptions {
   /** Whether to only visit unique nodes (default: true) */
   unique?: boolean
 }
+
+/**
+ * Kite entrypoint - async version (recommended)
+ * Opens the database on a background thread to avoid blocking the event loop
+ */
+export declare function kite(path: string, options: JsKiteOptions): Promise<unknown>
+
+/** Kite entrypoint - sync version */
+export declare function kiteSync(path: string, options: JsKiteOptions): Kite
 
 /** Memory metrics */
 export interface MemoryMetrics {
@@ -1313,15 +1345,6 @@ export declare const enum PropValueTag {
   String = 4,
   VectorF32 = 5
 }
-
-/**
- * Ray entrypoint - async version (recommended)
- * Opens the database on a background thread to avoid blocking the event loop
- */
-export declare function ray(path: string, options: JsRayOptions): Promise<unknown>
-
-/** Ray entrypoint - sync version (for backwards compatibility) */
-export declare function raySync(path: string, options: JsRayOptions): Ray
 
 /** Restore a backup into a target path */
 export declare function restoreBackup(backupPath: string, restorePath: string, options?: RestoreOptions | undefined | null): string

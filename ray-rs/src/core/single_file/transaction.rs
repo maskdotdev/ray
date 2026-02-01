@@ -5,7 +5,7 @@
 use crate::core::wal::record::{
   build_begin_payload, build_commit_payload, build_rollback_payload, WalRecord,
 };
-use crate::error::{RayError, Result};
+use crate::error::{KiteError, Result};
 use crate::types::*;
 
 use super::open::SyncMode;
@@ -15,12 +15,12 @@ impl SingleFileDB {
   /// Begin a new transaction
   pub fn begin(&self, read_only: bool) -> Result<TxId> {
     if self.read_only && !read_only {
-      return Err(RayError::ReadOnly);
+      return Err(KiteError::ReadOnly);
     }
 
     let mut current_tx = self.current_tx.lock();
     if current_tx.is_some() {
-      return Err(RayError::TransactionInProgress);
+      return Err(KiteError::TransactionInProgress);
     }
 
     let txid = self.alloc_tx_id();
@@ -57,7 +57,7 @@ impl SingleFileDB {
     // Take the transaction and release the lock immediately
     let tx = {
       let mut current_tx = self.current_tx.lock();
-      current_tx.take().ok_or(RayError::NoTransaction)?
+      current_tx.take().ok_or(KiteError::NoTransaction)?
     };
 
     if tx.read_only {
@@ -136,7 +136,7 @@ impl SingleFileDB {
   /// Rollback the current transaction
   pub fn rollback(&self) -> Result<()> {
     let mut current_tx = self.current_tx.lock();
-    let tx = current_tx.take().ok_or(RayError::NoTransaction)?;
+    let tx = current_tx.take().ok_or(KiteError::NoTransaction)?;
 
     if tx.read_only {
       // Read-only transactions don't need WAL
@@ -182,8 +182,8 @@ impl SingleFileDB {
     let current_tx = self.current_tx.lock();
     match current_tx.as_ref() {
       Some(tx) if !tx.read_only => Ok(tx.txid),
-      Some(_) => Err(RayError::ReadOnly),
-      None => Err(RayError::NoTransaction),
+      Some(_) => Err(KiteError::ReadOnly),
+      None => Err(KiteError::NoTransaction),
     }
   }
 }

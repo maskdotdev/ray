@@ -16,7 +16,7 @@ use std::thread;
 use tempfile::tempdir;
 
 extern crate kitedb;
-use kitedb::api::ray::{EdgeDef, NodeDef, PropDef, Ray, RayOptions};
+use kitedb::api::kite::{EdgeDef, NodeDef, PropDef, Kite, KiteOptions};
 use kitedb::core::single_file::{open_single_file, SingleFileOpenOptions};
 use kitedb::mvcc::TxManager;
 use kitedb::types::PropValue;
@@ -25,7 +25,7 @@ use kitedb::types::PropValue;
 // Setup Helpers
 // ============================================================================
 
-fn create_test_schema() -> RayOptions {
+fn create_test_schema() -> KiteOptions {
   let user = NodeDef::new("User", "user:")
     .prop(PropDef::string("name"))
     .prop(PropDef::int("age"))
@@ -33,12 +33,12 @@ fn create_test_schema() -> RayOptions {
 
   let follows = EdgeDef::new("FOLLOWS");
 
-  RayOptions::new().node(user).edge(follows)
+  KiteOptions::new().node(user).edge(follows)
 }
 
-fn setup_ray_db(node_count: usize, edge_count: usize) -> (tempfile::TempDir, Ray) {
+fn setup_ray_db(node_count: usize, edge_count: usize) -> (tempfile::TempDir, Kite) {
   let temp_dir = tempdir().unwrap();
-  let mut ray = Ray::open(temp_dir.path(), create_test_schema()).unwrap();
+  let mut ray = Kite::open(temp_dir.path(), create_test_schema()).unwrap();
 
   let mut node_ids = Vec::with_capacity(node_count);
   for i in 0..node_count {

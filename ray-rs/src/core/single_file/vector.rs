@@ -6,7 +6,7 @@ use crate::core::snapshot::reader::SnapshotData;
 use crate::core::wal::record::{
   build_del_node_vector_payload, build_set_node_vector_payload, WalRecord,
 };
-use crate::error::{RayError, Result};
+use crate::error::{KiteError, Result};
 use crate::types::*;
 use crate::vector::store::{
   create_vector_store, vector_store_delete, vector_store_get, vector_store_has, vector_store_insert,
@@ -34,7 +34,7 @@ impl SingleFileDB {
       let stores = self.vector_stores.read();
       if let Some(store) = stores.get(&prop_key_id) {
         if store.config.dimensions != vector.len() {
-          return Err(RayError::VectorDimensionMismatch {
+          return Err(KiteError::VectorDimensionMismatch {
             expected: store.config.dimensions,
             got: vector.len(),
           });
@@ -142,7 +142,7 @@ impl SingleFileDB {
     if stores.contains_key(&prop_key_id) {
       let store = stores.get(&prop_key_id).unwrap();
       if store.config.dimensions != dimensions {
-        return Err(RayError::VectorDimensionMismatch {
+        return Err(KiteError::VectorDimensionMismatch {
           expected: store.config.dimensions,
           got: dimensions,
         });
@@ -215,7 +215,7 @@ pub(crate) fn vector_stores_from_snapshot(
         });
 
         if store.config.dimensions != vec.len() {
-          return Err(RayError::InvalidSnapshot(format!(
+          return Err(KiteError::InvalidSnapshot(format!(
             "Vector dimension mismatch for prop key {key_id}: expected {}, got {}",
             store.config.dimensions,
             vec.len()
@@ -223,7 +223,7 @@ pub(crate) fn vector_stores_from_snapshot(
         }
 
         vector_store_insert(store, node_id, &vec).map_err(|e| {
-          RayError::InvalidSnapshot(format!(
+          KiteError::InvalidSnapshot(format!(
             "Failed to insert vector for node {node_id} (prop {key_id}): {e}"
           ))
         })?;

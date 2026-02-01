@@ -9,10 +9,10 @@ use crate::graph::iterators::{count_nodes as graph_count_nodes, list_nodes as gr
 use crate::graph::key_index::get_node_key as graph_get_node_key;
 use crate::graph::nodes::{
   create_node as graph_create_node, delete_node as graph_delete_node, get_node_by_key_db,
-  node_exists_db, NodeOpts,
+  node_exists_db, upsert_node_with_props, NodeOpts,
 };
 use crate::graph::tx::TxHandle as GraphTxHandle;
-use crate::types::NodeId;
+use crate::types::{NodeId, PropKeyId, PropValue};
 
 /// Trait for node operations
 pub trait NodeOps {
@@ -93,6 +93,44 @@ pub fn create_node_graph(handle: &mut GraphTxHandle, key: Option<String>) -> PyR
   }
   let node_id = graph_create_node(handle, opts)
     .map_err(|e| PyRuntimeError::new_err(format!("Failed to create node: {e}")))?;
+  Ok(node_id as i64)
+}
+
+/// Upsert node on single-file database
+pub fn upsert_node_single(
+  db: &RustSingleFileDB,
+  key: &str,
+  props: &[(PropKeyId, Option<PropValue>)],
+) -> PyResult<i64> {
+  let node_id = match db.get_node_by_key(key) {
+    Some(id) => id,
+    None => db
+      .create_node(Some(key))
+      .map_err(|e| PyRuntimeError::new_err(format!("Failed to create node: {e}")))?,
+  };
+
+  for (prop_key_id, value_opt) in props {
+    match value_opt {
+      Some(value) => db
+        .set_node_prop(node_id, *prop_key_id, value.clone())
+        .map_err(|e| PyRuntimeError::new_err(format!("Failed to set prop: {e}")))?,
+      None => db
+        .delete_node_prop(node_id, *prop_key_id)
+        .map_err(|e| PyRuntimeError::new_err(format!("Failed to delete prop: {e}")))?,
+    }
+  }
+
+  Ok(node_id as i64)
+}
+
+/// Upsert node on graph database (requires transaction handle)
+pub fn upsert_node_graph(
+  handle: &mut GraphTxHandle,
+  key: &str,
+  props: &[(PropKeyId, Option<PropValue>)],
+) -> PyResult<i64> {
+  let (node_id, _) = upsert_node_with_props(handle, key, props.iter().cloned())
+    .map_err(|e| PyRuntimeError::new_err(format!("Failed to upsert node: {e}")))?;
   Ok(node_id as i64)
 }
 

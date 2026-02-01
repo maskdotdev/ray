@@ -53,7 +53,7 @@ mod tests {
   use std::time::{Duration, Instant};
   use tempfile::tempdir;
 
-  use crate::api::ray::{EdgeDef, NodeDef, PropDef, Ray, RayOptions};
+  use crate::api::kite::{EdgeDef, NodeDef, PropDef, Kite, KiteOptions};
   use crate::core::single_file::{open_single_file, SingleFileOpenOptions};
   use crate::mvcc::{ConflictDetector, TxManager};
   use crate::types::PropValue;
@@ -62,7 +62,7 @@ mod tests {
   // Test Helpers
   // ============================================================================
 
-  fn create_test_schema() -> RayOptions {
+  fn create_test_schema() -> KiteOptions {
     let user = NodeDef::new("User", "user:")
       .prop(PropDef::string("name"))
       .prop(PropDef::int("age"))
@@ -73,16 +73,16 @@ mod tests {
     let follows = EdgeDef::new("FOLLOWS");
     let likes = EdgeDef::new("LIKES");
 
-    RayOptions::new()
+    KiteOptions::new()
       .node(user)
       .node(post)
       .edge(follows)
       .edge(likes)
   }
 
-  fn setup_test_db(node_count: usize, edge_count: usize) -> (tempfile::TempDir, Ray) {
+  fn setup_test_db(node_count: usize, edge_count: usize) -> (tempfile::TempDir, Kite) {
     let temp_dir = tempdir().unwrap();
-    let mut ray = Ray::open(temp_dir.path(), create_test_schema()).unwrap();
+    let mut ray = Kite::open(temp_dir.path(), create_test_schema()).unwrap();
 
     // Create nodes
     let mut node_ids = Vec::with_capacity(node_count);

@@ -102,10 +102,10 @@ function HomePage() {
 
 	// Schema code examples for each language
 	const schemaCode = {
-		typescript: `import { ray } from '@kitedb/core';
+		typescript: `import { kite } from '@kitedb/core';
 
 // Open database with schema
-const db = ray('./knowledge.kitedb', {
+const db = kite('./knowledge.kitedb', {
   nodes: [
     {
       name: 'document',
@@ -127,10 +127,10 @@ const db = ray('./knowledge.kitedb', {
     },
   ],
 });`,
-		rust: `use kitedb::ray;
+		rust: `use kitedb::kite;
 
 // Open database with schema
-let db = ray("./knowledge.kitedb", RayOptions {
+let db = kite("./knowledge.kitedb", KiteOptions {
     nodes: vec![
         NodeSpec::new("document")
             .prop("title", PropType::String)
@@ -145,7 +145,7 @@ let db = ray("./knowledge.kitedb", RayOptions {
     ],
     ..Default::default()
 })?;`,
-		python: `from kitedb import ray, define_node, define_edge, prop
+		python: `from kitedb import kite, define_node, define_edge, prop
 
 # Define schema
 document = define_node("document",
@@ -165,7 +165,7 @@ topic = define_node("topic",
 discusses = define_edge("discusses", {"relevance": prop.float("relevance")})
 
 # Open database
-db = ray("./knowledge.kitedb", nodes=[document, topic], edges=[discusses])`,
+db = kite("./knowledge.kitedb", nodes=[document, topic], edges=[discusses])`,
 	};
 
 	const traversalCode = {

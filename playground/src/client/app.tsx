@@ -1,6 +1,6 @@
 /**
  * Main App Component
- * Ray Electric Blue Theme
+ * Kite Electric Blue Theme
  */
 
 import { useState, useCallback, useEffect, useRef } from "react";

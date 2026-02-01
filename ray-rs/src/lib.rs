@@ -72,7 +72,7 @@ pub mod pyo3_bindings;
 
 // Re-export commonly used items
 pub use check::{check_snapshot, quick_check};
-pub use error::{RayError, Result};
+pub use error::{KiteError, Result};
 
 // Re-export schema builders for convenience
 pub use api::schema::{
@@ -82,6 +82,9 @@ pub use api::schema::{
 // Deprecated aliases for backwards compatibility
 #[allow(deprecated)]
 pub use api::schema::{define_edge, define_node};
+
+// Convenience entrypoint (Rust)
+pub use api::kite::kite;
 
 // ============================================================================
 // NAPI Exports
@@ -110,8 +113,8 @@ pub use types::PropValueTag;
 // Re-export NAPI database types
 #[cfg(feature = "napi")]
 pub use napi_bindings::{
-  open_database, ray, Database, DbStats, EdgePage, EdgeWithProps, JsEdge, JsFullEdge, JsNodeProp,
-  JsPropValue, NodePage, NodeWithProps, OpenOptions, PaginationOptions, PropType, Ray,
+  open_database, Database, DbStats, EdgePage, EdgeWithProps, JsEdge, JsFullEdge, JsNodeProp,
+  JsPropValue, NodePage, NodeWithProps, OpenOptions, PaginationOptions, PropType, Kite,
   StreamOptions,
 };
 

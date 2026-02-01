@@ -9,7 +9,7 @@ use std::io::{Read, Write};
 use std::path::Path;
 
 use crate::constants::*;
-use crate::error::{RayError, Result};
+use crate::error::{KiteError, Result};
 use crate::types::{ManifestV1, MANIFEST_SIZE};
 use crate::util::binary::*;
 use crate::util::crc::crc32c;
@@ -77,7 +77,7 @@ pub fn serialize_manifest(manifest: &ManifestV1) -> Vec<u8> {
 /// Parse manifest from bytes
 pub fn parse_manifest(buffer: &[u8]) -> Result<ManifestV1> {
   if buffer.len() < MANIFEST_SIZE {
-    return Err(RayError::InvalidSnapshot(format!(
+    return Err(KiteError::InvalidSnapshot(format!(
       "Manifest too small: {} < {}",
       buffer.len(),
       MANIFEST_SIZE
@@ -90,7 +90,7 @@ pub fn parse_manifest(buffer: &[u8]) -> Result<ManifestV1> {
   let magic = read_u32(buffer, offset);
   offset += 4;
   if magic != MAGIC_MANIFEST {
-    return Err(RayError::InvalidMagic {
+    return Err(KiteError::InvalidMagic {
       expected: MAGIC_MANIFEST,
       got: magic,
     });
@@ -102,7 +102,7 @@ pub fn parse_manifest(buffer: &[u8]) -> Result<ManifestV1> {
   offset += 4;
 
   if MIN_READER_MANIFEST < min_reader_version {
-    return Err(RayError::VersionMismatch {
+    return Err(KiteError::VersionMismatch {
       required: min_reader_version,
       current: MIN_READER_MANIFEST,
     });
@@ -131,7 +131,7 @@ pub fn parse_manifest(buffer: &[u8]) -> Result<ManifestV1> {
   let computed_crc = crc32c(&buffer[..offset]);
 
   if stored_crc != computed_crc {
-    return Err(RayError::CrcMismatch {
+    return Err(KiteError::CrcMismatch {
       stored: stored_crc,
       computed: computed_crc,
     });
@@ -259,7 +259,7 @@ mod tests {
     bytes[20] ^= 0xFF;
 
     let result = parse_manifest(&bytes);
-    assert!(matches!(result, Err(RayError::CrcMismatch { .. })));
+    assert!(matches!(result, Err(KiteError::CrcMismatch { .. })));
   }
 
   #[test]
@@ -268,7 +268,7 @@ mod tests {
     write_u32(&mut bytes, 0, 0xDEADBEEF); // Wrong magic
 
     let result = parse_manifest(&bytes);
-    assert!(matches!(result, Err(RayError::InvalidMagic { .. })));
+    assert!(matches!(result, Err(KiteError::InvalidMagic { .. })));
   }
 
   #[test]

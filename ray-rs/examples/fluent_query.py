@@ -11,7 +11,7 @@ Usage:
 
 import tempfile
 import shutil
-from kitedb import ray, define_node, define_edge, prop, optional
+from kitedb import kite, define_node, define_edge, prop, optional
 
 
 # =============================================================================
@@ -59,7 +59,7 @@ def main():
     
     try:
         # Open database with schema
-        db = ray(db_path, nodes=[user, company], edges=[knows, works_at])
+        db = kite(db_path, nodes=[user, company], edges=[knows, works_at])
         
         try:
             # Insert Alice

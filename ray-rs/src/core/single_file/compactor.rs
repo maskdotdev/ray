@@ -5,7 +5,7 @@ use std::sync::atomic::Ordering;
 use crate::core::pager::pages_to_store;
 use crate::core::snapshot::writer::{build_snapshot_to_memory, SnapshotBuildInput};
 use crate::core::wal::buffer::WalBuffer;
-use crate::error::{RayError, Result};
+use crate::error::{KiteError, Result};
 use crate::util::compression::CompressionOptions;
 
 use super::SingleFileDB;
@@ -44,11 +44,11 @@ impl SingleFileDB {
   /// This merges snapshot + delta into a new snapshot and clears WAL.
   pub fn optimize_single_file(&self, options: Option<SingleFileOptimizeOptions>) -> Result<()> {
     if self.read_only {
-      return Err(RayError::ReadOnly);
+      return Err(KiteError::ReadOnly);
     }
 
     if self.has_transaction() {
-      return Err(RayError::TransactionInProgress);
+      return Err(KiteError::TransactionInProgress);
     }
 
     if self.is_checkpoint_running() {
@@ -130,11 +130,11 @@ impl SingleFileDB {
   /// Vacuum operation - shrink file by reclaiming free pages.
   pub fn vacuum_single_file(&self, options: Option<VacuumOptions>) -> Result<()> {
     if self.read_only {
-      return Err(RayError::ReadOnly);
+      return Err(KiteError::ReadOnly);
     }
 
     if self.has_transaction() {
-      return Err(RayError::TransactionInProgress);
+      return Err(KiteError::TransactionInProgress);
     }
 
     let options = options.unwrap_or_default();

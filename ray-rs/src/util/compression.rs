@@ -3,7 +3,7 @@
 //! Supports multiple compression algorithms with automatic detection.
 //! Ported from src/util/compression.ts
 
-use crate::error::{RayError, Result};
+use crate::error::{KiteError, Result};
 use flate2::read::{DeflateDecoder, GzDecoder};
 use flate2::write::{DeflateEncoder, GzEncoder};
 use flate2::Compression;
@@ -92,10 +92,10 @@ pub fn compress(data: &[u8], compression_type: CompressionType, level: i32) -> R
       let mut encoder = GzEncoder::new(Vec::new(), Compression::new(level));
       encoder
         .write_all(data)
-        .map_err(|e| RayError::Compression(e.to_string()))?;
+        .map_err(|e| KiteError::Compression(e.to_string()))?;
       encoder
         .finish()
-        .map_err(|e| RayError::Compression(e.to_string()))
+        .map_err(|e| KiteError::Compression(e.to_string()))
     }
 
     CompressionType::Deflate => {
@@ -103,10 +103,10 @@ pub fn compress(data: &[u8], compression_type: CompressionType, level: i32) -> R
       let mut encoder = DeflateEncoder::new(Vec::new(), Compression::new(level));
       encoder
         .write_all(data)
-        .map_err(|e| RayError::Compression(e.to_string()))?;
+        .map_err(|e| KiteError::Compression(e.to_string()))?;
       encoder
         .finish()
-        .map_err(|e| RayError::Compression(e.to_string()))
+        .map_err(|e| KiteError::Compression(e.to_string()))
     }
   }
 }
@@ -123,7 +123,7 @@ pub fn decompress(data: &[u8], compression_type: CompressionType) -> Result<Vec<
       let mut out = Vec::new();
       decoder
         .read_to_end(&mut out)
-        .map_err(|e| RayError::Compression(e.to_string()))?;
+        .map_err(|e| KiteError::Compression(e.to_string()))?;
       Ok(out)
     }
 
@@ -132,7 +132,7 @@ pub fn decompress(data: &[u8], compression_type: CompressionType) -> Result<Vec<
       let mut out = Vec::new();
       decoder
         .read_to_end(&mut out)
-        .map_err(|e| RayError::Compression(e.to_string()))?;
+        .map_err(|e| KiteError::Compression(e.to_string()))?;
       Ok(out)
     }
   }
@@ -154,7 +154,7 @@ pub fn decompress_with_size(
       let mut decoder = GzDecoder::new(data);
       decoder
         .read_to_end(&mut out)
-        .map_err(|e| RayError::Compression(e.to_string()))?;
+        .map_err(|e| KiteError::Compression(e.to_string()))?;
       Ok(out)
     }
 
@@ -163,7 +163,7 @@ pub fn decompress_with_size(
       let mut decoder = DeflateDecoder::new(data);
       decoder
         .read_to_end(&mut out)
-        .map_err(|e| RayError::Compression(e.to_string()))?;
+        .map_err(|e| KiteError::Compression(e.to_string()))?;
       Ok(out)
     }
   }
@@ -195,24 +195,24 @@ pub fn maybe_compress(data: &[u8], options: &CompressionOptions) -> (Vec<u8>, Co
 
 #[cfg(not(target_arch = "wasm32"))]
 fn zstd_encode(data: &[u8], level: i32) -> Result<Vec<u8>> {
-  zstd::encode_all(data, level).map_err(|e| RayError::Compression(e.to_string()))
+  zstd::encode_all(data, level).map_err(|e| KiteError::Compression(e.to_string()))
 }
 
 #[cfg(target_arch = "wasm32")]
 fn zstd_encode(_data: &[u8], _level: i32) -> Result<Vec<u8>> {
-  Err(RayError::Compression(
+  Err(KiteError::Compression(
     "zstd compression is not supported on wasm targets".to_string(),
   ))
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 fn zstd_decode(data: &[u8]) -> Result<Vec<u8>> {
-  zstd::decode_all(data).map_err(|e| RayError::Compression(e.to_string()))
+  zstd::decode_all(data).map_err(|e| KiteError::Compression(e.to_string()))
 }
 
 #[cfg(target_arch = "wasm32")]
 fn zstd_decode(_data: &[u8]) -> Result<Vec<u8>> {
-  Err(RayError::Compression(
+  Err(KiteError::Compression(
     "zstd decompression is not supported on wasm targets".to_string(),
   ))
 }
@@ -220,16 +220,16 @@ fn zstd_decode(_data: &[u8]) -> Result<Vec<u8>> {
 #[cfg(not(target_arch = "wasm32"))]
 fn zstd_decode_with_size(data: &[u8], uncompressed_size: usize) -> Result<Vec<u8>> {
   let mut out = Vec::with_capacity(uncompressed_size);
-  let mut decoder = zstd::Decoder::new(data).map_err(|e| RayError::Compression(e.to_string()))?;
+  let mut decoder = zstd::Decoder::new(data).map_err(|e| KiteError::Compression(e.to_string()))?;
   decoder
     .read_to_end(&mut out)
-    .map_err(|e| RayError::Compression(e.to_string()))?;
+    .map_err(|e| KiteError::Compression(e.to_string()))?;
   Ok(out)
 }
 
 #[cfg(target_arch = "wasm32")]
 fn zstd_decode_with_size(_data: &[u8], _uncompressed_size: usize) -> Result<Vec<u8>> {
-  Err(RayError::Compression(
+  Err(KiteError::Compression(
     "zstd decompression is not supported on wasm targets".to_string(),
   ))
 }

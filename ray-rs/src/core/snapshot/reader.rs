@@ -3,7 +3,7 @@
 //! Ported from src/core/snapshot-reader.ts
 
 use crate::constants::*;
-use crate::error::{RayError, Result};
+use crate::error::{KiteError, Result};
 use crate::types::*;
 use crate::util::binary::*;
 use crate::util::compression::{decompress_with_size, CompressionType};
@@ -69,7 +69,7 @@ impl SnapshotData {
     let buffer = &mmap[..];
 
     if buffer.len() < SNAPSHOT_HEADER_SIZE {
-      return Err(RayError::InvalidSnapshot(format!(
+      return Err(KiteError::InvalidSnapshot(format!(
         "Snapshot too small: {} bytes",
         buffer.len()
       )));
@@ -78,7 +78,7 @@ impl SnapshotData {
     // Parse header
     let magic = read_u32(buffer, 0);
     if magic != MAGIC_SNAPSHOT {
-      return Err(RayError::InvalidMagic {
+      return Err(KiteError::InvalidMagic {
         expected: MAGIC_SNAPSHOT,
         got: magic,
       });
@@ -88,7 +88,7 @@ impl SnapshotData {
     let min_reader_version = read_u32(buffer, 8);
 
     if MIN_READER_SNAPSHOT < min_reader_version {
-      return Err(RayError::VersionMismatch {
+      return Err(KiteError::VersionMismatch {
         required: min_reader_version,
         current: MIN_READER_SNAPSHOT,
       });
@@ -125,7 +125,7 @@ impl SnapshotData {
     let section_table_size = section_count * SECTION_ENTRY_SIZE;
 
     if buffer.len() < SNAPSHOT_HEADER_SIZE + section_table_size {
-      return Err(RayError::InvalidSnapshot(format!(
+      return Err(KiteError::InvalidSnapshot(format!(
         "Snapshot too small for section table: {} bytes",
         buffer.len()
       )));
@@ -174,7 +174,7 @@ impl SnapshotData {
       let footer_crc = read_u32(buffer, crc_offset);
       let computed_crc = crc32c(&buffer[..crc_offset]);
       if footer_crc != computed_crc {
-        return Err(RayError::CrcMismatch {
+        return Err(KiteError::CrcMismatch {
           stored: footer_crc,
           computed: computed_crc,
         });
@@ -199,7 +199,7 @@ impl SnapshotData {
     let buffer = &mmap[offset..];
 
     if buffer.len() < SNAPSHOT_HEADER_SIZE {
-      return Err(RayError::InvalidSnapshot(format!(
+      return Err(KiteError::InvalidSnapshot(format!(
         "Snapshot too small: {} bytes",
         buffer.len()
       )));
@@ -208,7 +208,7 @@ impl SnapshotData {
     // Parse header
     let magic = read_u32(buffer, 0);
     if magic != MAGIC_SNAPSHOT {
-      return Err(RayError::InvalidMagic {
+      return Err(KiteError::InvalidMagic {
         expected: MAGIC_SNAPSHOT,
         got: magic,
       });
@@ -218,7 +218,7 @@ impl SnapshotData {
     let min_reader_version = read_u32(buffer, 8);
 
     if MIN_READER_SNAPSHOT < min_reader_version {
-      return Err(RayError::VersionMismatch {
+      return Err(KiteError::VersionMismatch {
         required: min_reader_version,
         current: MIN_READER_SNAPSHOT,
       });
@@ -255,7 +255,7 @@ impl SnapshotData {
     let section_table_size = section_count * SECTION_ENTRY_SIZE;
 
     if buffer.len() < SNAPSHOT_HEADER_SIZE + section_table_size {
-      return Err(RayError::InvalidSnapshot(format!(
+      return Err(KiteError::InvalidSnapshot(format!(
         "Snapshot too small for section table: {} bytes",
         buffer.len()
       )));
@@ -301,7 +301,7 @@ impl SnapshotData {
         let footer_crc = read_u32(buffer, actual_snapshot_size - 4);
         let computed_crc = crc32c(&buffer[..actual_snapshot_size - 4]);
         if footer_crc != computed_crc {
-          return Err(RayError::CrcMismatch {
+          return Err(KiteError::CrcMismatch {
             stored: footer_crc,
             computed: computed_crc,
           });

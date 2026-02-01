@@ -2,7 +2,7 @@
  * Toolbar Component
  *
  * Tool mode buttons and zoom controls.
- * Ray Electric Blue Theme.
+ * Kite Electric Blue Theme.
  */
 
 import type { ToolMode } from "../lib/types.ts";

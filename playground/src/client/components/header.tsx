@@ -2,7 +2,7 @@
  * Header Component
  *
  * Contains logo, search, path mode inputs, and database controls.
- * Ray Electric Blue Theme.
+ * Kite Electric Blue Theme.
  */
 
 import { useState, useRef } from "react";
@@ -304,7 +304,7 @@ export function Header({
             <circle cx="12" cy="12" r="4" fill={COLORS.accent} />
           </svg>
         </div>
-        <span style={styles.logoRay}>Ray</span>
+        <span style={styles.logoRay}>Kite</span>
         <span style={styles.logoDb}>DB</span>
         <span style={styles.logoBadge}>Playground</span>
       </div>

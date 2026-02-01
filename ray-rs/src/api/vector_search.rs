@@ -1,6 +1,6 @@
 //! Vector similarity search API
 //!
-//! Provides high-level API for vector similarity search integrated with the Ray API.
+//! Provides high-level API for vector similarity search integrated with the Kite API.
 //!
 //! Ported from src/api/vector-search.ts
 

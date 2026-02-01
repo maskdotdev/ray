@@ -114,7 +114,7 @@ function DocPageContent(props: { slug: string }) {
 
         <h2 id="quick-example">Quick Example</h2>
         <CodeBlock
-          code={`import { ray, defineNode, defineEdge, prop } from '@kitedb/core';
+          code={`import { kite, defineNode, defineEdge, prop } from '@kitedb/core';
 
 const user = defineNode('user', {
   key: (id: string) => \`user:\${id}\`,
@@ -129,7 +129,7 @@ const follows = defineEdge('follows', {
   to: user,
 });
 
-const db = await ray('./social.kitedb', {
+const db = await kite('./social.kitedb', {
   nodes: [user],
   edges: [follows],
 });

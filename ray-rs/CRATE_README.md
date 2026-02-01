@@ -1,7 +1,7 @@
 # KiteDB
 
 KiteDB is a high-performance embedded graph database with built-in vector search.
-This crate provides the Rust core and the high-level Ray API.
+This crate provides the Rust core and the high-level Kite API.
 
 ## Features
 
@@ -19,10 +19,10 @@ This crate provides the Rust core and the high-level Ray API.
 kitedb = "0.1"
 ```
 
-## Quick start (Ray API)
+## Quick start (Kite API)
 
 ```rust
-use kitedb::api::ray::{EdgeDef, NodeDef, PropDef, Ray, RayOptions};
+use kitedb::api::kite::{EdgeDef, NodeDef, PropDef, Kite, KiteOptions};
 use kitedb::types::PropValue;
 use std::collections::HashMap;
 
@@ -31,16 +31,16 @@ fn main() -> kitedb::error::Result<()> {
     .prop(PropDef::string("name").required());
   let knows = EdgeDef::new("KNOWS");
 
-  let mut ray = Ray::open("my_graph.kitedb", RayOptions::new().node(user).edge(knows))?;
+  let mut kite = Kite::open("my_graph.kitedb", KiteOptions::new().node(user).edge(knows))?;
 
   let mut alice_props = HashMap::new();
   alice_props.insert("name".to_string(), PropValue::String("Alice".into()));
-  let alice = ray.create_node("User", "alice", alice_props)?;
+  let alice = kite.create_node("User", "alice", alice_props)?;
 
-  let bob = ray.create_node("User", "bob", HashMap::new())?;
-  ray.link(alice.id, "KNOWS", bob.id)?;
+  let bob = kite.create_node("User", "bob", HashMap::new())?;
+  kite.link(alice.id, "KNOWS", bob.id)?;
 
-  let friends = ray.neighbors_out(alice.id, Some("KNOWS"))?;
+  let friends = kite.neighbors_out(alice.id, Some("KNOWS"))?;
   println!("friends: {friends:?}");
 
   Ok(())
@@ -59,11 +59,11 @@ KiteDB supports concurrent reads when wrapped in a `RwLock`. Multiple threads ca
 ```rust
 use std::sync::Arc;
 use parking_lot::RwLock;
-use kitedb::api::ray::{Ray, RayOptions, NodeDef};
+use kitedb::api::kite::{Kite, KiteOptions, NodeDef};
 
-// Wrap Ray in RwLock for concurrent access
-let ray = Ray::open("graph.kitedb", RayOptions::new().node(NodeDef::new("User", "user:")))?;
-let db = Arc::new(RwLock::new(ray));
+// Wrap Kite in RwLock for concurrent access
+let kite = Kite::open("graph.kitedb", KiteOptions::new().node(NodeDef::new("User", "user:")))?;
+let db = Arc::new(RwLock::new(kite));
 
 // Multiple threads can read concurrently
 let db_clone = Arc::clone(&db);

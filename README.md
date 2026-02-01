@@ -1,4 +1,4 @@
-# Ray - Embedded Graph Database
+# Kite - Embedded Graph Database
 
 A high-performance embedded graph database for Bun/TypeScript with:
 
@@ -40,7 +40,7 @@ bun install
 
 ## Browser (WASM) prototype
 
-RayDB can run in the browser via the WASI build of the core (`@ray-db/core`).
+KiteDB can run in the browser via the WASI build of the core (`@ray-db/core`).
 This uses an in-memory filesystem by default (ephemeral per page load).
 
 Build the WASM bundle locally:
@@ -304,9 +304,9 @@ await commit(tx2);  // Throws ConflictError
 Find shortest paths between nodes:
 
 ```typescript
-import { ray, defineNode, defineEdge, prop } from './src/api';
+import { kite, defineNode, defineEdge, prop } from './src/api';
 
-const db = await ray('./my-graph', { nodes: [...], edges: [...] });
+const db = await kite('./my-graph', { nodes: [...], edges: [...] });
 
 // Shortest path (unweighted)
 const path = await db
@@ -367,7 +367,7 @@ console.log('Cache misses:', cacheStats.misses);
 The fluent API provides a type-safe, ergonomic interface for graph operations with schema definitions:
 
 ```typescript
-import { ray, defineNode, defineEdge, prop, optional } from '@ray-db/ray';
+import { kite, defineNode, defineEdge, prop, optional } from '@ray-db/ray';
 
 // Define schema
 const user = defineNode('user', {
@@ -384,7 +384,7 @@ const knows = defineEdge('knows', {
 });
 
 // Initialize database with schema
-const db = await ray('./my-graph', {
+const db = await kite('./my-graph', {
   nodes: [user],
   edges: [knows],
 });
@@ -464,12 +464,12 @@ const userCount = await db.count(user);
 
 // List all edges (lazy async generator)
 for await (const e of db.allEdges()) {
-  console.log(`${e.src.$key} -> ${e.dst.$key}`);
+  console.log(`${e.src.key} -> ${e.dst.key}`);
 }
 
 // List edges of specific type with properties
 for await (const e of db.allEdges(knows)) {
-  console.log(`${e.src.$key} knows ${e.dst.$key} since ${e.props.since}`);
+  console.log(`${e.src.key} knows ${e.dst.key} since ${e.props.since}`);
 }
 
 // Count all edges (O(1) - fast)
@@ -509,7 +509,7 @@ bun run bench/benchmark-api-vs-raw.ts --nodes 10000 --edges 50000 --iterations 1
 
 ## File Formats
 
-Ray supports two storage formats. The directory-based format is legacy and will be
+Kite supports two storage formats. The directory-based format is legacy and will be
 deprecated in favor of the single-file format.
 
 ### Single-File Format (`.raydb`) - Recommended

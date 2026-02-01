@@ -1,10 +1,10 @@
 """
-Ray Database - Fluent API
+Kite Database - Fluent API
 
 High-level, type-safe API for KiteDB matching the TypeScript fluent style.
 
 Example:
-    >>> from kitedb import ray, node, edge, prop, optional
+    >>> from kitedb import kite, node, edge, prop, optional
     >>> 
     >>> # Define schema
     >>> user = node("user",
@@ -21,7 +21,7 @@ Example:
     ... })
     >>> 
     >>> # Open database
-    >>> db = ray("./my-graph", nodes=[user], edges=[knows])
+    >>> db = kite("./my-graph", nodes=[user], edges=[knows])
     >>> 
     >>> # Insert nodes with fluent API
     >>> alice = db.insert(user).values(
@@ -71,6 +71,7 @@ from kitedb._kitedb import Database, OpenOptions
 from .builders import (
     DeleteBuilder,
     InsertBuilder,
+    UpsertBuilder,
     NodeRef,
     UpdateBuilder,
     UpdateByRefBuilder,
@@ -96,15 +97,15 @@ class EdgeData:
     props: Dict[str, Any]
 
 
-class Ray:
+class Kite:
     """
-    Ray Database - High-level fluent API.
+    Kite Database - High-level fluent API.
     
     Provides a type-safe, chainable interface for graph database operations
     similar to the TypeScript API.
     
     Example:
-        >>> db = ray("./my-graph", nodes=[user, company], edges=[knows, worksAt])
+        >>> db = kite("./my-graph", nodes=[user, company], edges=[knows, worksAt])
         >>> 
         >>> # Insert
         >>> alice = db.insert(user).values(key="alice", name="Alice").returning()
@@ -134,7 +135,7 @@ class Ray:
         options: Optional[OpenOptions] = None,
     ):
         """
-        Open or create a Ray database.
+        Open or create a Kite database.
         
         Args:
             path: Path to the database file
@@ -276,6 +277,29 @@ class Ray:
             ... ).returning()
         """
         return InsertBuilder(
+            db=self._db,
+            node_def=node,
+            resolve_prop_key_id=self._resolve_prop_key_id,
+        )
+
+    def upsert(self, node: NodeDef[Any]) -> UpsertBuilder[NodeDef[Any]]:
+        """
+        Upsert a node (create if missing, otherwise update).
+        
+        Args:
+            node: Node definition
+        
+        Returns:
+            UpsertBuilder for chaining
+        
+        Example:
+            >>> alice = db.upsert(user).values(
+            ...     key="alice",
+            ...     name="Alice",
+            ...     email="alice@example.com"
+            ... ).returning()
+        """
+        return UpsertBuilder(
             db=self._db,
             node_def=node,
             resolve_prop_key_id=self._resolve_prop_key_id,
@@ -753,7 +777,7 @@ class Ray:
             raise
     
     @contextmanager
-    def transaction(self) -> Generator[Ray, None, None]:
+    def transaction(self) -> Generator[Kite, None, None]:
         """
         Context manager for batching multiple operations in a single transaction.
         
@@ -785,7 +809,7 @@ class Ray:
     # Context Manager
     # ==========================================================================
     
-    def __enter__(self) -> Ray:
+    def __enter__(self) -> Kite:
         return self
     
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> bool:
@@ -797,15 +821,15 @@ class Ray:
 # Entry Point
 # ============================================================================
 
-def ray(
+def kite(
     path: str,
     *,
     nodes: List[NodeDef[Any]],
     edges: List[EdgeDef],
     options: Optional[OpenOptions] = None,
-) -> Ray:
+) -> Kite:
     """
-    Open or create a Ray database.
+    Open or create a KiteDB database.
     
     This is the main entry point for the fluent API.
     
@@ -816,10 +840,10 @@ def ray(
         options: Optional database options
     
     Returns:
-        Ray database instance
+        Kite database instance
     
     Example:
-        >>> from kitedb import ray, node, edge, prop, optional
+        >>> from kitedb import kite, node, edge, prop, optional
         >>> 
         >>> user = node("user",
         ...     key=lambda id: f"user:{id}",
@@ -834,17 +858,17 @@ def ray(
         ...     "since": prop.int("since"),
         ... })
         >>> 
-        >>> db = ray("./my-graph", nodes=[user], edges=[knows])
+        >>> db = kite("./my-graph", nodes=[user], edges=[knows])
         >>> 
         >>> # Use as context manager
-        >>> with ray("./my-graph", nodes=[user], edges=[knows]) as db:
+        >>> with kite("./my-graph", nodes=[user], edges=[knows]) as db:
         ...     alice = db.insert(user).values(key="alice", name="Alice").returning()
     """
-    return Ray(path, nodes=nodes, edges=edges, options=options)
+    return Kite(path, nodes=nodes, edges=edges, options=options)
 
 
 __all__ = [
-    "Ray",
-    "ray",
+    "Kite",
+    "kite",
     "EdgeData",
 ]

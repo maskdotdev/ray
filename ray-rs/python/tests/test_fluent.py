@@ -6,7 +6,7 @@ from kitedb import (
     define_edge,
     define_node,
     prop,
-    ray,
+    kite,
     create_vector_index,
     VectorIndexOptions,
     SimilarOptions,
@@ -33,12 +33,30 @@ def _build_schema():
     return user, knows
 
 
+def test_upsert_inserts_and_updates():
+    user, knows = _build_schema()
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = os.path.join(tmpdir, "fluent.kitedb")
+        with kite(path, nodes=[user], edges=[knows]) as db:
+            created = db.upsert(user).values(key="alice", name="Alice", age=30).returning()
+            assert created.name == "Alice"
+            assert created.age == 30
+
+            updated = db.upsert(user).values(key="alice", age=31).returning()
+            assert updated.age == 31
+            assert updated.name == "Alice"
+
+            deleted = db.upsert(user).values(key="alice", name=None).returning()
+            assert deleted.name is None
+
+
 def test_traversal_select_edges():
     user, knows = _build_schema()
 
     with tempfile.TemporaryDirectory() as tmpdir:
         path = os.path.join(tmpdir, "fluent.kitedb")
-        with ray(path, nodes=[user], edges=[knows]) as db:
+        with kite(path, nodes=[user], edges=[knows]) as db:
             alice = db.insert(user).values(key="alice", name="Alice", age=30).returning()
             bob = db.insert(user).values(key="bob", name="Bob", age=25).returning()
             db.link(alice, knows, bob, since=2020)
@@ -51,9 +69,9 @@ def test_traversal_select_edges():
             edges = db.from_(alice).out(knows).edges().to_list()
             assert len(edges) == 1
             assert edges[0].props.get("since") == 2020
-            assert edges[0]["$src"] == alice.id
-            assert edges[0]["$dst"] == bob.id
-            assert edges[0]["$etype"] == knows._etype_id
+            assert edges[0]["src"] == alice.id
+            assert edges[0]["dst"] == bob.id
+            assert edges[0]["etype"] == knows._etype_id
 
             recent = (
                 db.from_(alice)
@@ -69,7 +87,7 @@ def test_traverse_variable_depth():
 
     with tempfile.TemporaryDirectory() as tmpdir:
         path = os.path.join(tmpdir, "fluent.kitedb")
-        with ray(path, nodes=[user], edges=[knows]) as db:
+        with kite(path, nodes=[user], edges=[knows]) as db:
             a = db.insert(user).values(key="a", name="A", age=1).returning()
             b = db.insert(user).values(key="b", name="B", age=2).returning()
             c = db.insert(user).values(key="c", name="C", age=3).returning()
@@ -94,7 +112,7 @@ def test_traverse_options_filters():
 
     with tempfile.TemporaryDirectory() as tmpdir:
         path = os.path.join(tmpdir, "fluent.kitedb")
-        with ray(path, nodes=[user], edges=[knows]) as db:
+        with kite(path, nodes=[user], edges=[knows]) as db:
             a = db.insert(user).values(key="a", name="A", age=1).returning()
             b = db.insert(user).values(key="b", name="B", age=2).returning()
             c = db.insert(user).values(key="c", name="C", age=3).returning()
@@ -134,7 +152,7 @@ def test_raw_edges():
 
     with tempfile.TemporaryDirectory() as tmpdir:
         path = os.path.join(tmpdir, "fluent.kitedb")
-        with ray(path, nodes=[user], edges=[knows]) as db:
+        with kite(path, nodes=[user], edges=[knows]) as db:
             a = db.insert(user).values(key="a", name="A", age=1).returning()
             b = db.insert(user).values(key="b", name="B", age=2).returning()
             db.link(a, knows, b, since=2020)
@@ -150,7 +168,7 @@ def test_pathfinding_weight_and_a_star():
 
     with tempfile.TemporaryDirectory() as tmpdir:
         path = os.path.join(tmpdir, "fluent.kitedb")
-        with ray(path, nodes=[user], edges=[knows]) as db:
+        with kite(path, nodes=[user], edges=[knows]) as db:
             a = db.insert(user).values(key="a", name="A", age=1).returning()
             b = db.insert(user).values(key="b", name="B", age=2).returning()
             c = db.insert(user).values(key="c", name="C", age=3).returning()
@@ -174,7 +192,7 @@ def test_to_any_and_all_edges():
 
     with tempfile.TemporaryDirectory() as tmpdir:
         path = os.path.join(tmpdir, "fluent.kitedb")
-        with ray(path, nodes=[user], edges=[knows]) as db:
+        with kite(path, nodes=[user], edges=[knows]) as db:
             a = db.insert(user).values(key="a", name="A", age=1).returning()
             b = db.insert(user).values(key="b", name="B", age=2).returning()
             c = db.insert(user).values(key="c", name="C", age=3).returning()
@@ -195,7 +213,7 @@ def test_fluent_check():
 
     with tempfile.TemporaryDirectory() as tmpdir:
         path = os.path.join(tmpdir, "fluent.kitedb")
-        with ray(path, nodes=[user], edges=[knows]) as db:
+        with kite(path, nodes=[user], edges=[knows]) as db:
             alice = db.insert(user).values(key="alice", name="Alice", age=30).returning()
             bob = db.insert(user).values(key="bob", name="Bob", age=25).returning()
             db.link(alice, knows, bob, since=2020)
@@ -210,7 +228,7 @@ def test_vector_index_search():
 
     with tempfile.TemporaryDirectory() as tmpdir:
         path = os.path.join(tmpdir, "fluent.kitedb")
-        with ray(path, nodes=[user], edges=[knows]) as db:
+        with kite(path, nodes=[user], edges=[knows]) as db:
             alice = db.insert(user).values(key="alice", name="Alice", age=30).returning()
             bob = db.insert(user).values(key="bob", name="Bob", age=25).returning()
 
@@ -234,7 +252,7 @@ def test_insert_values_list():
 
     with tempfile.TemporaryDirectory() as tmpdir:
         path = os.path.join(tmpdir, "fluent.kitedb")
-        with ray(path, nodes=[user], edges=[knows]) as db:
+        with kite(path, nodes=[user], edges=[knows]) as db:
             results = db.insert(user).values([
                 {"key": "alice", "name": "Alice", "age": 30},
                 {"key": "bob", "name": "Bob", "age": 25},

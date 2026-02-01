@@ -19,7 +19,7 @@ use std::collections::HashMap;
 
 use crate::constants::*;
 use crate::core::pager::FilePager;
-use crate::error::{RayError, Result};
+use crate::error::{KiteError, Result};
 use crate::types::*;
 use crate::util::binary::*;
 
@@ -391,7 +391,7 @@ impl WalBuffer {
 
     // Check if fits in primary region
     if self.primary_head + aligned_size as u64 > self.primary_region_size {
-      return Err(RayError::WalBufferFull);
+      return Err(KiteError::WalBufferFull);
     }
 
     // Calculate file offset
@@ -463,7 +463,7 @@ impl WalBuffer {
     let aligned_size = align_up(record_size, WAL_RECORD_ALIGNMENT);
 
     if !self.can_fit(aligned_size) {
-      return Err(RayError::WalBufferFull);
+      return Err(KiteError::WalBufferFull);
     }
 
     if self.active_region == 0 {

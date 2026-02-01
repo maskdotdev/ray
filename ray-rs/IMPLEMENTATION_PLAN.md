@@ -122,7 +122,7 @@ ray-rs/
 │   │
 │   ├── api/                   # High-level API
 │   │   ├── mod.rs
-│   │   ├── ray.rs             # Ray struct (main entry)
+│   │   ├── kite.rs            # Kite struct (main entry)
 │   │   ├── schema.rs          # Schema definitions
 │   │   ├── builders.rs        # Query builders
 │   │   ├── traversal.rs       # Traversal API
@@ -2204,26 +2204,26 @@ macro_rules! define_edge {
 }
 ```
 
-### 6.2 Ray Database (`src/api/ray.rs`)
+### 6.2 Kite Database (`src/api/kite.rs`)
 
 ```rust
-//! High-level Ray database API
+//! High-level Kite database API
 
 use crate::graph::db::GraphDB;
 use crate::api::schema::*;
 use crate::api::builders::*;
 use crate::api::traversal::*;
 
-/// Ray database handle
-pub struct Ray {
+/// Kite database handle
+pub struct Kite {
     db: GraphDB,
     etype_ids: HashMap<&'static str, ETypeId>,
     propkey_ids: HashMap<String, PropKeyId>,
 }
 
-impl Ray {
-    /// Open a ray database
-    pub fn open(path: impl AsRef<Path>, options: RayOptions) -> Result<Self> {
+impl Kite {
+    /// Open a kite database
+    pub fn open(path: impl AsRef<Path>, options: KiteOptions) -> Result<Self> {
         let db = GraphDB::open(path, options.into())?;
         
         // Initialize schema

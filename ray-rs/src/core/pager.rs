@@ -13,7 +13,7 @@ use crate::util::mmap::{map_file, Mmap};
 use crate::constants::{
   LOCK_BYTE_OFFSET, LOCK_BYTE_RANGE, MAX_PAGE_SIZE, MIN_PAGE_SIZE, OS_PAGE_SIZE,
 };
-use crate::error::{RayError, Result};
+use crate::error::{KiteError, Result};
 
 /// FilePager implementation for single-file database
 pub struct FilePager {
@@ -102,7 +102,7 @@ impl FilePager {
   /// Write a single page by page number
   pub fn write_page(&mut self, page_num: u32, data: &[u8]) -> Result<()> {
     if data.len() != self.page_size {
-      return Err(RayError::Internal(format!(
+      return Err(KiteError::Internal(format!(
         "Page data must be exactly {} bytes, got {}",
         self.page_size,
         data.len()
@@ -111,7 +111,7 @@ impl FilePager {
 
     // Safety check: don't write to lock byte range
     if self.is_lock_byte_page(page_num) {
-      return Err(RayError::Internal(format!(
+      return Err(KiteError::Internal(format!(
         "Cannot write to lock byte page range (page {page_num})"
       )));
     }
@@ -153,7 +153,7 @@ impl FilePager {
 
     // Validate mmap alignment
     if start_offset % OS_PAGE_SIZE != 0 {
-      return Err(RayError::Internal(format!(
+      return Err(KiteError::Internal(format!(
         "mmap offset {start_offset} must be aligned to OS page size {OS_PAGE_SIZE}"
       )));
     }
@@ -162,7 +162,7 @@ impl FilePager {
 
     // Check bounds
     if start_offset + length > mmap.len() {
-      return Err(RayError::Internal(format!(
+      return Err(KiteError::Internal(format!(
         "mmap range {}..{} exceeds file size {}",
         start_offset,
         start_offset + length,
@@ -177,7 +177,7 @@ impl FilePager {
   /// Returns the starting page number of the allocated range
   pub fn allocate_pages(&mut self, count: u32) -> Result<u32> {
     if count == 0 {
-      return Err(RayError::Internal(
+      return Err(KiteError::Internal(
         "Must allocate at least 1 page".to_string(),
       ));
     }
@@ -256,7 +256,7 @@ impl FilePager {
     // Validate destination doesn't overlap with lock byte range
     let (lock_start, lock_end) = self.lock_byte_page_range();
     if dst_page < lock_end && dst_page + page_count > lock_start {
-      return Err(RayError::Internal(
+      return Err(KiteError::Internal(
         "Cannot relocate to lock byte range".to_string(),
       ));
     }

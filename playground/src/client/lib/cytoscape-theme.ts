@@ -1,6 +1,6 @@
 /**
  * Cytoscape.js Theme Configuration
- * Ray Electric Blue Theme
+ * Kite Electric Blue Theme
  */
 
 import type cytoscape from "cytoscape";

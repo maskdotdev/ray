@@ -400,6 +400,23 @@ impl PyDatabase {
     }
   }
 
+  fn upsert_node(
+    &self,
+    key: String,
+    props: Vec<(u32, Option<PropValue>)>,
+  ) -> PyResult<i64> {
+    let core_props: Vec<(PropKeyId, Option<crate::types::PropValue>)> = props
+      .into_iter()
+      .map(|(k, v)| (k as PropKeyId, v.map(|value| value.into())))
+      .collect();
+
+    dispatch_tx!(
+      self,
+      |db| nodes::upsert_node_single(db, &key, &core_props),
+      |h| nodes::upsert_node_graph(h, &key, &core_props)
+    )
+  }
+
   // ==========================================================================
   // Edge Operations
   // ==========================================================================

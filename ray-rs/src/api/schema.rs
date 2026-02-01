@@ -639,7 +639,7 @@ impl std::error::Error for ValidationError {}
 /// Complete database schema
 ///
 /// Contains all node and edge type definitions for a database.
-/// Used to initialize a Ray database with type-safe operations.
+/// Used to initialize a Kite database with type-safe operations.
 #[derive(Debug, Clone, Default)]
 pub struct DatabaseSchema {
   /// Node type definitions by name

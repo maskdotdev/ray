@@ -21,7 +21,7 @@ This package ships prebuilt binaries for major platforms. If a prebuild isn't av
 The fluent API provides a high-level, type-safe interface for schema-driven workflows:
 
 ```ts
-import { ray, node, edge, prop, optional } from 'kitedb'
+import { kite, node, edge, prop, optional } from 'kitedb'
 
 // Define your schema
 const User = node('user', {
@@ -38,7 +38,7 @@ const Knows = edge('knows', {
 })
 
 // Open database (async)
-const db = await ray('./social.kitedb', {
+const db = await kite('./social.kitedb', {
   nodes: [User],
   edges: [Knows],
 })
@@ -163,7 +163,7 @@ This is implemented using a read-write lock (RwLock) internally, providing good 
 
 ## API surface
 
-The Node bindings expose both low-level graph primitives (`Database`) and higher-level APIs (Ray) for schema-driven workflows, plus metrics, backups, traversal, and vector search. For full API details and guides, see the docs:
+The Node bindings expose both low-level graph primitives (`Database`) and higher-level APIs (Kite) for schema-driven workflows, plus metrics, backups, traversal, and vector search. For full API details and guides, see the docs:
 
 https://kitedb.vercel.com/docs
 

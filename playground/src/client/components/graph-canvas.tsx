@@ -2,7 +2,7 @@
  * Graph Canvas Component
  *
  * Renders the graph using Cytoscape.js with fCoSE layout.
- * Ray Electric Blue Theme.
+ * Kite Electric Blue Theme.
  */
 
 import { useRef } from "react";

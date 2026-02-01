@@ -7,9 +7,9 @@ behavior while working within JS <-> Rust constraints.
 
 - `openGraphDB(path, options)` -> `Database.open(path, options)`
 - Low-level GraphDB helpers (nodes/edges/props/cache) -> `Database` methods
-- `VectorIndex` -> `VectorIndex` (nodeId-only until Ray/NodeRef exists)
-- High-level `ray(path, options)` -> `ray(path, options)` returning `Ray`
-- High-level builders/traversal/pathfinding -> NAPI `Ray` methods + builders
+- `VectorIndex` -> `VectorIndex` (nodeId-only until Kite/NodeRef exists)
+- High-level `kite(path, options)` -> `kite(path, options)` returning `Kite`
+- High-level builders/traversal/pathfinding -> NAPI `Kite` methods + builders
 
 ## Schema Input Format (NAPI)
 
@@ -62,12 +62,12 @@ NAPI accepts either a precomputed key string or a key args object, depending
 on the `KeySpec`:
 
 ```ts
-ray.get(user, "user:alice");
-ray.get(user, { id: "alice" }); // for template/parts
+kite.get(user, "user:alice");
+kite.get(user, { id: "alice" }); // for template/parts
 ```
 
 ## Notes / Open Questions
 
-- NodeRef availability in NAPI depends on the high-level Ray API landing.
+- NodeRef availability in NAPI depends on the high-level Kite API landing.
 - `template`/`parts` should be kept minimal to avoid ambiguous key generation.
 - The schema input format should round-trip into Rust `NodeSchema`/`EdgeSchema`.

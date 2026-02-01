@@ -1,6 +1,6 @@
 # Python Parity Matrix (TypeScript Core)
 
-Scope: TypeScript core API under `src/api/*` plus `src/api/vector-search.ts`, `Ray.check()` in `src/api/ray.ts`, and the operational helpers exported from `src/index.ts` (export/import, streaming, backup/restore, metrics/health). CLI helpers are excluded.
+Scope: TypeScript core API under `src/api/*` plus `src/api/vector-search.ts`, `Kite.check()` in `src/api/kite.ts`, and the operational helpers exported from `src/index.ts` (export/import, streaming, backup/restore, metrics/health). CLI helpers are excluded.
 
 Legend: parity = full feature match, partial = similar capability with API or behavior differences, missing = not exposed in Python bindings.
 
@@ -8,13 +8,13 @@ Legend: parity = full feature match, partial = similar capability with API or be
 
 | Area              | TypeScript (core)                                   | Python                                             | Parity  | Notes                                                                                              |
 | ----------------- | --------------------------------------------------- | -------------------------------------------------- | ------- | -------------------------------------------------------------------------------------------------- |
-| Open/close        | `ray(path, options)` / `Ray.open()` / `Ray.close()` | `ray(path, nodes, edges)` / `Ray(...)` / `close()` | parity  | Python is sync; TS is async.                                                                       |
+| Open/close        | `kite(path, options)` / `Kite.open()` / `Kite.close()` | `kite(path, nodes, edges)` / `Kite(...)` / `close()` | parity  | Python is sync; TS is async.                                                                       |
 | Schema            | `node`, `edge`, `prop`, `optional`                  | `node`, `edge`, `prop`, `optional`                 | parity  | Full parity. `defineNode`/`defineEdge` and `define_node`/`define_edge` kept as deprecated aliases. |
 | Insert (single)   | `insert(node).values({...}).returning()`            | `insert(node).values(...).returning()`             | parity  | Python accepts dict or kwargs.                                                                     |
 | Insert (batch)    | `insert(node).values([...]).returning()`            | `insert(node).values([...]).returning()`           | parity  | Python list insert uses batch path.                                                                |
-| Update (where)    | `update(node).set(...).where({$id/$key})`           | `update(node).set(...).where(id=..., key=...)`     | parity  | API shape differs.                                                                                 |
+| Update (where)    | `update(node).set(...).where({id/key})`             | `update(node).set(...).where(id=..., key=...)`     | parity  | API shape differs.                                                                                 |
 | Update by ref     | `update(nodeRef).set(...).execute()`                | `update(node_ref).set(...).execute()`              | parity  | Naming differences only.                                                                           |
-| Delete (where)    | `delete(node).where({$id/$key})`                    | `delete(node).where(id=..., key=...)`              | parity  | API shape differs.                                                                                 |
+| Delete (where)    | `delete(node).where({id/key})`                      | `delete(node).where(id=..., key=...)`              | parity  | API shape differs.                                                                                 |
 | Delete by ref     | `delete(nodeRef)`                                   | `delete(node_ref)`                                 | parity  | Both execute immediately.                                                                          |
 | Get node          | `get(node, key)`                                    | `get(node, key)`                                   | parity  | Python returns props; TS returns props.                                                            |
 | Get ref           | `getRef(node, key)`                                 | `get_ref(node, key)`                               | parity  | Both skip prop loading.                                                                            |
@@ -35,7 +35,7 @@ Legend: parity = full feature match, partial = similar capability with API or be
 | Traverse options filters | `TraverseOptions.whereEdge/whereNode`  | `TraverseOptions.where_edge/where_node`     | parity  | Filters applied during traversal.              |
 | Property loading default | loads all props                        | loads all props                             | parity  | Default behavior aligned.                      |
 | Results                  | async iterator + `toArray/first/count` | sync iterator + `to_list/first/count`       | partial | Behavior equivalent, sync vs async.            |
-| Edge results             | `{ $src, $dst, $etype, ...props }`     | `EdgeResult` with `$src/$dst/$etype` access | parity  | Python supports `$` keys via `[]`/`to_dict()`. |
+| Edge results             | `{ src, dst, etype, ...props }`        | `EdgeResult` with `src/dst/etype` access   | parity  | Naming differences only.                         |
 | Raw edges                | `rawEdges()`                           | `raw_edges()`                               | parity  | Same constraints (no variable-depth).          |
 
 ## Pathfinding

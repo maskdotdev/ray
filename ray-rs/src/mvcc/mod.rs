@@ -10,7 +10,7 @@
 //!
 //! ## 1. RwLock-based Concurrent Reads
 //!
-//! At the API level (Ray, NAPI bindings, Python bindings), read operations
+//! At the API level (Kite, NAPI bindings, Python bindings), read operations
 //! use a shared read lock (`RwLock::read()`), allowing multiple concurrent
 //! readers. Write operations use an exclusive write lock (`RwLock::write()`).
 //!

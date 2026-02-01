@@ -1,10 +1,10 @@
-# Ray API Documentation
+# Kite API Documentation
 
-This document provides a high-level overview of Ray's architecture and API layers.
+This document provides a high-level overview of Kite's architecture and API layers.
 
 ## Architecture Overview
 
-Ray is organized into several key layers:
+Kite is organized into several key layers:
 
 ```
 ┌─────────────────────────────────────────┐
@@ -89,7 +89,7 @@ const user = node("user", {
   props: { name: prop.string("name") },
 });
 
-const db = await ray("./db", { nodes: [user], edges: [] });
+const db = await kite("./db", { nodes: [user], edges: [] });
 const alice = await db
   .insert(user)
   .values({ key: "alice", name: "Alice" })
@@ -258,7 +258,7 @@ src/
 ✅ You want comfortable error handling
 
 ```typescript
-import { ray, node, edge, prop } from "./src/api";
+import { kite, node, edge, prop } from "./src/api";
 ```
 
 ### Use Low-Level API (`src/ray/graph-db/`)
@@ -379,7 +379,7 @@ type InsertUser = InferNodeInsert<typeof user>;
 
 // Inferred return type
 type User = InferNode<typeof user>;
-// { $id: bigint; $key: string; name: string; age?: bigint; }
+// { id: bigint; key: string; name: string; age?: bigint; }
 
 // Inferred edge props
 const knows = edge("knows", { since: prop.int("since") });
@@ -577,6 +577,6 @@ See `docs/api/README.md` for detailed API documentation and examples.
 
 ## References
 
-- [Ray Main README](../README.md)
+- [Kite Main README](../README.md)
 - [High-Level API Docs](./api/README.md)
 - [TypeScript Docs](../tsconfig.json)

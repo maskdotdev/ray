@@ -6,7 +6,7 @@
 #[cfg(not(target_arch = "wasm32"))]
 mod imp {
   use crate::constants::LOCK_FILENAME;
-  use crate::error::{RayError, Result};
+  use crate::error::{KiteError, Result};
   use std::fs::{File, OpenOptions};
   use std::path::Path;
 
@@ -60,10 +60,10 @@ mod imp {
         .create(true)
         .truncate(false)
         .open(path.as_ref())
-        .map_err(|e| RayError::LockFailed(format!("Failed to open lock file: {e}")))?;
+        .map_err(|e| KiteError::LockFailed(format!("Failed to open lock file: {e}")))?;
 
       fs2::FileExt::lock_exclusive(&file)
-        .map_err(|e| RayError::LockFailed(format!("Failed to acquire exclusive lock: {e}")))?;
+        .map_err(|e| KiteError::LockFailed(format!("Failed to acquire exclusive lock: {e}")))?;
 
       Ok(Self {
         file,
@@ -79,10 +79,10 @@ mod imp {
         .create(true)
         .truncate(false)
         .open(path.as_ref())
-        .map_err(|e| RayError::LockFailed(format!("Failed to open lock file: {e}")))?;
+        .map_err(|e| KiteError::LockFailed(format!("Failed to open lock file: {e}")))?;
 
       fs2::FileExt::lock_shared(&file)
-        .map_err(|e| RayError::LockFailed(format!("Failed to acquire shared lock: {e}")))?;
+        .map_err(|e| KiteError::LockFailed(format!("Failed to acquire shared lock: {e}")))?;
 
       Ok(Self {
         file,
@@ -98,7 +98,7 @@ mod imp {
         .create(true)
         .truncate(false)
         .open(path.as_ref())
-        .map_err(|e| RayError::LockFailed(format!("Failed to open lock file: {e}")))?;
+        .map_err(|e| KiteError::LockFailed(format!("Failed to open lock file: {e}")))?;
 
       match fs2::FileExt::try_lock_exclusive(&file) {
         Ok(()) => Ok(Some(Self {
@@ -106,7 +106,7 @@ mod imp {
           exclusive: true,
         })),
         Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Ok(None),
-        Err(e) => Err(RayError::LockFailed(format!(
+        Err(e) => Err(KiteError::LockFailed(format!(
           "Failed to try exclusive lock: {e}"
         ))),
       }
@@ -120,7 +120,7 @@ mod imp {
         .create(true)
         .truncate(false)
         .open(path.as_ref())
-        .map_err(|e| RayError::LockFailed(format!("Failed to open lock file: {e}")))?;
+        .map_err(|e| KiteError::LockFailed(format!("Failed to open lock file: {e}")))?;
 
       match fs2::FileExt::try_lock_shared(&file) {
         Ok(()) => Ok(Some(Self {
@@ -128,7 +128,7 @@ mod imp {
           exclusive: false,
         })),
         Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Ok(None),
-        Err(e) => Err(RayError::LockFailed(format!(
+        Err(e) => Err(KiteError::LockFailed(format!(
           "Failed to try shared lock: {e}"
         ))),
       }
@@ -142,7 +142,7 @@ mod imp {
     /// Release the lock (also happens on drop)
     pub fn release(self) -> Result<()> {
       fs2::FileExt::unlock(&self.file)
-        .map_err(|e| RayError::LockFailed(format!("Failed to release lock: {e}")))
+        .map_err(|e| KiteError::LockFailed(format!("Failed to release lock: {e}")))
     }
   }
 

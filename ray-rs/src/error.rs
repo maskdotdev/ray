@@ -116,9 +116,6 @@ pub enum KiteError {
 /// Result type alias for KiteDB operations
 pub type Result<T> = std::result::Result<T, KiteError>;
 
-/// Backwards compatibility alias
-pub type RayError = KiteError;
-
 /// Conflict error - specialized error for MVCC conflicts
 /// Allows extracting conflict details
 impl KiteError {
@@ -135,7 +132,7 @@ impl KiteError {
   /// Get conflict keys if this is a conflict error
   pub fn conflict_keys(&self) -> Option<&[String]> {
     match self {
-      RayError::Conflict { keys, .. } => Some(keys),
+      KiteError::Conflict { keys, .. } => Some(keys),
       _ => None,
     }
   }
@@ -145,8 +142,8 @@ impl KiteError {
 // Error conversion impls
 // ============================================================================
 
-impl From<serde_json::Error> for RayError {
+impl From<serde_json::Error> for KiteError {
   fn from(err: serde_json::Error) -> Self {
-    RayError::Serialization(err.to_string())
+    KiteError::Serialization(err.to_string())
   }
 }

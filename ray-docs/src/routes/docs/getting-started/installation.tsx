@@ -28,10 +28,10 @@ function InstallationPage() {
       <h2 id="verify">Verify Installation</h2>
       <p>Create a simple test file to verify the installation works:</p>
       <MultiLangCode
-        typescript={`import { ray } from '@kitedb/core';
+        typescript={`import { kite } from '@kitedb/core';
 
 // Open database with a simple schema
-const db = ray('./test.kitedb', {
+const db = kite('./test.kitedb', {
   nodes: [
     {
       name: 'user',
@@ -43,11 +43,11 @@ const db = ray('./test.kitedb', {
 
 console.log('KiteDB is working!');
 db.close();`}
-        rust={`use kitedb::ray;
+        rust={`use kitedb::kite;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Open database with a simple schema
-    let db = ray("./test.kitedb", RayOptions {
+    let db = kite("./test.kitedb", KiteOptions {
         nodes: vec![
             NodeSpec::new("user")
                 .prop("name", PropType::String),
@@ -60,7 +60,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     db.close();
     Ok(())
 }`}
-        python={`from kitedb import ray, define_node, prop
+        python={`from kitedb import kite, define_node, prop
 
 # Define a simple schema
 user = define_node("user",
@@ -69,7 +69,7 @@ user = define_node("user",
 )
 
 # Open database
-with ray("./test.kitedb", nodes=[user], edges=[]) as db:
+with kite("./test.kitedb", nodes=[user], edges=[]) as db:
     print("KiteDB is working!")`}
         filename={{ ts: 'test.ts', rs: 'main.rs', py: 'test.py' }}
       />

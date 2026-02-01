@@ -3,7 +3,7 @@
  *
  * @example
  * ```typescript
- * import { ray, defineNode, defineEdge, prop, optional } from 'kitedb-core'
+ * import { kite, defineNode, defineEdge, prop, optional } from 'kitedb-core'
  *
  * // Define schema
  * const User = defineNode('user', {
@@ -19,7 +19,7 @@
  * })
  *
  * // Open database
- * const db = await ray('./my.kitedb', {
+ * const db = await kite('./my.kitedb', {
  *   nodes: [User],
  *   edges: [knows],
  * })
@@ -46,9 +46,9 @@ export type { PropType, PropSpec, KeySpec, NodeSpec, NodeConfig, EdgeSpec } from
 // =============================================================================
 
 // Import native bindings
-import { ray as nativeRay, raySync as nativeRaySync, Ray as NativeRay } from '../index'
+import { kite as nativeKite, kiteSync as nativeKiteSync, Kite as NativeKite } from '../index'
 
-import type { JsRayOptions, JsNodeSpec, JsEdgeSpec, JsPropSpec, JsPropValue } from '../index'
+import type { JsKiteOptions, JsNodeSpec, JsEdgeSpec, JsPropSpec, JsPropValue } from '../index'
 
 import type { NodeSpec, EdgeSpec, PropSpec } from './schema'
 
@@ -56,20 +56,23 @@ import type { NodeSpec, EdgeSpec, PropSpec } from './schema'
 // Clean Type Aliases (no Js prefix)
 // =============================================================================
 
-// Re-export Ray class
-export { Ray } from '../index'
+// Re-export Kite class
+export { Kite } from '../index'
 
 // Re-export other classes with clean names
 export {
   Database,
   VectorIndex,
-  RayInsertBuilder,
-  RayInsertExecutorSingle,
-  RayInsertExecutorMany,
-  RayUpdateBuilder,
-  RayUpdateEdgeBuilder,
-  RayTraversal,
-  RayPath,
+  KiteInsertBuilder,
+  KiteInsertExecutorSingle,
+  KiteInsertExecutorMany,
+  KiteUpdateBuilder,
+  KiteUpdateEdgeBuilder,
+  KiteTraversal,
+  KitePath,
+  KiteUpsertBuilder,
+  KiteUpsertExecutorSingle,
+  KiteUpsertExecutorMany,
 } from '../index'
 
 // Re-export enums with clean names
@@ -165,11 +168,11 @@ export type {
 } from '../index'
 
 // =============================================================================
-// Ray Options (clean API)
+// Kite Options (clean API)
 // =============================================================================
 
-/** Options for opening a Ray database */
-export interface RayOptions {
+/** Options for opening a Kite database */
+export interface KiteOptions {
   /** Node type definitions */
   nodes: NodeSpec[]
   /** Edge type definitions */
@@ -227,7 +230,7 @@ function edgeSpecToNative(spec: EdgeSpec): JsEdgeSpec {
   }
 }
 
-function optionsToNative(options: RayOptions): JsRayOptions {
+function optionsToNative(options: KiteOptions): JsKiteOptions {
   return {
     nodes: options.nodes.map(nodeSpecToNative),
     edges: options.edges.map(edgeSpecToNative),
@@ -242,48 +245,48 @@ function optionsToNative(options: RayOptions): JsRayOptions {
 // =============================================================================
 
 /**
- * Open a Ray database asynchronously.
+ * Open a Kite database asynchronously.
  *
  * This is the recommended way to open a database as it doesn't block
  * the Node.js event loop during file I/O.
  *
  * @param path - Path to the database file
  * @param options - Database options including schema
- * @returns Promise resolving to a Ray database instance
+ * @returns Promise resolving to a Kite database instance
  *
  * @example
  * ```typescript
- * const db = await ray('./my.kitedb', {
+ * const db = await kite('./my.kitedb', {
  *   nodes: [User, Post],
  *   edges: [follows, authored],
  * })
  * ```
  */
-export async function ray(path: string, options: RayOptions): Promise<NativeRay> {
+export async function kite(path: string, options: KiteOptions): Promise<NativeKite> {
   const nativeOptions = optionsToNative(options)
   // Cast through unknown because NAPI-RS generates Promise<unknown> for async tasks
-  return (await nativeRay(path, nativeOptions)) as NativeRay
+  return (await nativeKite(path, nativeOptions)) as NativeKite
 }
 
 /**
- * Open a Ray database synchronously.
+ * Open a Kite database synchronously.
  *
  * Use this when you need synchronous initialization (e.g., at module load time).
- * For most cases, prefer the async `ray()` function.
+ * For most cases, prefer the async `kite()` function.
  *
  * @param path - Path to the database file
  * @param options - Database options including schema
- * @returns A Ray database instance
+ * @returns A Kite database instance
  *
  * @example
  * ```typescript
- * const db = raySync('./my.kitedb', {
+ * const db = kiteSync('./my.kitedb', {
  *   nodes: [User],
  *   edges: [knows],
  * })
  * ```
  */
-export function raySync(path: string, options: RayOptions): NativeRay {
+export function kiteSync(path: string, options: KiteOptions): NativeKite {
   const nativeOptions = optionsToNative(options)
-  return nativeRaySync(path, nativeOptions)
+  return nativeKiteSync(path, nativeOptions)
 }

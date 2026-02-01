@@ -8,7 +8,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::constants::{EXT_KITEDB, MANIFEST_FILENAME, SNAPSHOTS_DIR, WAL_DIR};
 use crate::core::single_file::SingleFileDB;
-use crate::error::{RayError, Result};
+use crate::error::{KiteError, Result};
 use crate::graph::db::GraphDB;
 
 /// Backup options
@@ -60,7 +60,7 @@ pub fn create_backup_single_file(
   let mut backup_path = PathBuf::from(backup_path.as_ref());
 
   if backup_path.exists() && !options.overwrite {
-    return Err(RayError::Internal(
+    return Err(KiteError::Internal(
       "Backup already exists at path (use overwrite: true)".to_string(),
     ));
   }
@@ -98,7 +98,7 @@ pub fn create_backup_graph(
   let backup_path = PathBuf::from(backup_path.as_ref());
 
   if backup_path.exists() && !options.overwrite {
-    return Err(RayError::Internal(
+    return Err(KiteError::Internal(
       "Backup already exists at path (use overwrite: true)".to_string(),
     ));
   }
@@ -159,11 +159,11 @@ pub fn restore_backup(
   let mut restore_path = PathBuf::from(restore_path.as_ref());
 
   if !backup_path.exists() {
-    return Err(RayError::Internal("Backup not found at path".to_string()));
+    return Err(KiteError::Internal("Backup not found at path".to_string()));
   }
 
   if restore_path.exists() && !options.overwrite {
-    return Err(RayError::Internal(
+    return Err(KiteError::Internal(
       "Database already exists at restore path (use overwrite: true)".to_string(),
     ));
   }
@@ -189,7 +189,7 @@ pub fn restore_backup(
     let _size = copy_dir_recursive(&backup_path, &restore_path)?;
     Ok(restore_path)
   } else {
-    Err(RayError::Internal(
+    Err(KiteError::Internal(
       "Backup path is not a file or directory".to_string(),
     ))
   }
@@ -198,7 +198,7 @@ pub fn restore_backup(
 pub fn get_backup_info(backup_path: impl AsRef<Path>) -> Result<BackupResult> {
   let backup_path = PathBuf::from(backup_path.as_ref());
   if !backup_path.exists() {
-    return Err(RayError::Internal("Backup not found at path".to_string()));
+    return Err(KiteError::Internal("Backup not found at path".to_string()));
   }
 
   let metadata = fs::metadata(&backup_path)?;
@@ -215,7 +215,7 @@ pub fn get_backup_info(backup_path: impl AsRef<Path>) -> Result<BackupResult> {
     let size = dir_size(&backup_path)?;
     Ok(backup_result(&backup_path, size, "multi-file", timestamp))
   } else {
-    Err(RayError::Internal(
+    Err(KiteError::Internal(
       "Backup path is not a file or directory".to_string(),
     ))
   }
@@ -230,11 +230,11 @@ pub fn create_offline_backup(
   let backup_path = PathBuf::from(backup_path.as_ref());
 
   if !db_path.exists() {
-    return Err(RayError::Internal("Database not found at path".to_string()));
+    return Err(KiteError::Internal("Database not found at path".to_string()));
   }
 
   if backup_path.exists() && !options.overwrite {
-    return Err(RayError::Internal(
+    return Err(KiteError::Internal(
       "Backup already exists at path (use overwrite: true)".to_string(),
     ));
   }
@@ -265,7 +265,7 @@ pub fn create_offline_backup(
       SystemTime::now(),
     ))
   } else {
-    Err(RayError::Internal(
+    Err(KiteError::Internal(
       "Database path is not a file or directory".to_string(),
     ))
   }

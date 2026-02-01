@@ -1,10 +1,10 @@
-# Ray API - Architecture & Design
+# Kite API - Architecture & Design
 
-This document describes the architecture and design decisions of the Ray high-level API.
+This document describes the architecture and design decisions of the Kite high-level API.
 
 ## Overview
 
-The Ray API is a **type-safe, schema-first wrapper** around a low-level embedded graph database. It provides a Drizzle-like developer experience with full TypeScript type inference.
+The Kite API is a **type-safe, schema-first wrapper** around a low-level embedded graph database. It provides a Drizzle-like developer experience with full TypeScript type inference.
 
 ## Design Philosophy
 
@@ -64,16 +64,16 @@ type InsertUser = InferNodeInsert<typeof user>;
 // Result: { key: string; name: string; email: string; age?: bigint; }
 
 type User = InferNode<typeof user>;
-// Result: { $id: bigint; $key: string; name: string; email: string; age?: bigint; }
+// Result: { id: bigint; key: string; name: string; email: string; age?: bigint; }
 ```
 
 ### 2. Database Context (`ray.ts`)
 
-The `Ray` class is the main interface for all operations:
+The `Kite` class is the main interface for all operations:
 
 **Initialization:**
 ```typescript
-const db = await ray('./my-db', {
+const db = await kite('./my-db', {
   nodes: [user, company],
   edges: [knows, worksAt],
 });
@@ -115,7 +115,7 @@ Delete → where() → DeleteExecutor → execute()
 
 **Link/Unlink:**
 ```
-Direct methods on Ray (no builder needed)
+Direct methods on Kite (no builder needed)
 ```
 
 **Design Notes:**
@@ -123,7 +123,7 @@ Direct methods on Ray (no builder needed)
 - Builders are immutable and return new instances
 - The `_toBatchOp()` method allows operations to be batched
 - Batch operations receive a `TxHandle` for transaction context
-- Where conditions support both `$id` and `$key` lookups
+- Where conditions support both `id` and `key` lookups
 
 ### 4. Traversal (`traversal.ts`)
 
@@ -201,7 +201,7 @@ createTraversalBuilder() sets up execution state
 ## Property Type System
 
 ```
-Ray Type           TypeScript Type    Storage        Tag
+Kite Type           TypeScript Type    Storage        Tag
 ─────────────────────────────────────────────────────────
 prop.string()      string             String         4
 prop.int()         bigint             i64            2
@@ -235,9 +235,9 @@ typeof alice.active;    // 'boolean'
 
 ```typescript
 export interface NodeRef<N extends NodeDef = NodeDef> {
-  readonly $id: NodeID;      // Internal numeric ID
-  readonly $key: string;     // Application key
-  readonly $def: N;          // Node definition
+  readonly id: NodeID;      // Internal numeric ID
+  readonly key: string;     // Application key
+  readonly def: N;          // Node definition
   [key: string]: unknown;    // Properties
 }
 ```
@@ -273,12 +273,12 @@ Benefits:
 Flexible WHERE matching:
 
 ```typescript
-type WhereCondition = { $key: string } | { $id: NodeID };
+type WhereCondition = { key: string } | { id: NodeID };
 ```
 
 Allows:
-- `where({ $key: 'user:alice' })` - String lookup
-- `where({ $id: 123n })` - Direct ID (from NodeRef)
+- `where({ key: 'user:alice' })` - String lookup
+- `where({ id: 123n })` - Direct ID (from NodeRef)
 
 ### 4. Escape Hatch
 
@@ -342,7 +342,7 @@ try {
 
 ### vs. Raw GraphDB (`src/db/`)
 
-| Feature | Ray API | Raw GraphDB |
+| Feature | Kite API | Raw GraphDB |
 |---------|-------------|-----------|
 | Type safety | Full | Manual |
 | Schema | Defined | Implicit |
@@ -351,7 +351,7 @@ try {
 | Builders | Yes | No |
 | Ergonomics | High | Low |
 
-**When to use Ray API:**
+**When to use Kite API:**
 - Building applications
 - Need type safety
 - Want ergonomic API
@@ -363,7 +363,7 @@ try {
 
 ### vs. Other Databases
 
-| Aspect | Ray | SQL | NoSQL | Neo4j |
+| Aspect | Kite | SQL | NoSQL | Neo4j |
 |--------|----------|-----|-------|-------|
 | Embedded | Yes | No | Sometimes | No |
 | Graph-first | Yes | No | No | Yes |
@@ -373,7 +373,7 @@ try {
 
 ## Future Considerations
 
-Several items from the original roadmap (MVCC, pathfinding, and the caching layer) are now implemented and documented elsewhere — see [Ray README](../../README.md) for the MVCC, pathfinding, and caching sections, and [API architecture](../API.md) for MVCC layer details. This section tracks only features that remain future work.
+Several items from the original roadmap (MVCC, pathfinding, and the caching layer) are now implemented and documented elsewhere — see [Kite README](../../README.md) for the MVCC, pathfinding, and caching sections, and [API architecture](../API.md) for MVCC layer details. This section tracks only features that remain future work.
 
 1. **Advanced Traversal**
    - Subgraph matching

@@ -1,4 +1,4 @@
-//! NAPI bindings for the high-level Ray API
+//! NAPI bindings for the high-level Kite API
 
 use napi::bindgen_prelude::*;
 use napi::UnknownRef;
@@ -8,9 +8,9 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use crate::api::pathfinding::{bfs, dijkstra, yen_k_shortest, PathConfig, PathResult};
-use crate::api::ray::{
-  BatchOp, BatchResult, EdgeDef, NodeDef, PropDef, PropType as RayPropType, Ray as RustRay,
-  RayOptions,
+use crate::api::kite::{
+  BatchOp, BatchResult, EdgeDef, NodeDef, PropDef, PropType as KitePropType, Kite as RustKite,
+  KiteOptions,
 };
 use crate::api::traversal::{TraversalBuilder, TraversalDirection, TraverseOptions};
 use crate::graph::edges::{
@@ -63,7 +63,7 @@ pub struct JsEdgeSpec {
 }
 
 #[napi(object)]
-pub struct JsRayOptions {
+pub struct JsKiteOptions {
   pub nodes: Vec<JsNodeSpec>,
   pub edges: Vec<JsEdgeSpec>,
   pub read_only: Option<bool>,
@@ -163,13 +163,13 @@ fn prop_spec_to_def(name: &str, spec: &JsPropSpec) -> Result<PropDef> {
     "bool" => PropDef::bool(name),
     "vector" => PropDef {
       name: name.to_string(),
-      prop_type: RayPropType::Any,
+      prop_type: KitePropType::Any,
       required: false,
       default: None,
     },
     "any" => PropDef {
       name: name.to_string(),
-      prop_type: RayPropType::Any,
+      prop_type: KitePropType::Any,
       required: false,
       default: None,
     },
@@ -419,9 +419,9 @@ fn node_to_js(
   props: HashMap<String, PropValue>,
 ) -> Result<Object<'static>> {
   let mut obj = Object::new(env)?;
-  obj.set_named_property("$id", node_id as i64)?;
-  obj.set_named_property("$key", node_key.as_deref().unwrap_or(""))?;
-  obj.set_named_property("$type", node_type)?;
+  obj.set_named_property("id", node_id as i64)?;
+  obj.set_named_property("key", node_key.as_deref().unwrap_or(""))?;
+  obj.set_named_property("type", node_type)?;
 
   for (name, value) in props {
     let js_value = prop_value_to_js(env, value)?;
@@ -453,7 +453,7 @@ struct TraversalFilterItem {
 }
 
 fn node_filter_data(
-  ray: &RustRay,
+  ray: &RustKite,
   node_id: NodeId,
   selected_props: Option<&std::collections::HashSet<String>>,
 ) -> NodeFilterData {
@@ -482,7 +482,7 @@ fn node_filter_data(
   }
 }
 
-fn edge_filter_data(ray: &RustRay, edge: &Edge) -> EdgeFilterData {
+fn edge_filter_data(ray: &RustKite, edge: &Edge) -> EdgeFilterData {
   let mut props = HashMap::new();
   if let Some(props_by_id) = get_edge_props_db(ray.raw(), edge.src, edge.etype, edge.dst) {
     for (key_id, value) in props_by_id {
@@ -502,9 +502,9 @@ fn edge_filter_data(ray: &RustRay, edge: &Edge) -> EdgeFilterData {
 
 fn node_filter_arg(env: &Env, data: &NodeFilterData) -> Result<Object<'static>> {
   let mut obj = Object::new(env)?;
-  obj.set_named_property("$id", data.id as i64)?;
-  obj.set_named_property("$key", data.key.as_str())?;
-  obj.set_named_property("$type", data.node_type.as_str())?;
+  obj.set_named_property("id", data.id as i64)?;
+  obj.set_named_property("key", data.key.as_str())?;
+  obj.set_named_property("type", data.node_type.as_str())?;
   for (name, value) in &data.props {
     let js_value = prop_value_to_js(env, value.clone())?;
     obj.set_named_property(name, js_value)?;
@@ -514,9 +514,9 @@ fn node_filter_arg(env: &Env, data: &NodeFilterData) -> Result<Object<'static>> 
 
 fn edge_filter_arg(env: &Env, data: &EdgeFilterData) -> Result<Object<'static>> {
   let mut obj = Object::new(env)?;
-  obj.set_named_property("$src", data.src as i64)?;
-  obj.set_named_property("$dst", data.dst as i64)?;
-  obj.set_named_property("$etype", data.etype)?;
+  obj.set_named_property("src", data.src as i64)?;
+  obj.set_named_property("dst", data.dst as i64)?;
+  obj.set_named_property("etype", data.etype)?;
   for (name, value) in &data.props {
     let js_value = prop_value_to_js(env, value.clone())?;
     obj.set_named_property(name, js_value)?;
@@ -524,14 +524,14 @@ fn edge_filter_arg(env: &Env, data: &EdgeFilterData) -> Result<Object<'static>> 
   Ok(Object::from_raw(env.raw(), obj.raw()))
 }
 
-fn call_filter(env: &Env, func_ref: &UnknownRef<false>, arg: Object) -> Result<bool> {
+fn call_filter(env: &Env, func_ref: &Arc<UnknownRef<false>>, arg: Object) -> Result<bool> {
   let func_value = func_ref.get_value(env)?;
   let func: Function<Unknown, Unknown> = unsafe { func_value.cast()? };
   let result: Unknown = func.call(arg.into_unknown(env)?)?;
   result.coerce_to_bool()
 }
 
-fn get_node_props(ray: &RustRay, node_id: NodeId) -> HashMap<String, PropValue> {
+fn get_node_props(ray: &RustKite, node_id: NodeId) -> HashMap<String, PropValue> {
   let mut props = HashMap::new();
   if let Some(props_by_id) = get_node_props_db(ray.raw(), node_id) {
     for (key_id, value) in props_by_id {
@@ -659,14 +659,14 @@ fn get_neighbors(
 }
 
 // =============================================================================
-// Ray Handle
+// Kite Handle
 // =============================================================================
 
-/// High-level Ray database handle for Node.js/Bun.
+/// High-level Kite database handle for Node.js/Bun.
 ///
 /// # Thread Safety and Concurrent Access
 ///
-/// Ray uses an internal RwLock to support concurrent operations:
+/// Kite uses an internal RwLock to support concurrent operations:
 ///
 /// - **Read operations** (get, exists, neighbors, traversals) use a shared read lock,
 ///   allowing multiple concurrent reads without blocking each other.
@@ -691,29 +691,29 @@ fn get_neighbors(
 /// await db.insert("User").key("david").set("name", "David").execute();
 /// ```
 #[napi]
-pub struct Ray {
-  inner: Arc<RwLock<Option<RustRay>>>,
+pub struct Kite {
+  inner: Arc<RwLock<Option<RustKite>>>,
   node_specs: Arc<HashMap<String, KeySpec>>,
 }
 
-impl Ray {
+impl Kite {
   /// Execute a read operation with a shared lock.
   /// Multiple read operations can execute concurrently.
-  fn with_ray<R>(&self, f: impl FnOnce(&RustRay) -> Result<R>) -> Result<R> {
+  fn with_kite<R>(&self, f: impl FnOnce(&RustKite) -> Result<R>) -> Result<R> {
     let guard = self.inner.read();
     let ray = guard
       .as_ref()
-      .ok_or_else(|| Error::from_reason("Ray is closed"))?;
+      .ok_or_else(|| Error::from_reason("Kite is closed"))?;
     f(ray)
   }
 
   /// Execute a write operation with an exclusive lock.
   /// This blocks all other operations until complete.
-  fn with_ray_mut<R>(&self, f: impl FnOnce(&mut RustRay) -> Result<R>) -> Result<R> {
+  fn with_kite_mut<R>(&self, f: impl FnOnce(&mut RustKite) -> Result<R>) -> Result<R> {
     let mut guard = self.inner.write();
     let ray = guard
       .as_mut()
-      .ok_or_else(|| Error::from_reason("Ray is closed"))?;
+      .ok_or_else(|| Error::from_reason("Kite is closed"))?;
     f(ray)
   }
 
@@ -726,12 +726,12 @@ impl Ray {
 }
 
 #[napi]
-impl Ray {
-  /// Open a Ray database
+impl Kite {
+  /// Open a Kite database
   #[napi(factory)]
-  pub fn open(path: String, options: JsRayOptions) -> Result<Self> {
+  pub fn open(path: String, options: JsKiteOptions) -> Result<Self> {
     let mut node_specs: HashMap<String, KeySpec> = HashMap::new();
-    let mut ray_opts = RayOptions::new();
+    let mut ray_opts = KiteOptions::new();
     ray_opts.read_only = options.read_only.unwrap_or(false);
     ray_opts.create_if_missing = options.create_if_missing.unwrap_or(true);
     ray_opts.lock_file = options.lock_file.unwrap_or(true);
@@ -761,9 +761,9 @@ impl Ray {
       ray_opts.edges.push(edge_def);
     }
 
-    let ray = RustRay::open(path, ray_opts).map_err(|e| Error::from_reason(e.to_string()))?;
+    let ray = RustKite::open(path, ray_opts).map_err(|e| Error::from_reason(e.to_string()))?;
 
-    Ok(Ray {
+    Ok(Kite {
       inner: Arc::new(RwLock::new(Some(ray))),
       node_specs: Arc::new(node_specs),
     })
@@ -784,7 +784,7 @@ impl Ray {
   pub fn get(&self, env: Env, node_type: String, key: Unknown) -> Result<Option<Object>> {
     let spec = self.key_spec(&node_type)?.clone();
     let key_suffix = key_suffix_from_js(&env, &spec, key)?;
-    self.with_ray(move |ray| {
+    self.with_kite(move |ray| {
       let node_ref = ray
         .get(&node_type, &key_suffix)
         .map_err(|e| Error::from_reason(e.to_string()))?;
@@ -803,7 +803,7 @@ impl Ray {
   /// Get a node by ID (returns node object with props)
   #[napi]
   pub fn get_by_id(&self, env: Env, node_id: i64) -> Result<Option<Object>> {
-    self.with_ray(move |ray| {
+    self.with_kite(move |ray| {
       let node_ref = ray
         .get_by_id(node_id as NodeId)
         .map_err(|e| Error::from_reason(e.to_string()))?;
@@ -823,7 +823,7 @@ impl Ray {
   pub fn get_ref(&self, env: Env, node_type: String, key: Unknown) -> Result<Option<Object>> {
     let spec = self.key_spec(&node_type)?.clone();
     let key_suffix = key_suffix_from_js(&env, &spec, key)?;
-    self.with_ray(move |ray| {
+    self.with_kite(move |ray| {
       let node_ref = ray
         .get_ref(&node_type, &key_suffix)
         .map_err(|e| Error::from_reason(e.to_string()))?;
@@ -847,7 +847,7 @@ impl Ray {
   /// Get a node property value
   #[napi]
   pub fn get_prop(&self, node_id: i64, prop_name: String) -> Result<Option<JsPropValue>> {
-    let value = self.with_ray(|ray| Ok(ray.get_prop(node_id as NodeId, &prop_name)))?;
+    let value = self.with_kite(|ray| Ok(ray.get_prop(node_id as NodeId, &prop_name)))?;
     Ok(value.map(JsPropValue::from))
   }
 
@@ -855,7 +855,7 @@ impl Ray {
   #[napi]
   pub fn set_prop(&self, env: Env, node_id: i64, prop_name: String, value: Unknown) -> Result<()> {
     let prop_value = js_value_to_prop_value(&env, value)?;
-    self.with_ray_mut(|ray| {
+    self.with_kite_mut(|ray| {
       ray
         .set_prop(node_id as NodeId, &prop_name, prop_value)
         .map_err(|e| Error::from_reason(e.to_string()))
@@ -865,13 +865,13 @@ impl Ray {
   /// Check if a node exists
   #[napi]
   pub fn exists(&self, node_id: i64) -> Result<bool> {
-    self.with_ray(|ray| Ok(ray.exists(node_id as NodeId)))
+    self.with_kite(|ray| Ok(ray.exists(node_id as NodeId)))
   }
 
   /// Delete a node by ID
   #[napi]
   pub fn delete_by_id(&self, node_id: i64) -> Result<bool> {
-    self.with_ray_mut(|ray| {
+    self.with_kite_mut(|ray| {
       ray
         .delete_node(node_id as NodeId)
         .map_err(|e| Error::from_reason(e.to_string()))
@@ -883,7 +883,7 @@ impl Ray {
   pub fn delete_by_key(&self, env: Env, node_type: String, key: Unknown) -> Result<bool> {
     let spec = self.key_spec(&node_type)?.clone();
     let key_suffix = key_suffix_from_js(&env, &spec, key)?;
-    self.with_ray_mut(|ray| {
+    self.with_kite_mut(|ray| {
       let full_key = ray
         .node_def(&node_type)
         .ok_or_else(|| Error::from_reason(format!("Unknown node type: {node_type}")))?
@@ -903,10 +903,23 @@ impl Ray {
 
   /// Create an insert builder
   #[napi]
-  pub fn insert(&self, node_type: String) -> Result<RayInsertBuilder> {
+  pub fn insert(&self, node_type: String) -> Result<KiteInsertBuilder> {
     let spec = self.key_spec(&node_type)?.clone();
     let prefix = spec.prefix().to_string();
-    Ok(RayInsertBuilder {
+    Ok(KiteInsertBuilder {
+      ray: self.inner.clone(),
+      node_type,
+      key_prefix: prefix,
+      key_spec: spec,
+    })
+  }
+
+  /// Create an upsert builder
+  #[napi]
+  pub fn upsert(&self, node_type: String) -> Result<KiteUpsertBuilder> {
+    let spec = self.key_spec(&node_type)?.clone();
+    let prefix = spec.prefix().to_string();
+    Ok(KiteUpsertBuilder {
       ray: self.inner.clone(),
       node_type,
       key_prefix: prefix,
@@ -916,8 +929,8 @@ impl Ray {
 
   /// Create an update builder by node ID
   #[napi]
-  pub fn update_by_id(&self, node_id: i64) -> Result<RayUpdateBuilder> {
-    Ok(RayUpdateBuilder {
+  pub fn update_by_id(&self, node_id: i64) -> Result<KiteUpdateBuilder> {
+    Ok(KiteUpdateBuilder {
       ray: self.inner.clone(),
       node_id: node_id as NodeId,
       updates: HashMap::new(),
@@ -931,10 +944,10 @@ impl Ray {
     env: Env,
     node_type: String,
     key: Unknown,
-  ) -> Result<RayUpdateBuilder> {
+  ) -> Result<KiteUpdateBuilder> {
     let spec = self.key_spec(&node_type)?.clone();
     let key_suffix = key_suffix_from_js(&env, &spec, key)?;
-    let node_id = self.with_ray(|ray| {
+    let node_id = self.with_kite(|ray| {
       let full_key = ray
         .node_def(&node_type)
         .ok_or_else(|| Error::from_reason(format!("Unknown node type: {node_type}")))?
@@ -943,7 +956,7 @@ impl Ray {
     })?;
 
     match node_id {
-      Some(node_id) => Ok(RayUpdateBuilder {
+      Some(node_id) => Ok(KiteUpdateBuilder {
         ray: self.inner.clone(),
         node_id,
         updates: HashMap::new(),
@@ -963,7 +976,7 @@ impl Ray {
     props: Option<Object>,
   ) -> Result<()> {
     let props_map = js_props_to_map(&env, props)?;
-    self.with_ray_mut(|ray| {
+    self.with_kite_mut(|ray| {
       if props_map.is_empty() {
         ray
           .link(src as NodeId, &edge_type, dst as NodeId)
@@ -979,7 +992,7 @@ impl Ray {
   /// Unlink two nodes
   #[napi]
   pub fn unlink(&self, src: i64, edge_type: String, dst: i64) -> Result<bool> {
-    self.with_ray_mut(|ray| {
+    self.with_kite_mut(|ray| {
       ray
         .unlink(src as NodeId, &edge_type, dst as NodeId)
         .map_err(|e| Error::from_reason(e.to_string()))
@@ -989,7 +1002,7 @@ impl Ray {
   /// Check if an edge exists
   #[napi]
   pub fn has_edge(&self, src: i64, edge_type: String, dst: i64) -> Result<bool> {
-    self.with_ray(move |ray| {
+    self.with_kite(move |ray| {
       let edge_def = ray
         .edge_def(&edge_type)
         .ok_or_else(|| Error::from_reason(format!("Unknown edge type: {edge_type}")))?;
@@ -1014,7 +1027,7 @@ impl Ray {
     dst: i64,
     prop_name: String,
   ) -> Result<Option<JsPropValue>> {
-    let value = self.with_ray(|ray| {
+    let value = self.with_kite(|ray| {
       ray
         .get_edge_prop(src as NodeId, &edge_type, dst as NodeId, &prop_name)
         .map_err(|e| Error::from_reason(e.to_string()))
@@ -1030,7 +1043,7 @@ impl Ray {
     edge_type: String,
     dst: i64,
   ) -> Result<HashMap<String, JsPropValue>> {
-    let props_opt = self.with_ray(|ray| {
+    let props_opt = self.with_kite(|ray| {
       ray
         .get_edge_props(src as NodeId, &edge_type, dst as NodeId)
         .map_err(|e| Error::from_reason(e.to_string()))
@@ -1056,7 +1069,7 @@ impl Ray {
     value: Unknown,
   ) -> Result<()> {
     let prop_value = js_value_to_prop_value(&env, value)?;
-    self.with_ray_mut(|ray| {
+    self.with_kite_mut(|ray| {
       ray
         .set_edge_prop(
           src as NodeId,
@@ -1078,7 +1091,7 @@ impl Ray {
     dst: i64,
     prop_name: String,
   ) -> Result<()> {
-    self.with_ray_mut(|ray| {
+    self.with_kite_mut(|ray| {
       ray
         .del_edge_prop(src as NodeId, &edge_type, dst as NodeId, &prop_name)
         .map_err(|e| Error::from_reason(e.to_string()))
@@ -1087,8 +1100,8 @@ impl Ray {
 
   /// Update edge properties with a builder
   #[napi]
-  pub fn update_edge(&self, src: i64, edge_type: String, dst: i64) -> Result<RayUpdateEdgeBuilder> {
-    let etype_id = self.with_ray(|ray| {
+  pub fn update_edge(&self, src: i64, edge_type: String, dst: i64) -> Result<KiteUpdateEdgeBuilder> {
+    let etype_id = self.with_kite(|ray| {
       let edge_def = ray
         .edge_def(&edge_type)
         .ok_or_else(|| Error::from_reason(format!("Unknown edge type: {edge_type}")))?;
@@ -1097,7 +1110,7 @@ impl Ray {
         .ok_or_else(|| Error::from_reason("Edge type not initialized"))
     })?;
 
-    Ok(RayUpdateEdgeBuilder {
+    Ok(KiteUpdateEdgeBuilder {
       ray: self.inner.clone(),
       src: src as NodeId,
       etype_id,
@@ -1109,7 +1122,7 @@ impl Ray {
   /// List all nodes of a type (returns array of node objects)
   #[napi]
   pub fn all(&self, env: Env, node_type: String) -> Result<Vec<Object>> {
-    self.with_ray(|ray| {
+    self.with_kite(|ray| {
       let node_def = ray
         .node_def(&node_type)
         .ok_or_else(|| Error::from_reason(format!("Unknown node type: {node_type}")))?;
@@ -1132,7 +1145,7 @@ impl Ray {
   /// Count nodes (optionally by type)
   #[napi]
   pub fn count_nodes(&self, node_type: Option<String>) -> Result<i64> {
-    self.with_ray(|ray| match node_type {
+    self.with_kite(|ray| match node_type {
       Some(node_type) => ray
         .count_nodes_by_type(&node_type)
         .map(|v| v as i64)
@@ -1144,7 +1157,7 @@ impl Ray {
   /// Count edges (optionally by type)
   #[napi]
   pub fn count_edges(&self, edge_type: Option<String>) -> Result<i64> {
-    self.with_ray(|ray| match edge_type {
+    self.with_kite(|ray| match edge_type {
       Some(edge_type) => ray
         .count_edges_by_type(&edge_type)
         .map(|v| v as i64)
@@ -1156,7 +1169,7 @@ impl Ray {
   /// List all edges (optionally by type)
   #[napi]
   pub fn all_edges(&self, edge_type: Option<String>) -> Result<Vec<JsFullEdge>> {
-    self.with_ray(|ray| {
+    self.with_kite(|ray| {
       let options = if let Some(ref edge_type) = edge_type {
         let edge_def = ray
           .edge_def(edge_type)
@@ -1188,7 +1201,7 @@ impl Ray {
   /// Check if a path exists between two nodes
   #[napi]
   pub fn has_path(&self, source: i64, target: i64, edge_type: Option<String>) -> Result<bool> {
-    self.with_ray_mut(|ray| {
+    self.with_kite_mut(|ray| {
       ray
         .has_path(source as NodeId, target as NodeId, edge_type.as_deref())
         .map_err(|e| Error::from_reason(e.to_string()))
@@ -1203,7 +1216,7 @@ impl Ray {
     max_depth: i64,
     edge_type: Option<String>,
   ) -> Result<Vec<i64>> {
-    self.with_ray(|ray| {
+    self.with_kite(|ray| {
       let nodes = ray
         .reachable_from(source as NodeId, max_depth as usize, edge_type.as_deref())
         .map_err(|e| Error::from_reason(e.to_string()))?;
@@ -1214,7 +1227,7 @@ impl Ray {
   /// Get all node type names
   #[napi]
   pub fn node_types(&self) -> Result<Vec<String>> {
-    self.with_ray(|ray| {
+    self.with_kite(|ray| {
       Ok(
         ray
           .node_types()
@@ -1228,7 +1241,7 @@ impl Ray {
   /// Get all edge type names
   #[napi]
   pub fn edge_types(&self) -> Result<Vec<String>> {
-    self.with_ray(|ray| {
+    self.with_kite(|ray| {
       Ok(
         ray
           .edge_types()
@@ -1242,7 +1255,7 @@ impl Ray {
   /// Get database statistics
   #[napi]
   pub fn stats(&self) -> Result<DbStats> {
-    self.with_ray(|ray| {
+    self.with_kite(|ray| {
       let s = ray.stats();
       Ok(DbStats {
         snapshot_gen: s.snapshot_gen as i64,
@@ -1272,13 +1285,13 @@ impl Ray {
   /// Get a human-readable description of the database
   #[napi]
   pub fn describe(&self) -> Result<String> {
-    self.with_ray(|ray| Ok(ray.describe()))
+    self.with_kite(|ray| Ok(ray.describe()))
   }
 
   /// Check database integrity
   #[napi]
   pub fn check(&self) -> Result<CheckResult> {
-    self.with_ray(|ray| {
+    self.with_kite(|ray| {
       let result = ray.check().map_err(|e| Error::from_reason(e.to_string()))?;
       Ok(CheckResult::from(result))
     })
@@ -1361,7 +1374,7 @@ impl Ray {
       }
     }
 
-    let results = self.with_ray_mut(|ray| {
+    let results = self.with_kite_mut(|ray| {
       ray
         .batch(rust_ops)
         .map_err(|e| Error::from_reason(e.to_string()))
@@ -1376,8 +1389,8 @@ impl Ray {
 
   /// Begin a traversal from a node ID
   #[napi]
-  pub fn from(&self, node_id: i64) -> Result<RayTraversal> {
-    Ok(RayTraversal {
+  pub fn from(&self, node_id: i64) -> Result<KiteTraversal> {
+    Ok(KiteTraversal {
       ray: self.inner.clone(),
       builder: TraversalBuilder::new(vec![node_id as NodeId]),
       where_edge: None,
@@ -1387,8 +1400,8 @@ impl Ray {
 
   /// Begin a traversal from multiple nodes
   #[napi]
-  pub fn from_nodes(&self, node_ids: Vec<i64>) -> Result<RayTraversal> {
-    Ok(RayTraversal {
+  pub fn from_nodes(&self, node_ids: Vec<i64>) -> Result<KiteTraversal> {
+    Ok(KiteTraversal {
       ray: self.inner.clone(),
       builder: TraversalBuilder::new(node_ids.into_iter().map(|id| id as NodeId).collect()),
       where_edge: None,
@@ -1398,8 +1411,8 @@ impl Ray {
 
   /// Begin a path finding query
   #[napi]
-  pub fn path(&self, source: i64, target: i64) -> Result<RayPath> {
-    Ok(RayPath::new(
+  pub fn path(&self, source: i64, target: i64) -> Result<KitePath> {
+    Ok(KitePath::new(
       self.inner.clone(),
       source as NodeId,
       vec![target as NodeId],
@@ -1408,8 +1421,8 @@ impl Ray {
 
   /// Begin a path finding query to multiple targets
   #[napi]
-  pub fn path_to_any(&self, source: i64, targets: Vec<i64>) -> Result<RayPath> {
-    Ok(RayPath::new(
+  pub fn path_to_any(&self, source: i64, targets: Vec<i64>) -> Result<KitePath> {
+    Ok(KitePath::new(
       self.inner.clone(),
       source as NodeId,
       targets.into_iter().map(|id| id as NodeId).collect(),
@@ -1417,31 +1430,31 @@ impl Ray {
   }
 }
 
-/// Ray entrypoint - sync version (for backwards compatibility)
+/// Kite entrypoint - sync version
 #[napi]
-pub fn ray_sync(path: String, options: JsRayOptions) -> Result<Ray> {
-  Ray::open(path, options)
+pub fn kite_sync(path: String, options: JsKiteOptions) -> Result<Kite> {
+  Kite::open(path, options)
 }
 
 // =============================================================================
-// Async Ray Open Task
+// Async Kite Open Task
 // =============================================================================
 
-/// Task for opening Ray database asynchronously
-pub struct OpenRayTask {
+/// Task for opening Kite database asynchronously
+pub struct OpenKiteTask {
   path: String,
-  options: JsRayOptions,
+  options: JsKiteOptions,
   // Store result here to avoid public type in trait
-  result: Option<(RustRay, HashMap<String, KeySpec>)>,
+  result: Option<(RustKite, HashMap<String, KeySpec>)>,
 }
 
-impl napi::Task for OpenRayTask {
+impl napi::Task for OpenKiteTask {
   type Output = ();
-  type JsValue = Ray;
+  type JsValue = Kite;
 
   fn compute(&mut self) -> Result<Self::Output> {
     let mut node_specs: HashMap<String, KeySpec> = HashMap::new();
-    let mut ray_opts = RayOptions::new();
+    let mut ray_opts = KiteOptions::new();
     ray_opts.read_only = self.options.read_only.unwrap_or(false);
     ray_opts.create_if_missing = self.options.create_if_missing.unwrap_or(true);
     ray_opts.lock_file = self.options.lock_file.unwrap_or(true);
@@ -1471,7 +1484,7 @@ impl napi::Task for OpenRayTask {
       ray_opts.edges.push(edge_def);
     }
 
-    let ray = RustRay::open(&self.path, ray_opts).map_err(|e| Error::from_reason(e.to_string()))?;
+    let ray = RustKite::open(&self.path, ray_opts).map_err(|e| Error::from_reason(e.to_string()))?;
     self.result = Some((ray, node_specs));
     Ok(())
   }
@@ -1481,18 +1494,18 @@ impl napi::Task for OpenRayTask {
       .result
       .take()
       .ok_or_else(|| Error::from_reason("Task result not available"))?;
-    Ok(Ray {
+    Ok(Kite {
       inner: Arc::new(RwLock::new(Some(ray))),
       node_specs: Arc::new(node_specs),
     })
   }
 }
 
-/// Ray entrypoint - async version (recommended)
+/// Kite entrypoint - async version (recommended)
 /// Opens the database on a background thread to avoid blocking the event loop
 #[napi]
-pub fn ray(path: String, options: JsRayOptions) -> AsyncTask<OpenRayTask> {
-  AsyncTask::new(OpenRayTask {
+pub fn kite(path: String, options: JsKiteOptions) -> AsyncTask<OpenKiteTask> {
+  AsyncTask::new(OpenKiteTask {
     path,
     options,
     result: None,
@@ -1504,15 +1517,15 @@ pub fn ray(path: String, options: JsRayOptions) -> AsyncTask<OpenRayTask> {
 // =============================================================================
 
 #[napi]
-pub struct RayInsertBuilder {
-  ray: Arc<RwLock<Option<RustRay>>>,
+pub struct KiteInsertBuilder {
+  ray: Arc<RwLock<Option<RustKite>>>,
   node_type: String,
   key_prefix: String,
   key_spec: KeySpec,
 }
 
 #[napi]
-impl RayInsertBuilder {
+impl KiteInsertBuilder {
   /// Specify values for a single insert
   #[napi]
   pub fn values(
@@ -1520,11 +1533,11 @@ impl RayInsertBuilder {
     env: Env,
     key: Unknown,
     props: Option<Object>,
-  ) -> Result<RayInsertExecutorSingle> {
+  ) -> Result<KiteInsertExecutorSingle> {
     let key_suffix = key_suffix_from_js(&env, &self.key_spec, key)?;
     let full_key = format!("{}{}", self.key_prefix, key_suffix);
     let props_map = js_props_to_map(&env, props)?;
-    Ok(RayInsertExecutorSingle {
+    Ok(KiteInsertExecutorSingle {
       ray: self.ray.clone(),
       node_type: self.node_type.clone(),
       full_key,
@@ -1534,7 +1547,7 @@ impl RayInsertBuilder {
 
   /// Specify values for multiple inserts
   #[napi]
-  pub fn values_many(&self, env: Env, entries: Vec<Unknown>) -> Result<RayInsertExecutorMany> {
+  pub fn values_many(&self, env: Env, entries: Vec<Unknown>) -> Result<KiteInsertExecutorMany> {
     let mut items = Vec::with_capacity(entries.len());
     for entry in entries {
       let obj = entry.coerce_to_object()?;
@@ -1545,7 +1558,7 @@ impl RayInsertBuilder {
       let props_map = js_props_to_map(&env, props)?;
       items.push((full_key, props_map));
     }
-    Ok(RayInsertExecutorMany {
+    Ok(KiteInsertExecutorMany {
       ray: self.ray.clone(),
       node_type: self.node_type.clone(),
       entries: items,
@@ -1554,15 +1567,15 @@ impl RayInsertBuilder {
 }
 
 #[napi]
-pub struct RayInsertExecutorSingle {
-  ray: Arc<RwLock<Option<RustRay>>>,
+pub struct KiteInsertExecutorSingle {
+  ray: Arc<RwLock<Option<RustKite>>>,
   node_type: String,
   full_key: String,
   props: HashMap<String, PropValue>,
 }
 
 #[napi]
-impl RayInsertExecutorSingle {
+impl KiteInsertExecutorSingle {
   /// Execute the insert without returning
   #[napi]
   pub fn execute(&self) -> Result<()> {
@@ -1585,14 +1598,14 @@ impl RayInsertExecutorSingle {
 }
 
 #[napi]
-pub struct RayInsertExecutorMany {
-  ray: Arc<RwLock<Option<RustRay>>>,
+pub struct KiteInsertExecutorMany {
+  ray: Arc<RwLock<Option<RustKite>>>,
   node_type: String,
   entries: Vec<(String, HashMap<String, PropValue>)>,
 }
 
 #[napi]
-impl RayInsertExecutorMany {
+impl KiteInsertExecutorMany {
   /// Execute the inserts without returning
   #[napi]
   pub fn execute(&self) -> Result<()> {
@@ -1622,7 +1635,7 @@ impl RayInsertExecutorMany {
 }
 
 fn insert_single(
-  ray: &Arc<RwLock<Option<RustRay>>>,
+  ray: &Arc<RwLock<Option<RustKite>>>,
   node_type: &str,
   full_key: &str,
   props: &HashMap<String, PropValue>,
@@ -1630,7 +1643,7 @@ fn insert_single(
   let mut guard = ray.write();
   let ray = guard
     .as_mut()
-    .ok_or_else(|| Error::from_reason("Ray is closed"))?;
+    .ok_or_else(|| Error::from_reason("Kite is closed"))?;
   let node_def = ray
     .node_def(node_type)
     .ok_or_else(|| Error::from_reason(format!("Unknown node type: {node_type}")))?
@@ -1672,18 +1685,187 @@ fn insert_single(
 }
 
 // =============================================================================
+// Upsert Builder
+// =============================================================================
+
+#[napi]
+pub struct KiteUpsertBuilder {
+  ray: Arc<RwLock<Option<RustKite>>>,
+  node_type: String,
+  key_prefix: String,
+  key_spec: KeySpec,
+}
+
+#[napi]
+impl KiteUpsertBuilder {
+  /// Specify values for a single upsert
+  #[napi]
+  pub fn values(
+    &self,
+    env: Env,
+    key: Unknown,
+    props: Option<Object>,
+  ) -> Result<KiteUpsertExecutorSingle> {
+    let key_suffix = key_suffix_from_js(&env, &self.key_spec, key)?;
+    let full_key = format!("{}{}", self.key_prefix, key_suffix);
+    let props_map = js_props_to_map(&env, props)?;
+    Ok(KiteUpsertExecutorSingle {
+      ray: self.ray.clone(),
+      node_type: self.node_type.clone(),
+      full_key,
+      props: props_map,
+    })
+  }
+
+  /// Specify values for multiple upserts
+  #[napi]
+  pub fn values_many(&self, env: Env, entries: Vec<Unknown>) -> Result<KiteUpsertExecutorMany> {
+    let mut items = Vec::with_capacity(entries.len());
+    for entry in entries {
+      let obj = entry.coerce_to_object()?;
+      let key: Unknown = obj.get_named_property("key")?;
+      let props: Option<Object> = obj.get_named_property("props")?;
+      let key_suffix = key_suffix_from_js(&env, &self.key_spec, key)?;
+      let full_key = format!("{}{}", self.key_prefix, key_suffix);
+      let props_map = js_props_to_map(&env, props)?;
+      items.push((full_key, props_map));
+    }
+    Ok(KiteUpsertExecutorMany {
+      ray: self.ray.clone(),
+      node_type: self.node_type.clone(),
+      entries: items,
+    })
+  }
+}
+
+#[napi]
+pub struct KiteUpsertExecutorSingle {
+  ray: Arc<RwLock<Option<RustKite>>>,
+  node_type: String,
+  full_key: String,
+  props: HashMap<String, PropValue>,
+}
+
+#[napi]
+impl KiteUpsertExecutorSingle {
+  /// Execute the upsert without returning
+  #[napi]
+  pub fn execute(&self) -> Result<()> {
+    upsert_single(&self.ray, &self.node_type, &self.full_key, &self.props).map(|_| ())
+  }
+
+  /// Execute the upsert and return the node
+  #[napi]
+  pub fn returning(&self, env: Env) -> Result<Object> {
+    let (node_id, props) = upsert_single(&self.ray, &self.node_type, &self.full_key, &self.props)?;
+    node_to_js(
+      &env,
+      node_id,
+      Some(self.full_key.clone()),
+      &self.node_type,
+      props,
+    )
+  }
+}
+
+#[napi]
+pub struct KiteUpsertExecutorMany {
+  ray: Arc<RwLock<Option<RustKite>>>,
+  node_type: String,
+  entries: Vec<(String, HashMap<String, PropValue>)>,
+}
+
+#[napi]
+impl KiteUpsertExecutorMany {
+  /// Execute the upserts without returning
+  #[napi]
+  pub fn execute(&self) -> Result<()> {
+    for (full_key, props) in &self.entries {
+      upsert_single(&self.ray, &self.node_type, full_key, props)?;
+    }
+    Ok(())
+  }
+
+  /// Execute the upserts and return nodes
+  #[napi]
+  pub fn returning(&self, env: Env) -> Result<Vec<Object>> {
+    let mut out = Vec::with_capacity(self.entries.len());
+    for (full_key, props) in &self.entries {
+      let (node_id, props) = upsert_single(&self.ray, &self.node_type, full_key, props)?;
+      out.push(node_to_js(
+        &env,
+        node_id,
+        Some(full_key.clone()),
+        &self.node_type,
+        props,
+      )?);
+    }
+    Ok(out)
+  }
+}
+
+fn upsert_single(
+  ray: &Arc<RwLock<Option<RustKite>>>,
+  node_type: &str,
+  full_key: &str,
+  props: &HashMap<String, PropValue>,
+) -> Result<(NodeId, HashMap<String, PropValue>)> {
+  let mut guard = ray.write();
+  let ray = guard
+    .as_mut()
+    .ok_or_else(|| Error::from_reason("Kite is closed"))?;
+  let node_def = ray
+    .node_def(node_type)
+    .ok_or_else(|| Error::from_reason(format!("Unknown node type: {node_type}")))?
+    .clone();
+
+  let mut handle =
+    begin_tx(ray.raw()).map_err(|e| Error::from_reason(format!("Failed to begin tx: {e}")))?;
+
+  let mut updates = Vec::with_capacity(props.len());
+  for (prop_name, value) in props {
+    let prop_key_id = if let Some(&id) = node_def.prop_key_ids.get(prop_name) {
+      id
+    } else {
+      handle.db.get_or_create_propkey(prop_name)
+    };
+    let value_opt = match value {
+      PropValue::Null => None,
+      other => Some(other.clone()),
+    };
+    updates.push((prop_key_id, value_opt));
+  }
+
+  let (node_id, _) =
+    match crate::graph::nodes::upsert_node_with_props(&mut handle, full_key, updates) {
+      Ok(result) => result,
+      Err(e) => {
+        let _ = rollback(&mut handle);
+        return Err(Error::from_reason(format!("Failed to upsert node: {e}")));
+      }
+    };
+
+  if let Err(e) = commit(&mut handle) {
+    return Err(Error::from_reason(format!("Failed to commit: {e}")));
+  }
+
+  let props = get_node_props(ray, node_id);
+  Ok((node_id, props))
+}
+
+// =============================================================================
 // Update Builder
 // =============================================================================
 
 #[napi]
-pub struct RayUpdateBuilder {
-  ray: Arc<RwLock<Option<RustRay>>>,
+pub struct KiteUpdateBuilder {
+  ray: Arc<RwLock<Option<RustKite>>>,
   node_id: NodeId,
   updates: HashMap<String, Option<PropValue>>,
 }
 
 #[napi]
-impl RayUpdateBuilder {
+impl KiteUpdateBuilder {
   /// Set a node property
   #[napi]
   pub fn set(&mut self, env: Env, prop_name: String, value: Unknown) -> Result<()> {
@@ -1715,7 +1897,7 @@ impl RayUpdateBuilder {
     let mut guard = self.ray.write();
     let ray = guard
       .as_mut()
-      .ok_or_else(|| Error::from_reason("Ray is closed"))?;
+      .ok_or_else(|| Error::from_reason("Kite is closed"))?;
 
     if self.updates.is_empty() {
       return Ok(());
@@ -1749,8 +1931,8 @@ impl RayUpdateBuilder {
 // =============================================================================
 
 #[napi]
-pub struct RayUpdateEdgeBuilder {
-  ray: Arc<RwLock<Option<RustRay>>>,
+pub struct KiteUpdateEdgeBuilder {
+  ray: Arc<RwLock<Option<RustKite>>>,
   src: NodeId,
   etype_id: ETypeId,
   dst: NodeId,
@@ -1758,7 +1940,7 @@ pub struct RayUpdateEdgeBuilder {
 }
 
 #[napi]
-impl RayUpdateEdgeBuilder {
+impl KiteUpdateEdgeBuilder {
   /// Set an edge property
   #[napi]
   pub fn set(&mut self, env: Env, prop_name: String, value: Unknown) -> Result<()> {
@@ -1790,7 +1972,7 @@ impl RayUpdateEdgeBuilder {
     let mut guard = self.ray.write();
     let ray = guard
       .as_mut()
-      .ok_or_else(|| Error::from_reason("Ray is closed"))?;
+      .ok_or_else(|| Error::from_reason("Kite is closed"))?;
 
     if self.updates.is_empty() {
       return Ok(());
@@ -1839,59 +2021,80 @@ impl RayUpdateEdgeBuilder {
 // =============================================================================
 
 #[napi]
-pub struct RayTraversal {
-  ray: Arc<RwLock<Option<RustRay>>>,
+pub struct KiteTraversal {
+  ray: Arc<RwLock<Option<RustKite>>>,
   builder: TraversalBuilder,
-  where_edge: Option<UnknownRef<false>>,
-  where_node: Option<UnknownRef<false>>,
+  where_edge: Option<Arc<UnknownRef<false>>>,
+  where_node: Option<Arc<UnknownRef<false>>>,
+}
+
+impl KiteTraversal {
+  fn fork(&self) -> KiteTraversal {
+    KiteTraversal {
+      ray: self.ray.clone(),
+      builder: self.builder.clone(),
+      where_edge: self.where_edge.clone(),
+      where_node: self.where_node.clone(),
+    }
+  }
 }
 
 #[napi]
-impl RayTraversal {
+impl KiteTraversal {
   #[napi(js_name = "whereEdge")]
-  pub fn where_edge(&mut self, env: Env, func: UnknownRef<false>) -> Result<()> {
+  pub fn where_edge(&self, env: Env, func: UnknownRef<false>) -> Result<KiteTraversal> {
     let value = func.get_value(&env)?;
     if value.get_type()? != ValueType::Function {
       return Err(Error::from_reason("whereEdge requires a function"));
     }
-    self.where_edge = Some(func);
-    Ok(())
+    let mut next = self.fork();
+    next.where_edge = Some(Arc::new(func));
+    Ok(next)
   }
 
   #[napi(js_name = "whereNode")]
-  pub fn where_node(&mut self, env: Env, func: UnknownRef<false>) -> Result<()> {
+  pub fn where_node(&self, env: Env, func: UnknownRef<false>) -> Result<KiteTraversal> {
     let value = func.get_value(&env)?;
     if value.get_type()? != ValueType::Function {
       return Err(Error::from_reason("whereNode requires a function"));
     }
-    self.where_node = Some(func);
-    Ok(())
+    let mut next = self.fork();
+    next.where_node = Some(Arc::new(func));
+    Ok(next)
   }
 
   #[napi]
-  pub fn out(&mut self, edge_type: Option<String>) -> Result<()> {
-    let etype = self.resolve_etype(edge_type)?;
-    self.builder = self.builder.clone().out(etype);
-    Ok(())
+  pub fn out(&self, edge_type: Option<String>) -> Result<KiteTraversal> {
+    let mut next = self.fork();
+    let etype = next.resolve_etype(edge_type)?;
+    next.builder = next.builder.clone().out(etype);
+    Ok(next)
   }
 
   #[napi(js_name = "in")]
-  pub fn in_(&mut self, edge_type: Option<String>) -> Result<()> {
-    let etype = self.resolve_etype(edge_type)?;
-    self.builder = self.builder.clone().r#in(etype);
-    Ok(())
+  pub fn in_(&self, edge_type: Option<String>) -> Result<KiteTraversal> {
+    let mut next = self.fork();
+    let etype = next.resolve_etype(edge_type)?;
+    next.builder = next.builder.clone().r#in(etype);
+    Ok(next)
   }
 
   #[napi]
-  pub fn both(&mut self, edge_type: Option<String>) -> Result<()> {
-    let etype = self.resolve_etype(edge_type)?;
-    self.builder = self.builder.clone().both(etype);
-    Ok(())
+  pub fn both(&self, edge_type: Option<String>) -> Result<KiteTraversal> {
+    let mut next = self.fork();
+    let etype = next.resolve_etype(edge_type)?;
+    next.builder = next.builder.clone().both(etype);
+    Ok(next)
   }
 
   #[napi]
-  pub fn traverse(&mut self, edge_type: Option<String>, options: JsTraverseOptions) -> Result<()> {
-    let etype = self.resolve_etype(edge_type)?;
+  pub fn traverse(
+    &self,
+    edge_type: Option<String>,
+    options: JsTraverseOptions,
+  ) -> Result<KiteTraversal> {
+    let mut next = self.fork();
+    let etype = next.resolve_etype(edge_type)?;
     let opts = TraverseOptions {
       max_depth: options.max_depth as usize,
       min_depth: options.min_depth.unwrap_or(1) as usize,
@@ -1907,21 +2110,23 @@ impl RayTraversal {
       where_edge: None,
       where_node: None,
     };
-    self.builder = self.builder.clone().traverse(etype, opts);
-    Ok(())
+    next.builder = next.builder.clone().traverse(etype, opts);
+    Ok(next)
   }
 
   #[napi]
-  pub fn take(&mut self, limit: i64) -> Result<()> {
-    self.builder = self.builder.clone().take(limit as usize);
-    Ok(())
+  pub fn take(&self, limit: i64) -> Result<KiteTraversal> {
+    let mut next = self.fork();
+    next.builder = next.builder.clone().take(limit as usize);
+    Ok(next)
   }
 
   #[napi]
-  pub fn select(&mut self, props: Vec<String>) -> Result<()> {
+  pub fn select(&self, props: Vec<String>) -> Result<KiteTraversal> {
+    let mut next = self.fork();
     let refs: Vec<&str> = props.iter().map(|p| p.as_str()).collect();
-    self.builder = self.builder.clone().select_props(&refs);
-    Ok(())
+    next.builder = next.builder.clone().select_props(&refs);
+    Ok(next)
   }
 
   #[napi]
@@ -1938,7 +2143,7 @@ impl RayTraversal {
       let guard = ray.read();
       let ray = guard
         .as_ref()
-        .ok_or_else(|| Error::from_reason("Ray is closed"))?;
+        .ok_or_else(|| Error::from_reason("Kite is closed"))?;
 
       let results: Vec<_> = self
         .builder
@@ -2003,7 +2208,7 @@ impl RayTraversal {
       let guard = ray.read();
       let ray = guard
         .as_ref()
-        .ok_or_else(|| Error::from_reason("Ray is closed"))?;
+        .ok_or_else(|| Error::from_reason("Kite is closed"))?;
 
       let results: Vec<_> = self
         .builder
@@ -2074,7 +2279,7 @@ impl RayTraversal {
       let guard = ray.read();
       let ray = guard
         .as_ref()
-        .ok_or_else(|| Error::from_reason("Ray is closed"))?;
+        .ok_or_else(|| Error::from_reason("Kite is closed"))?;
 
       let results: Vec<_> = self
         .builder
@@ -2133,7 +2338,7 @@ impl RayTraversal {
     let guard = self.ray.read();
     let ray = guard
       .as_ref()
-      .ok_or_else(|| Error::from_reason("Ray is closed"))?;
+      .ok_or_else(|| Error::from_reason("Kite is closed"))?;
     let edge_def = ray
       .edge_def(&edge_type)
       .ok_or_else(|| Error::from_reason(format!("Unknown edge type: {edge_type}")))?;
@@ -2149,8 +2354,8 @@ impl RayTraversal {
 // =============================================================================
 
 #[napi]
-pub struct RayPath {
-  ray: Arc<RwLock<Option<RustRay>>>,
+pub struct KitePath {
+  ray: Arc<RwLock<Option<RustKite>>>,
   source: NodeId,
   targets: HashSet<NodeId>,
   allowed_etypes: HashSet<ETypeId>,
@@ -2158,8 +2363,8 @@ pub struct RayPath {
   max_depth: usize,
 }
 
-impl RayPath {
-  fn new(ray: Arc<RwLock<Option<RustRay>>>, source: NodeId, targets: Vec<NodeId>) -> Self {
+impl KitePath {
+  fn new(ray: Arc<RwLock<Option<RustKite>>>, source: NodeId, targets: Vec<NodeId>) -> Self {
     Self {
       ray,
       source,
@@ -2172,13 +2377,13 @@ impl RayPath {
 }
 
 #[napi]
-impl RayPath {
+impl KitePath {
   #[napi]
   pub fn via(&mut self, edge_type: String) -> Result<()> {
     let guard = self.ray.read();
     let ray = guard
       .as_ref()
-      .ok_or_else(|| Error::from_reason("Ray is closed"))?;
+      .ok_or_else(|| Error::from_reason("Kite is closed"))?;
     let edge_def = ray
       .edge_def(&edge_type)
       .ok_or_else(|| Error::from_reason(format!("Unknown edge type: {edge_type}")))?;
@@ -2217,7 +2422,7 @@ impl RayPath {
     let guard = self.ray.read();
     let ray = guard
       .as_ref()
-      .ok_or_else(|| Error::from_reason("Ray is closed"))?;
+      .ok_or_else(|| Error::from_reason("Kite is closed"))?;
     let config = PathConfig {
       source: self.source,
       targets: self.targets.clone(),
@@ -2238,7 +2443,7 @@ impl RayPath {
     let guard = self.ray.read();
     let ray = guard
       .as_ref()
-      .ok_or_else(|| Error::from_reason("Ray is closed"))?;
+      .ok_or_else(|| Error::from_reason("Kite is closed"))?;
     let config = PathConfig {
       source: self.source,
       targets: self.targets.clone(),
@@ -2257,7 +2462,7 @@ impl RayPath {
     let guard = self.ray.read();
     let ray = guard
       .as_ref()
-      .ok_or_else(|| Error::from_reason("Ray is closed"))?;
+      .ok_or_else(|| Error::from_reason("Kite is closed"))?;
     let config = PathConfig {
       source: self.source,
       targets: self.targets.clone(),

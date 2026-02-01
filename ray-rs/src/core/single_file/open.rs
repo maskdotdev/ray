@@ -13,7 +13,7 @@ use crate::constants::*;
 use crate::core::pager::{create_pager, is_valid_page_size, open_pager, pages_to_store};
 use crate::core::snapshot::reader::SnapshotData;
 use crate::core::wal::buffer::WalBuffer;
-use crate::error::{RayError, Result};
+use crate::error::{KiteError, Result};
 use crate::types::*;
 use crate::util::mmap::map_file;
 use crate::vector::store::{create_vector_store, vector_store_delete, vector_store_insert};
@@ -173,7 +173,7 @@ pub fn open_single_file<P: AsRef<Path>>(
 
   // Validate page size
   if !is_valid_page_size(options.page_size) {
-    return Err(RayError::Internal(format!(
+    return Err(KiteError::Internal(format!(
       "Invalid page size: {}. Must be power of 2 between 4KB and 64KB",
       options.page_size
     )));
@@ -183,14 +183,14 @@ pub fn open_single_file<P: AsRef<Path>>(
   let file_exists = path.exists();
 
   if !file_exists && !options.create_if_missing {
-    return Err(RayError::InvalidPath(format!(
+    return Err(KiteError::InvalidPath(format!(
       "Database does not exist at {}",
       path.display()
     )));
   }
 
   if !file_exists && options.read_only {
-    return Err(RayError::ReadOnly);
+    return Err(KiteError::ReadOnly);
   }
 
   // Open or create pager

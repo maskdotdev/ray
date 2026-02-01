@@ -24,7 +24,7 @@ use crate::core::snapshot::reader::SnapshotData;
 use crate::core::wal::reader::{load_wal_segment_by_id, recover_from_segment};
 use crate::core::wal::record::WalRecord;
 use crate::core::wal::writer::WalWriter;
-use crate::error::{RayError, Result};
+use crate::error::{KiteError, Result};
 use crate::graph::checkpoint::CheckpointStatus;
 use crate::mvcc::{GcConfig, MvccManager};
 use crate::types::*;
@@ -385,7 +385,7 @@ impl GraphDB {
       self.wal_offset.store(new_offset, Ordering::SeqCst);
       Ok(())
     } else {
-      Err(RayError::Internal("WAL not initialized".to_string()))
+      Err(KiteError::Internal("WAL not initialized".to_string()))
     }
   }
 
@@ -413,14 +413,14 @@ impl GraphDB {
     use std::sync::Arc;
 
     if self.read_only {
-      return Err(RayError::ReadOnly);
+      return Err(KiteError::ReadOnly);
     }
 
     // Must have manifest for multi-file format
     let manifest = self
       .manifest
       .as_ref()
-      .ok_or_else(|| RayError::Internal("No manifest for multi-file database".to_string()))?;
+      .ok_or_else(|| KiteError::Internal("No manifest for multi-file database".to_string()))?;
 
     // Run compaction
     let delta = self.delta.read();
@@ -509,7 +509,7 @@ pub fn open_graph_db<P: AsRef<Path>>(path: P, options: OpenOptions) -> Result<Gr
   // Ensure directory exists
   if !path.exists() {
     if !options.create_if_missing {
-      return Err(RayError::InvalidPath(format!(
+      return Err(KiteError::InvalidPath(format!(
         "Database does not exist at {}",
         path.display()
       )));
@@ -536,7 +536,7 @@ pub fn open_graph_db<P: AsRef<Path>>(path: P, options: OpenOptions) -> Result<Gr
     Some(m) => m,
     None => {
       if options.read_only {
-        return Err(RayError::ReadOnly);
+        return Err(KiteError::ReadOnly);
       }
       let m = create_empty_manifest();
       write_manifest(path, &m)?;

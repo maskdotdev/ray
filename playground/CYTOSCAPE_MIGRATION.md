@@ -43,7 +43,7 @@ Migration from D3-force + HTML5 Canvas to Cytoscape.js for graph visualization.
    - Remove: `d3`, `@types/d3`
 
 2. **Create `lib/cytoscape-theme.ts`**
-   - Base stylesheet matching Ray Electric Blue theme
+   - Base stylesheet matching Kite Electric Blue theme
    - Node styles by type
    - Edge styles (bezier)
    - Selection/hover glow effects
@@ -163,7 +163,7 @@ Migration from D3-force + HTML5 Canvas to Cytoscape.js for graph visualization.
 
 ---
 
-## Theme Colors (Ray Electric Blue)
+## Theme Colors (Kite Electric Blue)
 
 ```typescript
 const COLORS = {

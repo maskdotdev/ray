@@ -3,7 +3,7 @@
 //! Ported from src/core/wal.ts
 
 use crate::constants::*;
-use crate::error::{RayError, Result};
+use crate::error::{KiteError, Result};
 use crate::types::*;
 use crate::util::binary::*;
 use std::fs::{File, OpenOptions};
@@ -55,7 +55,7 @@ pub fn serialize_wal_header(header: &WalHeaderV1) -> [u8; WAL_HEADER_SIZE] {
 /// Parse WAL header from bytes
 pub fn parse_wal_header(buffer: &[u8]) -> Result<WalHeaderV1> {
   if buffer.len() < WAL_HEADER_SIZE {
-    return Err(RayError::InvalidWal(format!(
+    return Err(KiteError::InvalidWal(format!(
       "WAL header too small: {} bytes",
       buffer.len()
     )));
@@ -63,7 +63,7 @@ pub fn parse_wal_header(buffer: &[u8]) -> Result<WalHeaderV1> {
 
   let magic = read_u32(buffer, 0);
   if magic != MAGIC_WAL {
-    return Err(RayError::InvalidMagic {
+    return Err(KiteError::InvalidMagic {
       expected: MAGIC_WAL,
       got: magic,
     });
@@ -73,7 +73,7 @@ pub fn parse_wal_header(buffer: &[u8]) -> Result<WalHeaderV1> {
   let min_reader_version = read_u32(buffer, 8);
 
   if MIN_READER_WAL < min_reader_version {
-    return Err(RayError::VersionMismatch {
+    return Err(KiteError::VersionMismatch {
       required: min_reader_version,
       current: MIN_READER_WAL,
     });

@@ -2,7 +2,7 @@
 //!
 //! Provides functions for adding, deleting, and querying edges.
 
-use crate::error::{RayError, Result};
+use crate::error::{KiteError, Result};
 use crate::mvcc::visibility::{edge_exists as mvcc_edge_exists, get_visible_version};
 use crate::types::*;
 
@@ -15,7 +15,7 @@ use super::tx::TxHandle;
 /// Add an edge between two nodes
 pub fn add_edge(handle: &mut TxHandle, src: NodeId, etype: ETypeId, dst: NodeId) -> Result<()> {
   if handle.tx.read_only {
-    return Err(RayError::ReadOnly);
+    return Err(KiteError::ReadOnly);
   }
 
   let patch = EdgePatch { etype, other: dst };
@@ -64,7 +64,7 @@ pub fn delete_edge(
   dst: NodeId,
 ) -> Result<bool> {
   if handle.tx.read_only {
-    return Err(RayError::ReadOnly);
+    return Err(KiteError::ReadOnly);
   }
 
   if !edge_exists_internal(handle.db, src, etype, dst) {
@@ -487,7 +487,7 @@ pub fn set_edge_prop(
   value: PropValue,
 ) -> Result<()> {
   if handle.tx.read_only {
-    return Err(RayError::ReadOnly);
+    return Err(KiteError::ReadOnly);
   }
 
   let props = handle
@@ -517,7 +517,7 @@ pub fn del_edge_prop(
   key_id: PropKeyId,
 ) -> Result<()> {
   if handle.tx.read_only {
-    return Err(RayError::ReadOnly);
+    return Err(KiteError::ReadOnly);
   }
 
   let props = handle

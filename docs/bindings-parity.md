@@ -36,9 +36,9 @@ Legend
 | Vector embeddings | Full | Full | Full | `set/get/del/has` node vectors |
 | Vector IVF/IVF-PQ + brute force | Full | Full | Full | Index classes + brute force search |
 | VectorIndex (high-level) | Full | Missing | Full | Matches core VectorIndex surface |
-| Fluent API (Ray) | Full | Partial | Full | CRUD + edge props + batch + traversal + pathfinding |
+| Fluent API (Kite) | Full | Partial | Full | CRUD + edge props + batch + traversal + pathfinding |
 | Fluent traversal helpers | Full | Full | Partial | NAPI missing callback-based `where_edge`/`where_node` |
-| Fluent pathfinding | Full | Full | Full | Ray path builder + K-shortest |
+| Fluent pathfinding | Full | Full | Full | Kite path builder + K-shortest |
 | DB-backed traversal/pathfinding (low-level) | Full | Partial | Full | DB traversal + BFS/Dijkstra/K-shortest |
 
 ## Language-Specific Gaps
@@ -67,7 +67,7 @@ Python
 - [ ] Expose metrics/health
 
 NAPI
-- [x] Add high-level fluent API surface (Ray + schema + builders) (partial)
+- [x] Add high-level fluent API surface (Kite + schema + builders) (partial)
 - [x] Add multi-file DB open/close with auto-detect
 - [x] Expose `check()` integrity verification
 - [x] Add high-level `VectorIndex` API

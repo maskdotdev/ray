@@ -2,7 +2,7 @@
 //!
 //! Mirrors the single-file vector API but uses GraphDB WAL + delta.
 
-use crate::error::{RayError, Result};
+use crate::error::{KiteError, Result};
 use crate::types::{NodeId, PropKeyId};
 use crate::vector::store::{
   create_vector_store, vector_store_get, vector_store_has, vector_store_stats,
@@ -20,7 +20,7 @@ pub fn set_node_vector(
   vector: &[f32],
 ) -> Result<()> {
   if handle.tx.read_only {
-    return Err(RayError::ReadOnly);
+    return Err(KiteError::ReadOnly);
   }
 
   // Check dimensions if store already exists
@@ -28,7 +28,7 @@ pub fn set_node_vector(
     let stores = handle.db.vector_stores.read();
     if let Some(store) = stores.get(&prop_key_id) {
       if store.config.dimensions != vector.len() {
-        return Err(RayError::VectorDimensionMismatch {
+        return Err(KiteError::VectorDimensionMismatch {
           expected: store.config.dimensions,
           got: vector.len(),
         });
@@ -56,7 +56,7 @@ pub fn delete_node_vector(
   prop_key_id: PropKeyId,
 ) -> Result<()> {
   if handle.tx.read_only {
-    return Err(RayError::ReadOnly);
+    return Err(KiteError::ReadOnly);
   }
 
   handle
@@ -123,7 +123,7 @@ pub fn get_or_create_vector_store(
   let mut stores = db.vector_stores.write();
   if let Some(store) = stores.get(&prop_key_id) {
     if store.config.dimensions != dimensions {
-      return Err(RayError::VectorDimensionMismatch {
+      return Err(KiteError::VectorDimensionMismatch {
         expected: store.config.dimensions,
         got: dimensions,
       });

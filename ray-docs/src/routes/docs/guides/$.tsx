@@ -65,9 +65,9 @@ function DocPageContent(props: { slug: string }) {
           and can have typed properties.
         </p>
         <MultiLangCode
-          typescript={`import { ray } from '@kitedb/core';
+          typescript={`import { kite } from '@kitedb/core';
 
-const db = ray('./blog.kitedb', {
+const db = kite('./blog.kitedb', {
   nodes: [
     {
       name: 'article',
@@ -82,9 +82,9 @@ const db = ray('./blog.kitedb', {
   ],
   edges: [],
 });`}
-          rust={`use kitedb::ray;
+          rust={`use kitedb::kite;
 
-let db = ray("./blog.kitedb", RayOptions {
+let db = kite("./blog.kitedb", KiteOptions {
     nodes: vec![
         NodeSpec::new("article")
             .prop("title", PropType::String)
@@ -96,7 +96,7 @@ let db = ray("./blog.kitedb", RayOptions {
     edges: vec![],
     ..Default::default()
 })?;`}
-          python={`from kitedb import ray, define_node, prop
+          python={`from kitedb import kite, define_node, prop
 
 article = define_node("article",
     key=lambda id: f"article:{id}",
@@ -109,7 +109,7 @@ article = define_node("article",
     }
 )
 
-db = ray("./blog.kitedb", nodes=[article], edges=[])`}
+db = kite("./blog.kitedb", nodes=[article], edges=[])`}
           filename={{ ts: 'schema.ts', rs: 'schema.rs', py: 'schema.py' }}
         />
 
@@ -128,7 +128,7 @@ db = ray("./blog.kitedb", nodes=[article], edges=[])`}
           Edges connect nodes and can have their own properties.
         </p>
         <MultiLangCode
-          typescript={`const db = ray('./blog.kitedb', {
+          typescript={`const db = kite('./blog.kitedb', {
   nodes: [
     { name: 'user', props: { name: { type: 'string' } } },
     { name: 'article', props: { title: { type: 'string' } } },
@@ -148,7 +148,7 @@ db = ray("./blog.kitedb", nodes=[article], edges=[])`}
     },
   ],
 });`}
-          rust={`let db = ray("./blog.kitedb", RayOptions {
+          rust={`let db = kite("./blog.kitedb", KiteOptions {
     nodes: vec![
         NodeSpec::new("user").prop("name", PropType::String),
         NodeSpec::new("article").prop("title", PropType::String),
@@ -161,7 +161,7 @@ db = ray("./blog.kitedb", nodes=[article], edges=[])`}
     ],
     ..Default::default()
 })?;`}
-          python={`from kitedb import ray, define_node, define_edge, prop
+          python={`from kitedb import kite, define_node, define_edge, prop
 
 user = define_node("user",
     key=lambda id: f"user:{id}",
@@ -176,7 +176,7 @@ article = define_node("article",
 authored = define_edge("authored", {"role": prop.string("role")})
 likes = define_edge("likes", {"likedAt": prop.int("likedAt")})
 
-db = ray("./blog.kitedb", nodes=[user, article], edges=[authored, likes])`}
+db = kite("./blog.kitedb", nodes=[user, article], edges=[authored, likes])`}
         />
 
         <h2 id="next-steps">Next Steps</h2>
@@ -778,19 +778,19 @@ if (db.hasTransaction()) {
   console.log('Transaction is active');
 }
 
-// The Ray high-level API auto-manages transactions
+// The Kite high-level API auto-manages transactions
 // Each operation is atomic by default`}
           rust={`// Check if there's an active transaction
 if db.has_transaction() {
     println!("Transaction is active");
 }
 
-// The Ray high-level API auto-manages transactions`}
+// The Kite high-level API auto-manages transactions`}
           python={`# Check if there's an active transaction
 if db.has_transaction():
     print("Transaction is active")
 
-# The Ray high-level API auto-manages transactions`}
+# The Kite high-level API auto-manages transactions`}
         />
 
         <h2 id="next-steps">Next Steps</h2>
@@ -843,7 +843,7 @@ const results = await Promise.all([
           rust={`use std::sync::{Arc, RwLock};
 use std::thread;
 
-let db = Arc::new(RwLock::new(Ray::open("./data.kitedb")?));
+let db = Arc::new(RwLock::new(Kite::open("./data.kitedb")?));
 
 let handles: Vec<_> = (0..4).map(|i| {
     let db = Arc::clone(&db);
@@ -860,7 +860,7 @@ let results: Vec<_> = handles.into_iter()
     .collect();`}
           python={`import threading
 
-db = ray("./data.kitedb", nodes=[user])
+db = kite("./data.kitedb", nodes=[user])
 results = {}
 
 def read_user(user_id: str):

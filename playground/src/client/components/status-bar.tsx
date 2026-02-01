@@ -2,7 +2,7 @@
  * Status Bar Component
  *
  * Shows node/edge counts, zoom level, DB status, and warnings.
- * Ray Electric Blue Theme.
+ * Kite Electric Blue Theme.
  */
 
 import { COLORS } from "../lib/types.ts";

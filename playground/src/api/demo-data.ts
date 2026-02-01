@@ -5,7 +5,7 @@
  * Simulates a small web server project with files, functions, classes, and their relationships.
  */
 
-import type { Ray } from "../../../src/index.ts";
+import type { Kite } from "../../../src/index.ts";
 import {
   FileNode,
   FunctionNode,
@@ -22,7 +22,7 @@ import {
  * ~30 nodes: files, functions, classes
  * ~50 edges: imports, calls, contains
  */
-export async function createDemoGraph(db: Ray): Promise<void> {
+export async function createDemoGraph(db: Kite): Promise<void> {
   // ==========================================================================
   // Files
   // ==========================================================================

@@ -365,6 +365,158 @@ class InsertBuilder(Generic[N]):
 
 
 # ============================================================================
+# Upsert Builder
+# ============================================================================
+
+class UpsertExecutor(Generic[N]):
+    """
+    Executor for upsert operations.
+    
+    Can either return the upserted node(s) or execute without returning.
+    """
+    
+    def __init__(
+        self,
+        db: Database,
+        node_def: N,
+        data: Union[Dict[str, Any], List[Dict[str, Any]]],
+        resolve_prop_key_id: Callable[[NodeDef, str], int],
+    ):
+        self._db = db
+        self._node_def = node_def
+        self._data = data if isinstance(data, list) else [data]
+        self._is_single = not isinstance(data, list)
+        self._resolve_prop_key_id = resolve_prop_key_id
+    
+    def returning(self) -> Union[NodeRef[N], List[NodeRef[N]]]:
+        """Execute upsert and return the node(s)."""
+        from kitedb._kitedb import PropValue
+        
+        results: List[NodeRef[N]] = []
+        
+        in_tx = self._db.has_transaction()
+        if not in_tx:
+            self._db.begin()
+        try:
+            for item in self._data:
+                item_copy = dict(item)
+                key_arg = item_copy.pop("key", None)
+                if key_arg is None:
+                    raise ValueError("Upsert requires a 'key' field")
+                
+                full_key = self._node_def.key_fn(key_arg)
+                
+                prop_updates: List[tuple[int, Optional[PropValue]]] = []
+                for prop_name, value in item_copy.items():
+                    prop_def = self._node_def.props.get(prop_name)
+                    if prop_def is None:
+                        continue
+                    
+                    prop_key_id = self._resolve_prop_key_id(self._node_def, prop_name)
+                    if value is None:
+                        prop_updates.append((prop_key_id, None))
+                    else:
+                        prop_value = to_prop_value(prop_def, value, PropValue)
+                        prop_updates.append((prop_key_id, prop_value))
+                
+                node_id = self._db.upsert_node(full_key, prop_updates)
+                
+                # Load full props for returning
+                props: Dict[str, Any] = {}
+                all_props = self._db.get_node_props(node_id)
+                if all_props is not None:
+                    key_id_to_name = {v: k for k, v in self._node_def._prop_key_ids.items()}
+                    for node_prop in all_props:
+                        prop_name = key_id_to_name.get(node_prop.key_id)
+                        if prop_name is not None:
+                            props[prop_name] = from_prop_value(node_prop.value)
+                
+                results.append(NodeRef(
+                    id=node_id,
+                    key=full_key,
+                    node_def=self._node_def,
+                    props=props,
+                ))
+            
+            if not in_tx:
+                self._db.commit()
+        except Exception:
+            if not in_tx:
+                self._db.rollback()
+            raise
+        
+        return results[0] if self._is_single else results
+    
+    def execute(self) -> None:
+        """Execute upsert without returning."""
+        self.returning()
+
+
+class UpsertBuilder(Generic[N]):
+    """
+    Builder for upsert operations.
+    
+    Example:
+        >>> alice = db.upsert(user).values(
+        ...     key="alice",
+        ...     name="Alice",
+        ...     email="alice@example.com"
+        ... ).returning()
+    """
+    
+    def __init__(
+        self,
+        db: Database,
+        node_def: N,
+        resolve_prop_key_id: Callable[[NodeDef, str], int],
+    ):
+        self._db = db
+        self._node_def = node_def
+        self._resolve_prop_key_id = resolve_prop_key_id
+    
+    def values(
+        self,
+        data: Optional[Union[Dict[str, Any], List[Dict[str, Any]]]] = None,
+        **kwargs: Any,
+    ) -> UpsertExecutor[N]:
+        """
+        Set the values to upsert.
+        
+        Can be called with a dict, a list of dicts, or with keyword arguments.
+        """
+        if data is None:
+            data = kwargs
+        elif isinstance(data, list):
+            if kwargs:
+                raise ValueError("Cannot combine list data with keyword arguments")
+            return UpsertExecutor(
+                db=self._db,
+                node_def=self._node_def,
+                data=data,
+                resolve_prop_key_id=self._resolve_prop_key_id,
+            )
+        elif kwargs:
+            data = {**data, **kwargs}
+
+        return UpsertExecutor(
+            db=self._db,
+            node_def=self._node_def,
+            data=data,
+            resolve_prop_key_id=self._resolve_prop_key_id,
+        )
+    
+    def values_many(self, data: List[Dict[str, Any]]) -> UpsertExecutor[N]:
+        """
+        Upsert multiple nodes at once.
+        """
+        return UpsertExecutor(
+            db=self._db,
+            node_def=self._node_def,
+            data=data,
+            resolve_prop_key_id=self._resolve_prop_key_id,
+        )
+
+# ============================================================================
 # Update Builder
 # ============================================================================
 

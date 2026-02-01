@@ -2,7 +2,7 @@
 //!
 //! Provides functions for creating, deleting, and querying nodes.
 
-use crate::error::{RayError, Result};
+use crate::error::{KiteError, Result};
 use crate::mvcc::visibility::{get_visible_version, node_exists as mvcc_node_exists};
 use crate::types::*;
 
@@ -51,7 +51,7 @@ impl NodeOpts {
 /// Create a new node
 pub fn create_node(handle: &mut TxHandle, opts: NodeOpts) -> Result<NodeId> {
   if handle.tx.read_only {
-    return Err(RayError::ReadOnly);
+    return Err(KiteError::ReadOnly);
   }
 
   let node_id = handle.db.alloc_node_id();
@@ -93,10 +93,43 @@ pub fn create_node(handle: &mut TxHandle, opts: NodeOpts) -> Result<NodeId> {
   Ok(node_id)
 }
 
+/// Upsert a node by key (create if missing, otherwise update props)
+///
+/// Returns the node ID and a flag indicating whether it was created.
+pub fn upsert_node_with_props<I>(
+  handle: &mut TxHandle,
+  key: &str,
+  props: I,
+) -> Result<(NodeId, bool)>
+where
+  I: IntoIterator<Item = (PropKeyId, Option<PropValue>)>,
+{
+  if handle.tx.read_only {
+    return Err(KiteError::ReadOnly);
+  }
+
+  let (node_id, created) = match get_node_by_key(handle, key) {
+    Some(existing) => (existing, false),
+    None => {
+      let node_id = create_node(handle, NodeOpts::new().with_key(key))?;
+      (node_id, true)
+    }
+  };
+
+  for (key_id, value_opt) in props {
+    match value_opt {
+      Some(value) => set_node_prop(handle, node_id, key_id, value)?,
+      None => del_node_prop(handle, node_id, key_id)?,
+    }
+  }
+
+  Ok((node_id, created))
+}
+
 /// Delete a node
 pub fn delete_node(handle: &mut TxHandle, node_id: NodeId) -> Result<bool> {
   if handle.tx.read_only {
-    return Err(RayError::ReadOnly);
+    return Err(KiteError::ReadOnly);
   }
 
   // If created in this transaction, remove it entirely
@@ -350,7 +383,7 @@ pub fn get_node_props_db(
 /// Add a label to a node
 pub fn add_node_label(handle: &mut TxHandle, node_id: NodeId, label_id: LabelId) -> Result<()> {
   if handle.tx.read_only {
-    return Err(RayError::ReadOnly);
+    return Err(KiteError::ReadOnly);
   }
 
   if let Some(node_delta) = handle.tx.pending_created_nodes.get_mut(&node_id) {
@@ -384,7 +417,7 @@ pub fn add_node_label(handle: &mut TxHandle, node_id: NodeId, label_id: LabelId)
 /// Remove a label from a node
 pub fn remove_node_label(handle: &mut TxHandle, node_id: NodeId, label_id: LabelId) -> Result<()> {
   if handle.tx.read_only {
-    return Err(RayError::ReadOnly);
+    return Err(KiteError::ReadOnly);
   }
 
   if let Some(node_delta) = handle.tx.pending_created_nodes.get_mut(&node_id) {
@@ -505,7 +538,7 @@ pub fn set_node_prop(
   value: PropValue,
 ) -> Result<()> {
   if handle.tx.read_only {
-    return Err(RayError::ReadOnly);
+    return Err(KiteError::ReadOnly);
   }
 
   let props = handle.tx.pending_node_props.entry(node_id).or_default();
@@ -522,7 +555,7 @@ pub fn set_node_prop(
 /// Delete a node property
 pub fn del_node_prop(handle: &mut TxHandle, node_id: NodeId, key_id: PropKeyId) -> Result<()> {
   if handle.tx.read_only {
-    return Err(RayError::ReadOnly);
+    return Err(KiteError::ReadOnly);
   }
 
   let props = handle.tx.pending_node_props.entry(node_id).or_default();
@@ -702,6 +735,42 @@ mod tests {
     assert_eq!(node3, node2 + 1);
 
     commit(&mut tx).unwrap();
+    close_graph_db(db).unwrap();
+  }
+
+  #[test]
+  fn test_upsert_node_with_props() {
+    let temp_dir = tempdir().unwrap();
+    let db = open_graph_db(temp_dir.path(), OpenOptions::new()).unwrap();
+
+    let name_key = db.get_or_create_propkey("name");
+
+    let mut tx = begin_tx(&db).unwrap();
+    let (node_id, created) = upsert_node_with_props(
+      &mut tx,
+      "user:alice",
+      vec![(name_key, Some(PropValue::String("Alice".to_string())))],
+    )
+    .unwrap();
+    commit(&mut tx).unwrap();
+
+    assert!(created);
+
+    let mut tx = begin_tx(&db).unwrap();
+    let (node_id_2, created_2) = upsert_node_with_props(
+      &mut tx,
+      "user:alice",
+      vec![(name_key, Some(PropValue::String("Alice Updated".to_string())))],
+    )
+    .unwrap();
+    commit(&mut tx).unwrap();
+
+    assert_eq!(node_id, node_id_2);
+    assert!(!created_2);
+
+    let stored = get_node_prop_db(&db, node_id_2, name_key);
+    assert_eq!(stored, Some(PropValue::String("Alice Updated".to_string())));
+
     close_graph_db(db).unwrap();
   }
 

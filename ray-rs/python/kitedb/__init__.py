@@ -9,7 +9,7 @@ A Python interface to the KiteDB graph database, providing:
 - Graph traversal and pathfinding (BFS, Dijkstra, A*)
 
 Fluent API (Recommended):
-    >>> from kitedb import ray, node, edge, prop, optional
+    >>> from kitedb import kite, node, edge, prop, optional
     >>> 
     >>> # Define schema
     >>> user = node("user",
@@ -24,7 +24,7 @@ Fluent API (Recommended):
     >>> knows = edge("knows", {"since": prop.int("since")})
     >>> 
     >>> # Open database and use fluent API
-    >>> with ray("./my-graph", nodes=[user], edges=[knows]) as db:
+    >>> with kite("./my-graph", nodes=[user], edges=[knows]) as db:
     ...     alice = db.insert(user).values(
     ...         key="alice", name="Alice", email="alice@example.com", age=30
     ...     ).returning()
@@ -128,6 +128,7 @@ from kitedb.schema import (
 from kitedb.builders import (
     NodeRef,
     InsertBuilder,
+    UpsertBuilder,
     UpdateBuilder,
     DeleteBuilder,
 )
@@ -145,8 +146,8 @@ from kitedb.traversal import (
 
 from kitedb.fluent import (
     EdgeData,
-    Ray,
-    ray,
+    Kite,
+    kite,
 )
 
 from kitedb.vector_index import (
@@ -165,8 +166,8 @@ __all__ = [
     # ==========================================================================
     
     # Entry point
-    "ray",
-    "Ray",
+    "kite",
+    "Kite",
     "EdgeData",
     "VectorIndex",
     "VectorIndexOptions",
@@ -192,6 +193,7 @@ __all__ = [
     
     # Builders
     "InsertBuilder",
+    "UpsertBuilder",
     "UpdateBuilder",
     "DeleteBuilder",
     

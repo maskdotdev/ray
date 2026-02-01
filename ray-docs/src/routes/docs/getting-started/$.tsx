@@ -65,10 +65,10 @@ function DocPageContent(props: { slug: string }) {
           social network with users and follow relationships.
         </p>
         <MultiLangCode
-          typescript={`import { ray } from '@kitedb/core';
+          typescript={`import { kite } from '@kitedb/core';
 
 // Define schema inline when opening the database
-const db = ray('./social.kitedb', {
+const db = kite('./social.kitedb', {
   nodes: [
     {
       name: 'user',
@@ -87,10 +87,10 @@ const db = ray('./social.kitedb', {
     },
   ],
 });`}
-          rust={`use kitedb::ray;
+          rust={`use kitedb::kite;
 
 // Define schema when opening the database
-let db = ray("./social.kitedb", RayOptions {
+let db = kite("./social.kitedb", KiteOptions {
     nodes: vec![
         NodeSpec::new("user")
             .prop("name", PropType::String)
@@ -102,7 +102,7 @@ let db = ray("./social.kitedb", RayOptions {
     ],
     ..Default::default()
 })?;`}
-          python={`from kitedb import ray, define_node, define_edge, prop
+          python={`from kitedb import kite, define_node, define_edge, prop
 
 # Define schema
 user = define_node("user",
@@ -118,7 +118,7 @@ follows = define_edge("follows", {
 })
 
 # Open database with schema
-db = ray("./social.kitedb", nodes=[user], edges=[follows])`}
+db = kite("./social.kitedb", nodes=[user], edges=[follows])`}
           filename={{ ts: 'social.ts', rs: 'main.rs', py: 'social.py' }}
         />
 
@@ -218,7 +218,7 @@ db.close();`}
 db.close()
 
 # Better: use context manager
-with ray("./social.kitedb", nodes=[user], edges=[follows]) as db:
+with kite("./social.kitedb", nodes=[user], edges=[follows]) as db:
     # ... operations ...
     pass  # Auto-closes on exit`}
         />

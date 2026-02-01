@@ -59,12 +59,12 @@ function DocPageContent(props: { slug: string }) {
           working with your graph database.
         </p>
 
-        <h2 id="ray-function">ray()</h2>
+        <h2 id="kite-function">kite()</h2>
         <p>Initialize the database connection.</p>
         <CodeBlock
-          code={`import { ray } from '@kitedb/core';
+          code={`import { kite } from '@kitedb/core';
 
-const db = await ray(path, options);`}
+const db = await kite(path, options);`}
           language="typescript"
         />
 
@@ -113,9 +113,9 @@ const db = await ray(path, options);`}
 
         <h2 id="storage-access">Storage Access</h2>
         <CodeBlock
-          code={`import { ray } from '@kitedb/core';
+          code={`import { kite } from '@kitedb/core';
 
-const db = await ray('./data.kitedb', { nodes, edges });
+const db = await kite('./data.kitedb', { nodes, edges });
 
 // Access the underlying storage
 const storage = db.storage;

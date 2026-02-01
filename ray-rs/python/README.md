@@ -39,7 +39,7 @@ pip install target/wheels/kitedb-*.whl
 The fluent API provides a high-level, type-safe interface:
 
 ```python
-from kitedb import ray, node, edge, prop, optional
+from kitedb import kite, node, edge, prop, optional
 
 # Define your schema
 User = node("user",
@@ -56,7 +56,7 @@ Knows = edge("knows", {
 })
 
 # Open database
-with ray("./social.kitedb", nodes=[User], edges=[Knows]) as db:
+with kite("./social.kitedb", nodes=[User], edges=[Knows]) as db:
     # Insert nodes
     alice = db.insert(User).values(key="alice", name="Alice", email="alice@example.com").returning()
     bob = db.insert(User).values(key="bob", name="Bob", email="bob@example.com").returning()

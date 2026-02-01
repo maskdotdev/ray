@@ -1,6 +1,6 @@
-# Ray High-Level API
+# Kite High-Level API
 
-The `api` module provides a **Drizzle-style, type-safe API** for Ray, a high-performance embedded graph database. It wraps the lower-level database primitives with a fluent, ergonomic interface featuring full TypeScript type inference.
+The `api` module provides a **Drizzle-style, type-safe API** for Kite, a high-performance embedded graph database. It wraps the lower-level database primitives with a fluent, ergonomic interface featuring full TypeScript type inference.
 
 ## Overview
 
@@ -54,7 +54,8 @@ const worksAt = edge("worksAt", {
 The API uses advanced TypeScript inference to automatically derive types:
 
 - `InferNodeInsert<N>` - Type for inserting a node
-- `InferNode<N>` - Type for returned nodes (includes `$id` and `$key`)
+- `InferNodeUpsert<N>` - Type for upserting a node (partial props)
+- `InferNode<N>` - Type for returned nodes (includes `id` and `key`)
 - `InferEdgeProps<E>` - Type for edge properties
 
 ```typescript
@@ -62,21 +63,21 @@ type InsertUser = InferNodeInsert<typeof user>;
 // Result: { key: string; name: string; email: string; age?: bigint; }
 
 type ReturnedUser = InferNode<typeof user>;
-// Result: { $id: bigint; $key: string; name: string; email: string; age?: bigint; }
+// Result: { id: bigint; key: string; name: string; email: string; age?: bigint; }
 ```
 
 ## Module Reference
 
 ### `ray.ts` - Main Database API
 
-#### `ray(path, options): Promise<Ray>`
+#### `kite(path, options): Promise<Kite>`
 
 Opens or creates a database with the given schema.
 
 **Parameters:**
 
 - `path: string` - Directory path for database files
-- `options: RayOptions` - Schema and database options
+- `options: KiteOptions` - Schema and database options
   - `nodes: NodeDef[]` - Node type definitions
   - `edges: EdgeDef[]` - Edge type definitions
   - `readOnly?: boolean` - Open in read-only mode
@@ -86,19 +87,20 @@ Opens or creates a database with the given schema.
 **Example:**
 
 ```typescript
-const db = await ray("./my-graph", {
+const db = await kite("./my-graph", {
   nodes: [user, company],
   edges: [knows, worksAt],
 });
 ```
 
-#### `Ray` Class
+#### `Kite` Class
 
 The main database context with methods for CRUD operations, transactions, and maintenance.
 
 **Node Operations:**
 
 - `insert<N>(node: N): InsertBuilder<N>` - Insert one or more nodes
+- `upsert<N>(node: N): UpsertBuilder<N>` - Insert or update nodes by key
 - `update<N>(node: N): UpdateBuilder<N>` - Update nodes by definition with WHERE
 - `update<N>(nodeRef: NodeRef<N>): UpdateByRefBuilder<N>` - Update a specific node
 - `delete<N>(node: N): DeleteBuilder<N>` - Delete nodes by definition
@@ -110,7 +112,8 @@ The main database context with methods for CRUD operations, transactions, and ma
 
 **Edge Operations:**
 
-- `link<E>(src: NodeRef, edge: E, dst: NodeRef, props?): Promise<void>` - Create edge
+- `link<E>(src: NodeRef, edge: E, dst: NodeRef, props?): Promise<void>` - Create edge (direct)
+- `link(src).to(dst).via(edge).props(...).execute()` - Fluent edge builder
 - `unlink<E>(src: NodeRef, edge: E, dst: NodeRef): Promise<void>` - Delete edge
 - `hasEdge<E>(src: NodeRef, edge: E, dst: NodeRef): Promise<boolean>` - Check edge exists
 - `updateEdge<E>(src, edge, dst): UpdateEdgeBuilder<E>` - Update edge properties
@@ -219,13 +222,23 @@ await db
   .execute();
 ```
 
+#### Upsert
+
+```typescript
+// Insert or update by key (partial updates allowed)
+const alice = await db
+  .upsert(user)
+  .values({ key: "alice", email: "alice@new.com" })
+  .returning();
+```
+
 #### Update by Definition
 
 ```typescript
 await db
   .update(user)
   .set({ name: "Alice Updated", email: "newemail@example.com" })
-  .where({ $key: "user:alice" })
+  .where({ key: "user:alice" })
   .execute();
 ```
 
@@ -239,7 +252,7 @@ await db.update(alice).set({ name: "Alice V2" }).execute();
 #### Delete by Definition
 
 ```typescript
-const deleted = await db.delete(user).where({ $key: "user:alice" }).execute();
+const deleted = await db.delete(user).where({ key: "user:alice" }).execute();
 ```
 
 #### Delete by Reference
@@ -251,11 +264,16 @@ const success = await db.delete(alice);
 
 #### Link (Create Edge)
 
+Direct `db.link(src, edge, dst, props)` is the fastest path; the fluent builder is more ergonomic.
+
 ```typescript
 const alice = await db.get(user, "alice");
 const bob = await db.get(user, "bob");
 
 await db.link(alice, knows, bob, { since: 2020 });
+
+// Fluent edge builder (DX-friendly)
+await db.link(alice).to(bob).via(knows).props({ since: 2020 }).execute();
 ```
 
 #### Unlink (Delete Edge)
@@ -342,9 +360,9 @@ Get edges instead of nodes:
 ```typescript
 const edges = await db.from(alice).out(knows).edges().toArray();
 
-// Each edge has: $src, $dst, $etype, and properties
+// Each edge has: src, dst, etype, and properties
 for (const edge of edges) {
-  console.log(`${edge.$src} --${edge.$etype}--> ${edge.$dst}`);
+  console.log(`${edge.src} --${edge.etype}--> ${edge.dst}`);
 }
 ```
 
@@ -355,7 +373,7 @@ List and count all nodes or edges with optional type filtering:
 ```typescript
 // List all users (async generator - memory efficient)
 for await (const user of db.all(user)) {
-  console.log(user.name, user.$key);
+  console.log(user.name, user.key);
 }
 
 // Count all nodes in database (fast - O(1) when no filter)
@@ -366,12 +384,12 @@ const userCount = await db.count(user);
 
 // List all edges
 for await (const edge of db.allEdges()) {
-  console.log(`${edge.src.$id} -> ${edge.dst.$id}`);
+  console.log(`${edge.src.id} -> ${edge.dst.id}`);
 }
 
 // List only "knows" edges
 for await (const edge of db.allEdges(knows)) {
-  console.log(`${edge.src.$key} knows ${edge.dst.$key}`, edge.props);
+  console.log(`${edge.src.key} knows ${edge.dst.key}`, edge.props);
 }
 
 // Count all edges (fast - O(1) when no filter)

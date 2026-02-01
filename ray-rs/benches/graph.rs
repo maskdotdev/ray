@@ -7,17 +7,17 @@ use std::collections::HashMap;
 use tempfile::tempdir;
 
 extern crate kitedb;
-use kitedb::api::ray::{BatchOp, EdgeDef, NodeDef, PropDef, Ray, RayOptions};
+use kitedb::api::kite::{BatchOp, EdgeDef, NodeDef, PropDef, Kite, KiteOptions};
 use kitedb::types::PropValue;
 
-fn create_test_schema() -> RayOptions {
+fn create_test_schema() -> KiteOptions {
   let user = NodeDef::new("User", "user:")
     .prop(PropDef::string("name"))
     .prop(PropDef::int("age"));
 
   let follows = EdgeDef::new("FOLLOWS");
 
-  RayOptions::new().node(user).edge(follows)
+  KiteOptions::new().node(user).edge(follows)
 }
 
 // =============================================================================
@@ -38,7 +38,7 @@ fn bench_create_node(c: &mut Criterion) {
         bencher.iter_with_setup(
           || {
             let temp_dir = tempdir().unwrap();
-            let ray = Ray::open(temp_dir.path(), create_test_schema()).unwrap();
+            let ray = Kite::open(temp_dir.path(), create_test_schema()).unwrap();
             (temp_dir, ray)
           },
           |(_temp_dir, mut ray)| {
@@ -62,7 +62,7 @@ fn bench_get_node_by_key(c: &mut Criterion) {
 
   // Setup: Create database with nodes
   let temp_dir = tempdir().unwrap();
-  let mut ray = Ray::open(temp_dir.path(), create_test_schema()).unwrap();
+  let mut ray = Kite::open(temp_dir.path(), create_test_schema()).unwrap();
 
   // Create 1000 nodes (smaller for faster setup)
   for i in 0..1000 {
@@ -94,7 +94,7 @@ fn bench_node_exists(c: &mut Criterion) {
   let mut group = c.benchmark_group("node_exists");
 
   let temp_dir = tempdir().unwrap();
-  let mut ray = Ray::open(temp_dir.path(), create_test_schema()).unwrap();
+  let mut ray = Kite::open(temp_dir.path(), create_test_schema()).unwrap();
 
   // Create nodes and store IDs
   let mut node_ids = Vec::new();
@@ -142,7 +142,7 @@ fn bench_link(c: &mut Criterion) {
         bencher.iter_with_setup(
           || {
             let temp_dir = tempdir().unwrap();
-            let mut ray = Ray::open(temp_dir.path(), create_test_schema()).unwrap();
+            let mut ray = Kite::open(temp_dir.path(), create_test_schema()).unwrap();
 
             // Create nodes first
             let node_count = ((edge_count as f64).sqrt() as usize).max(10);
@@ -178,7 +178,7 @@ fn bench_has_edge(c: &mut Criterion) {
   let mut group = c.benchmark_group("edge_has_edge");
 
   let temp_dir = tempdir().unwrap();
-  let mut ray = Ray::open(temp_dir.path(), create_test_schema()).unwrap();
+  let mut ray = Kite::open(temp_dir.path(), create_test_schema()).unwrap();
 
   // Create nodes and edges
   let mut node_ids = Vec::new();
@@ -228,7 +228,7 @@ fn bench_neighbors_out(c: &mut Criterion) {
 
   // Create a graph with varying out-degrees (smaller for faster setup)
   let temp_dir = tempdir().unwrap();
-  let mut ray = Ray::open(temp_dir.path(), create_test_schema()).unwrap();
+  let mut ray = Kite::open(temp_dir.path(), create_test_schema()).unwrap();
 
   let mut node_ids = Vec::new();
   for i in 0..100 {
@@ -262,7 +262,7 @@ fn bench_multi_hop_traversal(c: &mut Criterion) {
   let mut group = c.benchmark_group("traversal_multi_hop");
 
   let temp_dir = tempdir().unwrap();
-  let mut ray = Ray::open(temp_dir.path(), create_test_schema()).unwrap();
+  let mut ray = Kite::open(temp_dir.path(), create_test_schema()).unwrap();
 
   // Create a chain of 100 nodes (smaller for faster setup)
   let mut node_ids = Vec::new();
@@ -328,7 +328,7 @@ fn bench_get_prop(c: &mut Criterion) {
   let mut group = c.benchmark_group("property_get");
 
   let temp_dir = tempdir().unwrap();
-  let mut ray = Ray::open(temp_dir.path(), create_test_schema()).unwrap();
+  let mut ray = Kite::open(temp_dir.path(), create_test_schema()).unwrap();
 
   // Create nodes with properties (smaller for faster setup)
   let mut node_ids = Vec::new();
@@ -369,7 +369,7 @@ fn bench_set_prop(c: &mut Criterion) {
     bencher.iter_with_setup(
       || {
         let temp_dir = tempdir().unwrap();
-        let mut ray = Ray::open(temp_dir.path(), create_test_schema()).unwrap();
+        let mut ray = Kite::open(temp_dir.path(), create_test_schema()).unwrap();
         let node = ray.create_node("User", "testuser", HashMap::new()).unwrap();
         (temp_dir, ray, node.id)
       },
@@ -392,7 +392,7 @@ fn bench_shortest_path(c: &mut Criterion) {
   let mut group = c.benchmark_group("pathfinding_shortest");
 
   let temp_dir = tempdir().unwrap();
-  let mut ray = Ray::open(temp_dir.path(), create_test_schema()).unwrap();
+  let mut ray = Kite::open(temp_dir.path(), create_test_schema()).unwrap();
 
   // Create a grid-like graph (10x10 = 100 nodes)
   let grid_size = 10;
@@ -450,7 +450,7 @@ fn bench_count(c: &mut Criterion) {
   let mut group = c.benchmark_group("count");
 
   let temp_dir = tempdir().unwrap();
-  let mut ray = Ray::open(temp_dir.path(), create_test_schema()).unwrap();
+  let mut ray = Kite::open(temp_dir.path(), create_test_schema()).unwrap();
 
   // Create 1000 nodes and 5000 edges (smaller for faster setup)
   let mut node_ids = Vec::new();
@@ -491,7 +491,7 @@ fn bench_batch_create_node(c: &mut Criterion) {
       count,
       |bencher, &count| {
         let temp_dir = tempdir().unwrap();
-        let mut ray = Ray::open(temp_dir.path(), create_test_schema()).unwrap();
+        let mut ray = Kite::open(temp_dir.path(), create_test_schema()).unwrap();
         let mut batch_num = 0;
 
         bencher.iter(|| {
