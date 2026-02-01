@@ -1296,27 +1296,20 @@ impl Database {
   ) -> Result<bool> {
     match self.inner.as_ref() {
       Some(DatabaseInner::SingleFile(db)) => {
-        let created = if db.edge_exists(src as NodeId, etype as ETypeId, dst as NodeId) {
-          false
-        } else {
-          db.add_edge(src as NodeId, etype as ETypeId, dst as NodeId)
-            .map_err(|e| Error::from_reason(format!("Failed to add edge: {e}")))?;
-          true
-        };
+        let updates: Vec<(PropKeyId, Option<PropValue>)> = props
+          .into_iter()
+          .map(|prop| {
+            let value_opt = match prop.value.prop_type {
+              PropType::Null => None,
+              _ => Some(prop.value.into()),
+            };
+            (prop.key_id as PropKeyId, value_opt)
+          })
+          .collect();
 
-        for prop in props {
-          let key_id = prop.key_id as PropKeyId;
-          if matches!(prop.value.prop_type, PropType::Null) {
-            db.delete_edge_prop(src as NodeId, etype as ETypeId, dst as NodeId, key_id)
-              .map_err(|e| Error::from_reason(format!("Failed to delete property: {e}")))?;
-          } else {
-            db
-              .set_edge_prop(src as NodeId, etype as ETypeId, dst as NodeId, key_id, prop.value.into())
-              .map_err(|e| Error::from_reason(format!("Failed to set property: {e}")))?;
-          }
-        }
-
-        Ok(created)
+        db
+          .upsert_edge_with_props(src as NodeId, etype as ETypeId, dst as NodeId, updates)
+          .map_err(|e| Error::from_reason(format!("Failed to upsert edge: {e}")))
       }
       Some(DatabaseInner::Graph(_)) => self.with_graph_tx(|handle| {
         let updates: Vec<(PropKeyId, Option<PropValue>)> = props
