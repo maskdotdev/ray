@@ -21,6 +21,7 @@
 //! - `test_mvcc_read_write_conflict` - Read-write conflict detection
 //! - `test_mvcc_many_concurrent_readers` - Many readers, no conflicts
 //! - `test_mvcc_serialized_writes` - Sequential writes succeed
+//! - `test_mvcc_concurrent_upsert_same_edge_unique` - Edge upsert conflict detection
 //!
 //! ## Stress Tests
 //! - `test_high_concurrency_reads` - 16 threads, high throughput
@@ -58,8 +59,9 @@ mod tests {
   use crate::error::KiteError;
   use crate::graph::db::{open_graph_db, OpenOptions};
   use crate::graph::iterators::list_nodes as graph_list_nodes;
+  use crate::graph::iterators::{list_edges as graph_list_edges, ListEdgesOptions};
   use crate::graph::key_index::get_node_key as graph_get_node_key;
-  use crate::graph::nodes::upsert_node_with_props;
+  use crate::graph::nodes::{create_node, upsert_node_with_props, NodeOpts};
   use crate::graph::tx::{begin_tx, commit, rollback};
   use crate::mvcc::{ConflictDetector, TxManager};
   use crate::types::{PropKeyId, PropValue};
@@ -613,6 +615,90 @@ mod tests {
     }
 
     assert_eq!(count, 1, "Only one node should exist with the key");
+    assert_eq!(
+      successes.load(Ordering::Relaxed) + conflicts.load(Ordering::Relaxed),
+      num_threads as u64,
+      "All upserts should either commit or conflict"
+    );
+  }
+
+  #[test]
+  fn test_mvcc_concurrent_upsert_same_edge_unique() {
+    let temp_dir = tempdir().unwrap();
+    let db = open_graph_db(temp_dir.path(), OpenOptions::new().mvcc(true)).unwrap();
+    let db = Arc::new(db);
+
+    let etype = db.get_or_create_etype("FOLLOWS");
+
+    let (src, dst) = {
+      let mut tx = begin_tx(&db).unwrap();
+      let src = create_node(&mut tx, NodeOpts::new()).unwrap();
+      let dst = create_node(&mut tx, NodeOpts::new()).unwrap();
+      commit(&mut tx).unwrap();
+      (src, dst)
+    };
+
+    let num_threads = 8;
+    let begin_barrier = Arc::new(Barrier::new(num_threads));
+    let commit_barrier = Arc::new(Barrier::new(num_threads));
+    let successes = Arc::new(AtomicU64::new(0));
+    let conflicts = Arc::new(AtomicU64::new(0));
+
+    let handles: Vec<_> = (0..num_threads)
+      .map(|_| {
+        let db = Arc::clone(&db);
+        let begin_barrier = Arc::clone(&begin_barrier);
+        let commit_barrier = Arc::clone(&commit_barrier);
+        let successes = Arc::clone(&successes);
+        let conflicts = Arc::clone(&conflicts);
+
+        thread::spawn(move || {
+          begin_barrier.wait();
+          let mut tx = begin_tx(&db).unwrap();
+          commit_barrier.wait();
+          let updates: Vec<(PropKeyId, Option<PropValue>)> = Vec::new();
+
+          match crate::graph::edges::upsert_edge_with_props(&mut tx, src, etype, dst, updates) {
+            Ok(_) => match commit(&mut tx) {
+              Ok(_) => {
+                successes.fetch_add(1, Ordering::Relaxed);
+              }
+              Err(err) => {
+                let _ = rollback(&mut tx);
+                match err {
+                  KiteError::Conflict { .. } => {
+                    conflicts.fetch_add(1, Ordering::Relaxed);
+                  }
+                  other => panic!("Unexpected commit error: {other}"),
+                }
+              }
+            },
+            Err(err) => {
+              let _ = rollback(&mut tx);
+              panic!("Upsert failed: {err}");
+            }
+          }
+        })
+      })
+      .collect();
+
+    for handle in handles {
+      handle.join().unwrap();
+    }
+
+    assert_eq!(
+      successes.load(Ordering::Relaxed),
+      1,
+      "Only one edge upsert should commit successfully"
+    );
+
+    let edges = graph_list_edges(&db, ListEdgesOptions { etype: Some(etype) });
+    let count = edges
+      .into_iter()
+      .filter(|edge| edge.src == src && edge.dst == dst)
+      .count();
+    assert_eq!(count, 1, "Only one edge should exist between nodes");
+
     assert_eq!(
       successes.load(Ordering::Relaxed) + conflicts.load(Ordering::Relaxed),
       num_threads as u64,
