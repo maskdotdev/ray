@@ -56,8 +56,9 @@ pub fn create_node(handle: &mut TxHandle, opts: NodeOpts) -> Result<NodeId> {
 
   let node_id = handle.db.alloc_node_id();
 
+  let key_for_mvcc = opts.key.clone();
   let mut node_delta = NodeDelta {
-    key: opts.key.clone(),
+    key: key_for_mvcc.clone(),
     labels: None,
     labels_deleted: None,
     props: None,
@@ -88,6 +89,9 @@ pub fn create_node(handle: &mut TxHandle, opts: NodeOpts) -> Result<NodeId> {
   if let Some(mvcc) = handle.db.mvcc.as_ref() {
     let mut tx_mgr = mvcc.tx_manager.lock();
     tx_mgr.record_write(handle.tx.txid, format!("node:{node_id}"));
+    if let Some(key) = &key_for_mvcc {
+      tx_mgr.record_write(handle.tx.txid, format!("key:{key}"));
+    }
   }
 
   Ok(node_id)

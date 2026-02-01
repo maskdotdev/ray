@@ -43,7 +43,8 @@ use crate::graph::nodes::{
   add_node_label as graph_add_node_label, create_node as graph_create_node,
   del_node_prop as graph_del_node_prop, delete_node as graph_delete_node, get_node_by_key_db,
   get_node_labels_db, get_node_prop_db, get_node_props_db, node_exists_db, node_has_label_db,
-  remove_node_label as graph_remove_node_label, set_node_prop as graph_set_node_prop, NodeOpts,
+  remove_node_label as graph_remove_node_label, set_node_prop as graph_set_node_prop,
+  upsert_node_with_props, NodeOpts,
 };
 use crate::graph::tx::{
   begin_read_tx as graph_begin_read_tx, begin_tx as graph_begin_tx, commit as graph_commit,
@@ -1061,6 +1062,53 @@ impl Database {
         }
         let node_id = graph_create_node(handle, opts)
           .map_err(|e| Error::from_reason(format!("Failed to create node: {e}")))?;
+        Ok(node_id as i64)
+      }),
+      None => Err(Error::from_reason("Database is closed")),
+    }
+  }
+
+  /// Upsert a node by key (create if missing, update props)
+  #[napi]
+  pub fn upsert_node(&self, key: String, props: Vec<JsNodeProp>) -> Result<i64> {
+    match self.inner.as_ref() {
+      Some(DatabaseInner::SingleFile(db)) => {
+        let node_id = match db.get_node_by_key(&key) {
+          Some(id) => id,
+          None => db
+            .create_node(Some(&key))
+            .map_err(|e| Error::from_reason(format!("Failed to create node: {e}")))?,
+        };
+
+        for prop in props {
+          let key_id = prop.key_id as PropKeyId;
+          if matches!(prop.value.prop_type, PropType::Null) {
+            db
+              .delete_node_prop(node_id, key_id)
+              .map_err(|e| Error::from_reason(format!("Failed to delete property: {e}")))?;
+          } else {
+            db
+              .set_node_prop(node_id, key_id, prop.value.into())
+              .map_err(|e| Error::from_reason(format!("Failed to set property: {e}")))?;
+          }
+        }
+
+        Ok(node_id as i64)
+      }
+      Some(DatabaseInner::Graph(_)) => self.with_graph_tx(|handle| {
+        let updates: Vec<(PropKeyId, Option<PropValue>)> = props
+          .into_iter()
+          .map(|prop| {
+            let value_opt = match prop.value.prop_type {
+              PropType::Null => None,
+              _ => Some(prop.value.into()),
+            };
+            (prop.key_id as PropKeyId, value_opt)
+          })
+          .collect();
+
+        let (node_id, _) = upsert_node_with_props(handle, &key, updates)
+          .map_err(|e| Error::from_reason(format!("Failed to upsert node: {e}")))?;
         Ok(node_id as i64)
       }),
       None => Err(Error::from_reason("Database is closed")),

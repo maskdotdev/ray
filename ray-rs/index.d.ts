@@ -22,6 +22,8 @@ export declare class Database {
   hasTransaction(): boolean
   /** Create a new node */
   createNode(key?: string | undefined | null): number
+  /** Upsert a node by key (create if missing, update props) */
+  upsertNode(key: string, props: Array<JsNodeProp>): number
   /** Delete a node */
   deleteNode(nodeId: number): void
   /** Check if a node exists */

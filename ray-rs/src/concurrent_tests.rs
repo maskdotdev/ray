@@ -55,8 +55,14 @@ mod tests {
 
   use crate::api::kite::{EdgeDef, NodeDef, PropDef, Kite, KiteOptions};
   use crate::core::single_file::{open_single_file, SingleFileOpenOptions};
+  use crate::error::KiteError;
+  use crate::graph::db::{open_graph_db, OpenOptions};
+  use crate::graph::iterators::list_nodes as graph_list_nodes;
+  use crate::graph::key_index::get_node_key as graph_get_node_key;
+  use crate::graph::nodes::upsert_node_with_props;
+  use crate::graph::tx::{begin_tx, commit, rollback};
   use crate::mvcc::{ConflictDetector, TxManager};
-  use crate::types::PropValue;
+  use crate::types::{PropKeyId, PropValue};
 
   // ============================================================================
   // Test Helpers
@@ -534,6 +540,85 @@ mod tests {
   // ============================================================================
   // MVCC Transaction Isolation Tests
   // ============================================================================
+
+  #[test]
+  fn test_concurrent_upsert_same_key_unique() {
+    let temp_dir = tempdir().unwrap();
+    let db = open_graph_db(temp_dir.path(), OpenOptions::new().mvcc(true)).unwrap();
+    let db = Arc::new(db);
+
+    let num_threads = 8;
+    let begin_barrier = Arc::new(Barrier::new(num_threads));
+    let commit_barrier = Arc::new(Barrier::new(num_threads));
+    let successes = Arc::new(AtomicU64::new(0));
+    let conflicts = Arc::new(AtomicU64::new(0));
+
+    let handles: Vec<_> = (0..num_threads)
+      .map(|_| {
+        let db = Arc::clone(&db);
+        let begin_barrier = Arc::clone(&begin_barrier);
+        let commit_barrier = Arc::clone(&commit_barrier);
+        let successes = Arc::clone(&successes);
+        let conflicts = Arc::clone(&conflicts);
+
+        thread::spawn(move || {
+          begin_barrier.wait();
+          let mut tx = begin_tx(&db).unwrap();
+          commit_barrier.wait();
+          let updates: Vec<(PropKeyId, Option<PropValue>)> = Vec::new();
+
+          match upsert_node_with_props(&mut tx, "user:unique", updates) {
+            Ok(_) => match commit(&mut tx) {
+              Ok(_) => {
+                successes.fetch_add(1, Ordering::Relaxed);
+              }
+              Err(err) => {
+                let _ = rollback(&mut tx);
+                match err {
+                  KiteError::Conflict { .. } => {
+                    conflicts.fetch_add(1, Ordering::Relaxed);
+                  }
+                  other => panic!("Unexpected commit error: {other}"),
+                }
+              }
+            },
+            Err(err) => {
+              let _ = rollback(&mut tx);
+              panic!("Upsert failed: {err}");
+            }
+          }
+        })
+      })
+      .collect();
+
+    for handle in handles {
+      handle.join().unwrap();
+    }
+
+    assert_eq!(
+      successes.load(Ordering::Relaxed),
+      1,
+      "Only one upsert should commit successfully"
+    );
+
+    let delta = db.delta.read();
+    let snapshot = db.snapshot.as_ref();
+    let mut count = 0;
+    for node_id in graph_list_nodes(&db) {
+      if let Some(key) = graph_get_node_key(snapshot, &delta, node_id) {
+        if key == "user:unique" {
+          count += 1;
+        }
+      }
+    }
+
+    assert_eq!(count, 1, "Only one node should exist with the key");
+    assert_eq!(
+      successes.load(Ordering::Relaxed) + conflicts.load(Ordering::Relaxed),
+      num_threads as u64,
+      "All upserts should either commit or conflict"
+    );
+  }
 
   #[test]
   fn test_mvcc_concurrent_transactions_no_conflict() {

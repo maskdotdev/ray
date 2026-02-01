@@ -1780,18 +1780,17 @@ impl KiteUpsertExecutorMany {
   /// Execute the upserts without returning
   #[napi]
   pub fn execute(&self) -> Result<()> {
-    for (full_key, props) in &self.entries {
-      upsert_single(&self.ray, &self.node_type, full_key, props)?;
-    }
+    let _ = upsert_many(&self.ray, &self.node_type, &self.entries, false)?;
     Ok(())
   }
 
   /// Execute the upserts and return nodes
   #[napi]
   pub fn returning(&self, env: Env) -> Result<Vec<Object>> {
-    let mut out = Vec::with_capacity(self.entries.len());
-    for (full_key, props) in &self.entries {
-      let (node_id, props) = upsert_single(&self.ray, &self.node_type, full_key, props)?;
+    let results = upsert_many(&self.ray, &self.node_type, &self.entries, true)?;
+    let mut out = Vec::with_capacity(results.len());
+    for ((full_key, _), (node_id, props)) in self.entries.iter().zip(results.into_iter()) {
+      let props = props.expect("props loaded");
       out.push(node_to_js(
         &env,
         node_id,
@@ -1851,6 +1850,73 @@ fn upsert_single(
 
   let props = get_node_props(ray, node_id);
   Ok((node_id, props))
+}
+
+fn upsert_many(
+  ray: &Arc<RwLock<Option<RustKite>>>,
+  node_type: &str,
+  entries: &[(String, HashMap<String, PropValue>)],
+  load_props: bool,
+) -> Result<Vec<(NodeId, Option<HashMap<String, PropValue>>)>> {
+  if entries.is_empty() {
+    return Ok(Vec::new());
+  }
+
+  let mut guard = ray.write();
+  let ray = guard
+    .as_mut()
+    .ok_or_else(|| Error::from_reason("Kite is closed"))?;
+  let node_def = ray
+    .node_def(node_type)
+    .ok_or_else(|| Error::from_reason(format!("Unknown node type: {node_type}")))?
+    .clone();
+
+  let mut handle =
+    begin_tx(ray.raw()).map_err(|e| Error::from_reason(format!("Failed to begin tx: {e}")))?;
+
+  let mut node_ids = Vec::with_capacity(entries.len());
+  for (full_key, props) in entries {
+    let mut updates = Vec::with_capacity(props.len());
+    for (prop_name, value) in props {
+      let prop_key_id = if let Some(&id) = node_def.prop_key_ids.get(prop_name) {
+        id
+      } else {
+        handle.db.get_or_create_propkey(prop_name)
+      };
+      let value_opt = match value {
+        PropValue::Null => None,
+        other => Some(other.clone()),
+      };
+      updates.push((prop_key_id, value_opt));
+    }
+
+    let (node_id, _) =
+      match crate::graph::nodes::upsert_node_with_props(&mut handle, full_key, updates) {
+        Ok(result) => result,
+        Err(e) => {
+          let _ = rollback(&mut handle);
+          return Err(Error::from_reason(format!("Failed to upsert node: {e}")));
+        }
+      };
+    node_ids.push(node_id);
+  }
+
+  if let Err(e) = commit(&mut handle) {
+    let _ = rollback(&mut handle);
+    return Err(Error::from_reason(format!("Failed to commit: {e}")));
+  }
+
+  let mut results = Vec::with_capacity(node_ids.len());
+  for node_id in node_ids {
+    let props = if load_props {
+      Some(get_node_props(ray, node_id))
+    } else {
+      None
+    };
+    results.push((node_id, props));
+  }
+
+  Ok(results)
 }
 
 // =============================================================================
