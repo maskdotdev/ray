@@ -1335,6 +1335,68 @@ fn ensure_bytes(
   Ok(())
 }
 
+fn read_u8(buffer: &[u8], offset: &mut usize, context: &str) -> Result<u8, SerializeError> {
+  let end = offset.saturating_add(1);
+  let slice = buffer
+    .get(*offset..end)
+    .ok_or_else(|| SerializeError::BufferUnderflow {
+      context: context.to_string(),
+      offset: *offset,
+      needed: 1,
+      available: buffer.len().saturating_sub(*offset),
+    })?;
+  *offset = end;
+  Ok(slice[0])
+}
+
+fn read_u32_le(buffer: &[u8], offset: &mut usize, context: &str) -> Result<u32, SerializeError> {
+  let end = offset.saturating_add(4);
+  let slice = buffer
+    .get(*offset..end)
+    .ok_or_else(|| SerializeError::BufferUnderflow {
+      context: context.to_string(),
+      offset: *offset,
+      needed: 4,
+      available: buffer.len().saturating_sub(*offset),
+    })?;
+  let mut bytes = [0u8; 4];
+  bytes.copy_from_slice(slice);
+  *offset = end;
+  Ok(u32::from_le_bytes(bytes))
+}
+
+fn read_u64_le(buffer: &[u8], offset: &mut usize, context: &str) -> Result<u64, SerializeError> {
+  let end = offset.saturating_add(8);
+  let slice = buffer
+    .get(*offset..end)
+    .ok_or_else(|| SerializeError::BufferUnderflow {
+      context: context.to_string(),
+      offset: *offset,
+      needed: 8,
+      available: buffer.len().saturating_sub(*offset),
+    })?;
+  let mut bytes = [0u8; 8];
+  bytes.copy_from_slice(slice);
+  *offset = end;
+  Ok(u64::from_le_bytes(bytes))
+}
+
+fn read_f32_le(buffer: &[u8], offset: &mut usize, context: &str) -> Result<f32, SerializeError> {
+  let end = offset.saturating_add(4);
+  let slice = buffer
+    .get(*offset..end)
+    .ok_or_else(|| SerializeError::BufferUnderflow {
+      context: context.to_string(),
+      offset: *offset,
+      needed: 4,
+      available: buffer.len().saturating_sub(*offset),
+    })?;
+  let mut bytes = [0u8; 4];
+  bytes.copy_from_slice(slice);
+  *offset = end;
+  Ok(f32::from_le_bytes(bytes))
+}
+
 /// Calculate serialized size of IVF-PQ index
 pub fn ivf_pq_serialized_size(index: &IvfPqIndex) -> usize {
   let mut size = IVFPQ_HEADER_SIZE;
@@ -1478,8 +1540,7 @@ pub fn deserialize_ivf_pq(buffer: &[u8]) -> Result<IvfPqIndex, SerializeError> {
   let mut offset = 0;
 
   // Header
-  let magic = u32::from_le_bytes(buffer[offset..offset + 4].try_into().unwrap());
-  offset += 4;
+  let magic = read_u32_le(buffer, &mut offset, "IVF-PQ magic")?;
   if magic != IVFPQ_MAGIC {
     return Err(SerializeError::InvalidMagic {
       expected: IVFPQ_MAGIC,
@@ -1487,24 +1548,16 @@ pub fn deserialize_ivf_pq(buffer: &[u8]) -> Result<IvfPqIndex, SerializeError> {
     });
   }
 
-  let dimensions = u32::from_le_bytes(buffer[offset..offset + 4].try_into().unwrap()) as usize;
-  offset += 4;
-  let n_clusters = u32::from_le_bytes(buffer[offset..offset + 4].try_into().unwrap()) as usize;
-  offset += 4;
-  let n_probe = u32::from_le_bytes(buffer[offset..offset + 4].try_into().unwrap()) as usize;
-  offset += 4;
-  let num_subspaces = u32::from_le_bytes(buffer[offset..offset + 4].try_into().unwrap()) as usize;
-  offset += 4;
-  let num_centroids = u32::from_le_bytes(buffer[offset..offset + 4].try_into().unwrap()) as usize;
-  offset += 4;
-  let max_iterations = u32::from_le_bytes(buffer[offset..offset + 4].try_into().unwrap()) as usize;
-  offset += 4;
-  let metric = u8_to_metric(buffer[offset])?;
-  offset += 1;
-  let trained = buffer[offset] == 1;
-  offset += 1;
-  let use_residuals = buffer[offset] == 1;
-  offset += 1;
+  let dimensions = read_u32_le(buffer, &mut offset, "IVF-PQ dimensions")? as usize;
+  let n_clusters = read_u32_le(buffer, &mut offset, "IVF-PQ n_clusters")? as usize;
+  let n_probe = read_u32_le(buffer, &mut offset, "IVF-PQ n_probe")? as usize;
+  let num_subspaces = read_u32_le(buffer, &mut offset, "IVF-PQ num_subspaces")? as usize;
+  let num_centroids = read_u32_le(buffer, &mut offset, "IVF-PQ num_centroids")? as usize;
+  let max_iterations = read_u32_le(buffer, &mut offset, "IVF-PQ max_iterations")? as usize;
+  let metric = u8_to_metric(read_u8(buffer, &mut offset, "IVF-PQ metric")?)?;
+  let trained = read_u8(buffer, &mut offset, "IVF-PQ trained")? == 1;
+  let use_residuals = read_u8(buffer, &mut offset, "IVF-PQ use_residuals")? == 1;
+  ensure_bytes(buf_len, offset, 17, "IVF-PQ header reserved")?;
   offset += 17; // reserved
 
   let config = IvfPqConfig {
@@ -1522,10 +1575,7 @@ pub fn deserialize_ivf_pq(buffer: &[u8]) -> Result<IvfPqIndex, SerializeError> {
   };
 
   // IVF centroids
-  ensure_bytes(buf_len, offset, 4, "IVF-PQ centroid count")?;
-  let ivf_centroid_count =
-    u32::from_le_bytes(buffer[offset..offset + 4].try_into().unwrap()) as usize;
-  offset += 4;
+  let ivf_centroid_count = read_u32_le(buffer, &mut offset, "IVF-PQ centroid count")? as usize;
 
   ensure_bytes(
     buf_len,
@@ -1535,15 +1585,12 @@ pub fn deserialize_ivf_pq(buffer: &[u8]) -> Result<IvfPqIndex, SerializeError> {
   )?;
   let mut ivf_centroids = Vec::with_capacity(ivf_centroid_count);
   for _ in 0..ivf_centroid_count {
-    let val = f32::from_le_bytes(buffer[offset..offset + 4].try_into().unwrap());
+    let val = read_f32_le(buffer, &mut offset, "IVF-PQ IVF centroid")?;
     ivf_centroids.push(val);
-    offset += 4;
   }
 
   // Inverted lists
-  ensure_bytes(buf_len, offset, 4, "IVF-PQ inverted list count")?;
-  let num_lists = u32::from_le_bytes(buffer[offset..offset + 4].try_into().unwrap()) as usize;
-  offset += 4;
+  let num_lists = read_u32_le(buffer, &mut offset, "IVF-PQ inverted list count")? as usize;
 
   let mut inverted_lists: HashMap<usize, Vec<u64>> = HashMap::new();
   for i in 0..num_lists {
@@ -1553,10 +1600,16 @@ pub fn deserialize_ivf_pq(buffer: &[u8]) -> Result<IvfPqIndex, SerializeError> {
       8,
       &format!("IVF-PQ inverted list {i} header"),
     )?;
-    let cluster = u32::from_le_bytes(buffer[offset..offset + 4].try_into().unwrap()) as usize;
-    offset += 4;
-    let list_length = u32::from_le_bytes(buffer[offset..offset + 4].try_into().unwrap()) as usize;
-    offset += 4;
+    let cluster = read_u32_le(
+      buffer,
+      &mut offset,
+      &format!("IVF-PQ inverted list {i} cluster"),
+    )? as usize;
+    let list_length = read_u32_le(
+      buffer,
+      &mut offset,
+      &format!("IVF-PQ inverted list {i} length"),
+    )? as usize;
 
     ensure_bytes(
       buf_len,
@@ -1566,18 +1619,14 @@ pub fn deserialize_ivf_pq(buffer: &[u8]) -> Result<IvfPqIndex, SerializeError> {
     )?;
     let mut list = Vec::with_capacity(list_length);
     for _ in 0..list_length {
-      let vector_id = u64::from_le_bytes(buffer[offset..offset + 8].try_into().unwrap());
+      let vector_id = read_u64_le(buffer, &mut offset, "IVF-PQ inverted list vector_id")?;
       list.push(vector_id);
-      offset += 8;
     }
     inverted_lists.insert(cluster, list);
   }
 
   // PQ centroids
-  ensure_bytes(buf_len, offset, 4, "IVF-PQ PQ subspace count")?;
-  let num_pq_subspaces =
-    u32::from_le_bytes(buffer[offset..offset + 4].try_into().unwrap()) as usize;
-  offset += 4;
+  let num_pq_subspaces = read_u32_le(buffer, &mut offset, "IVF-PQ PQ subspace count")? as usize;
 
   let mut pq_centroids = Vec::with_capacity(num_pq_subspaces);
   for i in 0..num_pq_subspaces {
@@ -1587,9 +1636,11 @@ pub fn deserialize_ivf_pq(buffer: &[u8]) -> Result<IvfPqIndex, SerializeError> {
       4,
       &format!("IVF-PQ PQ subspace {i} centroid count"),
     )?;
-    let centroid_count =
-      u32::from_le_bytes(buffer[offset..offset + 4].try_into().unwrap()) as usize;
-    offset += 4;
+    let centroid_count = read_u32_le(
+      buffer,
+      &mut offset,
+      &format!("IVF-PQ PQ subspace {i} centroid count"),
+    )? as usize;
 
     ensure_bytes(
       buf_len,
@@ -1599,25 +1650,25 @@ pub fn deserialize_ivf_pq(buffer: &[u8]) -> Result<IvfPqIndex, SerializeError> {
     )?;
     let mut centroids = Vec::with_capacity(centroid_count);
     for _ in 0..centroid_count {
-      let val = f32::from_le_bytes(buffer[offset..offset + 4].try_into().unwrap());
+      let val = read_f32_le(buffer, &mut offset, "IVF-PQ PQ centroid")?;
       centroids.push(val);
-      offset += 4;
     }
     pq_centroids.push(centroids);
   }
 
   // PQ codes
-  ensure_bytes(buf_len, offset, 4, "IVF-PQ PQ codes count")?;
-  let num_pq_codes = u32::from_le_bytes(buffer[offset..offset + 4].try_into().unwrap()) as usize;
-  offset += 4;
+  let num_pq_codes = read_u32_le(buffer, &mut offset, "IVF-PQ PQ codes count")? as usize;
 
   let mut pq_codes: HashMap<u64, Vec<u8>> = HashMap::new();
   for i in 0..num_pq_codes {
     ensure_bytes(buf_len, offset, 12, &format!("IVF-PQ PQ code {i} header"))?;
-    let vector_id = u64::from_le_bytes(buffer[offset..offset + 8].try_into().unwrap());
-    offset += 8;
-    let code_len = u32::from_le_bytes(buffer[offset..offset + 4].try_into().unwrap()) as usize;
-    offset += 4;
+    let vector_id = read_u64_le(
+      buffer,
+      &mut offset,
+      &format!("IVF-PQ PQ code {i} vector_id"),
+    )?;
+    let code_len =
+      read_u32_le(buffer, &mut offset, &format!("IVF-PQ PQ code {i} length"))? as usize;
 
     ensure_bytes(
       buf_len,
@@ -1631,15 +1682,11 @@ pub fn deserialize_ivf_pq(buffer: &[u8]) -> Result<IvfPqIndex, SerializeError> {
   }
 
   // Centroid distances
-  ensure_bytes(buf_len, offset, 1, "IVF-PQ centroid distances flag")?;
-  let has_centroid_distances = buffer[offset] == 1;
-  offset += 1;
+  let has_centroid_distances = read_u8(buffer, &mut offset, "IVF-PQ centroid distances flag")? == 1;
 
   let centroid_distances = if has_centroid_distances {
-    ensure_bytes(buf_len, offset, 4, "IVF-PQ centroid distances count")?;
     let distance_count =
-      u32::from_le_bytes(buffer[offset..offset + 4].try_into().unwrap()) as usize;
-    offset += 4;
+      read_u32_le(buffer, &mut offset, "IVF-PQ centroid distances count")? as usize;
 
     ensure_bytes(
       buf_len,
@@ -1649,9 +1696,8 @@ pub fn deserialize_ivf_pq(buffer: &[u8]) -> Result<IvfPqIndex, SerializeError> {
     )?;
     let mut dists = Vec::with_capacity(distance_count);
     for _ in 0..distance_count {
-      let val = f32::from_le_bytes(buffer[offset..offset + 4].try_into().unwrap());
+      let val = read_f32_le(buffer, &mut offset, "IVF-PQ centroid distance")?;
       dists.push(val);
-      offset += 4;
     }
     Some(dists)
   } else {

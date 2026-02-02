@@ -17,8 +17,8 @@ use crate::api::traversal::{
 };
 use crate::backup as core_backup;
 use crate::core::single_file::{
-  close_single_file, is_single_file_path, open_single_file, SingleFileDB as RustSingleFileDB,
-  SingleFileOpenOptions as RustOpenOptions,
+  close_single_file, is_single_file_path, open_single_file, single_file_extension,
+  SingleFileDB as RustSingleFileDB, SingleFileOpenOptions as RustOpenOptions,
   SingleFileOptimizeOptions as RustSingleFileOptimizeOptions,
   SnapshotParseMode as RustSnapshotParseMode, SyncMode as RustSyncMode,
   VacuumOptions as RustVacuumOptions,
@@ -927,8 +927,19 @@ impl Database {
     }
 
     let mut db_path = path_buf;
-    if !is_single_file_path(&db_path) {
-      db_path = PathBuf::from(format!("{path}.kitedb"));
+    if db_path.extension().is_some() {
+      if !is_single_file_path(&db_path) {
+        let ext = db_path
+          .extension()
+          .map(|value| value.to_string_lossy())
+          .unwrap_or_else(|| "".into());
+        return Err(Error::from_reason(format!(
+          "Invalid database extension '.{ext}'. Single-file databases must use {} (or pass a path without an extension).",
+          single_file_extension()
+        )));
+      }
+    } else {
+      db_path = PathBuf::from(format!("{path}{}", single_file_extension()));
     }
 
     let opts: RustOpenOptions = options.into();
