@@ -77,7 +77,7 @@ impl SingleFileTxState {
 }
 
 // ============================================================================
-// Single-File GraphDB
+// Single-File Database
 // ============================================================================
 
 /// Single-file database handle

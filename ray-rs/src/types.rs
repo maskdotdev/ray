@@ -41,27 +41,6 @@ pub type PhysNode = u32;
 pub type StringId = u32;
 
 // ============================================================================
-// Manifest (manifest.gdm)
-// ============================================================================
-
-/// Manifest header structure
-#[derive(Debug, Clone)]
-pub struct ManifestV1 {
-  pub magic: u32,              // "GDBM" = 0x4D424447
-  pub version: u32,            // = 1
-  pub min_reader_version: u32, // = 1
-  pub reserved: u32,
-  pub active_snapshot_gen: u64,
-  pub prev_snapshot_gen: u64, // 0 if none
-  pub active_wal_seg: u64,
-  pub reserved2: [u64; 5],
-  pub crc32c: u32,
-}
-
-/// Manifest size in bytes
-pub const MANIFEST_SIZE: usize = 4 + 4 + 4 + 4 + 8 + 8 + 8 + 8 * 5 + 4; // 76 bytes
-
-// ============================================================================
 // Snapshot Header (snapshot.gds)
 // ============================================================================
 
@@ -202,22 +181,8 @@ pub struct KeyIndexEntry {
 pub const KEY_INDEX_ENTRY_SIZE: usize = 8 + 4 + 4 + 8; // 24 bytes
 
 // ============================================================================
-// WAL Header and Records
+// WAL Records
 // ============================================================================
-
-/// WAL header structure
-#[derive(Debug, Clone)]
-pub struct WalHeaderV1 {
-  pub magic: u32,              // "GDW1" = 0x31574447
-  pub version: u32,            // = 1
-  pub min_reader_version: u32, // = 1
-  pub reserved: u32,
-  pub segment_id: u64,
-  pub created_unix_ns: u64,
-  pub reserved2: [u64; 8],
-}
-
-pub const WAL_HEADER_SIZE: usize = 4 + 4 + 4 + 4 + 8 + 8 + 8 * 8; // 96 bytes
 
 /// WAL record types
 #[repr(u8)]

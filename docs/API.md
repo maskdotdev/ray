@@ -1,5 +1,7 @@
 # Kite API Documentation
 
+> Note: The directory-based GraphDB (multi-file) engine has been removed. KiteDB is single-file (`.kitedb`) only; GraphDB references below are historical.
+
 This document provides a high-level overview of Kite's architecture and API layers.
 
 ## Architecture Overview

@@ -49,8 +49,8 @@ fn main() -> kitedb::error::Result<()> {
 
 ## Lower-level API
 
-If you want direct access to graph primitives, use `kitedb::graph::db::open_graph_db`
-and the modules under `kitedb::graph`, `kitedb::vector`, and `kitedb::core`.
+For direct access to storage primitives, use `kitedb::core::single_file` and the
+modules under `kitedb::vector` and `kitedb::core`.
 
 ## Concurrent Access
 

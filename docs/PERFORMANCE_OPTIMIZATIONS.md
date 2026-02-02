@@ -1,5 +1,7 @@
 # RayDB Single-File Performance Optimizations
 
+> Note: The directory-based GraphDB (multi-file) engine has been removed. KiteDB is single-file (`.kitedb`) only; any GraphDB references below are historical.
+
 This document outlines identified performance optimization opportunities for the single-file format, prioritized by impact and implementation effort.
 
 ## Background
