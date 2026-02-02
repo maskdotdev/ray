@@ -27,7 +27,7 @@ pub struct KiteInsertBuilder {
   pub(crate) ray: Arc<RwLock<Option<RustKite>>>,
   pub(crate) node_type: String,
   pub(crate) key_prefix: String,
-  pub(crate) key_spec: KeySpec,
+  pub(crate) key_spec: Arc<KeySpec>,
 }
 
 impl KiteInsertBuilder {
@@ -35,7 +35,7 @@ impl KiteInsertBuilder {
     ray: Arc<RwLock<Option<RustKite>>>,
     node_type: String,
     key_prefix: String,
-    key_spec: KeySpec,
+    key_spec: Arc<KeySpec>,
   ) -> Self {
     Self {
       ray,
@@ -56,7 +56,7 @@ impl KiteInsertBuilder {
     key: Unknown,
     props: Option<Object>,
   ) -> Result<KiteInsertExecutorSingle> {
-    let key_suffix = key_suffix_from_js(&env, &self.key_spec, key)?;
+    let key_suffix = key_suffix_from_js(&env, self.key_spec.as_ref(), key)?;
     let props_map = js_props_to_map(&env, props)?;
     Ok(KiteInsertExecutorSingle {
       ray: self.ray.clone(),
@@ -74,7 +74,7 @@ impl KiteInsertBuilder {
       let obj = entry.coerce_to_object()?;
       let key: Unknown = obj.get_named_property("key")?;
       let props: Option<Object> = obj.get_named_property("props")?;
-      let key_suffix = key_suffix_from_js(&env, &self.key_spec, key)?;
+      let key_suffix = key_suffix_from_js(&env, self.key_spec.as_ref(), key)?;
       let props_map = js_props_to_map(&env, props)?;
       items.push((key_suffix, props_map));
     }
@@ -236,7 +236,7 @@ fn insert_many(
   Ok(
     node_refs
       .into_iter()
-      .zip(props_for_return.into_iter())
+      .zip(props_for_return)
       .map(|(node_ref, props)| (node_ref, Some(props)))
       .collect(),
   )
@@ -252,7 +252,7 @@ pub struct KiteUpsertBuilder {
   pub(crate) ray: Arc<RwLock<Option<RustKite>>>,
   pub(crate) node_type: String,
   pub(crate) key_prefix: String,
-  pub(crate) key_spec: KeySpec,
+  pub(crate) key_spec: Arc<KeySpec>,
 }
 
 impl KiteUpsertBuilder {
@@ -260,7 +260,7 @@ impl KiteUpsertBuilder {
     ray: Arc<RwLock<Option<RustKite>>>,
     node_type: String,
     key_prefix: String,
-    key_spec: KeySpec,
+    key_spec: Arc<KeySpec>,
   ) -> Self {
     Self {
       ray,
@@ -281,7 +281,7 @@ impl KiteUpsertBuilder {
     key: Unknown,
     props: Option<Object>,
   ) -> Result<KiteUpsertExecutorSingle> {
-    let key_suffix = key_suffix_from_js(&env, &self.key_spec, key)?;
+    let key_suffix = key_suffix_from_js(&env, self.key_spec.as_ref(), key)?;
     let props_map = js_props_to_map(&env, props)?;
     Ok(KiteUpsertExecutorSingle {
       ray: self.ray.clone(),
@@ -299,7 +299,7 @@ impl KiteUpsertBuilder {
       let obj = entry.coerce_to_object()?;
       let key: Unknown = obj.get_named_property("key")?;
       let props: Option<Object> = obj.get_named_property("props")?;
-      let key_suffix = key_suffix_from_js(&env, &self.key_spec, key)?;
+      let key_suffix = key_suffix_from_js(&env, self.key_spec.as_ref(), key)?;
       let props_map = js_props_to_map(&env, props)?;
       items.push((key_suffix, props_map));
     }
@@ -461,7 +461,7 @@ fn upsert_many(
   Ok(
     node_refs
       .into_iter()
-      .zip(props_for_return.into_iter())
+      .zip(props_for_return)
       .map(|(node_ref, props)| (node_ref, Some(props)))
       .collect(),
   )
