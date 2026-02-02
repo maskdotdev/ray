@@ -198,7 +198,7 @@ impl SingleFileDB {
     let delta = self.delta.read();
     let snapshot = self.snapshot.read();
     let mut edges = Vec::new();
-    let mut read_srcs = (self.mvcc.is_some() && txid != 0).then(|| HashSet::<NodeId>::new());
+    let mut read_srcs = (self.mvcc.is_some() && txid != 0).then(HashSet::<NodeId>::new);
 
     // From snapshot
     if let Some(ref snap) = *snapshot {

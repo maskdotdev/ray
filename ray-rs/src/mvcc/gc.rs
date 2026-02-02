@@ -197,7 +197,7 @@ impl GarbageCollector {
         tx.status == MvccTxStatus::Committed
           && tx
             .commit_ts
-            .map_or(false, |commit_ts| commit_ts < horizon_ts)
+            .is_some_and(|commit_ts| commit_ts < horizon_ts)
       })
       .map(|(&txid, _)| txid)
       .collect();

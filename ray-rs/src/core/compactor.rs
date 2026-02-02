@@ -251,7 +251,7 @@ fn snapshot_node_props(snap: &SnapshotData, phys_node: PhysNode) -> HashMap<Prop
 fn snapshot_node_labels(snap: &SnapshotData, phys_node: PhysNode) -> HashSet<LabelId> {
   let mut labels = HashSet::new();
   if let Some(snapshot_labels) = snap.get_node_labels(phys_node) {
-    labels.extend(snapshot_labels.into_iter());
+    labels.extend(snapshot_labels);
   }
   labels
 }

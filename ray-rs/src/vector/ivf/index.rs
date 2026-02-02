@@ -235,18 +235,18 @@ impl IvfIndex {
     // Use max-heap to track top-k candidates
     let mut heap = MaxHeap::new();
 
+    let params = SearchClusterParams {
+      manifest,
+      query_vec: &query_vec,
+      options: &options,
+      fragment_map: &fragment_map,
+      distance_fn,
+      k,
+    };
+
     // Search within selected clusters
     for cluster in probe_clusters {
-      self.search_cluster(
-        manifest,
-        &query_vec,
-        cluster,
-        &options,
-        &fragment_map,
-        distance_fn,
-        k,
-        &mut heap,
-      );
+      self.search_cluster(cluster, &params, &mut heap);
     }
 
     // Convert to results
@@ -280,13 +280,8 @@ impl IvfIndex {
 
   fn search_cluster(
     &self,
-    manifest: &VectorManifest,
-    query_vec: &[f32],
     cluster: usize,
-    options: &SearchOptions,
-    fragment_map: &HashMap<usize, &Fragment>,
-    distance_fn: fn(&[f32], &[f32]) -> f32,
-    k: usize,
+    params: &SearchClusterParams<'_>,
     heap: &mut MaxHeap,
   ) {
     let vector_ids = match self.inverted_lists.get(&cluster) {
@@ -295,12 +290,12 @@ impl IvfIndex {
     };
 
     for &vector_id in vector_ids {
-      let location = match manifest.vector_locations.get(&vector_id) {
+      let location = match params.manifest.vector_locations.get(&vector_id) {
         Some(loc) => loc,
         None => continue,
       };
 
-      let fragment = match fragment_map.get(&location.fragment_id) {
+      let fragment = match params.fragment_map.get(&location.fragment_id) {
         Some(f) => *f,
         None => continue,
       };
@@ -309,22 +304,22 @@ impl IvfIndex {
         continue;
       }
 
-      if !passes_filter(options, manifest, vector_id) {
+      if !passes_filter(params.options, params.manifest, vector_id) {
         continue;
       }
 
-      let vec = match vector_slice(manifest, fragment, location) {
+      let vec = match vector_slice(params.manifest, fragment, location) {
         Some(vec) => vec,
         None => continue,
       };
 
-      let dist = distance_fn(query_vec, vec);
+      let dist = (params.distance_fn)(params.query_vec, vec);
 
-      if !passes_threshold(self.config.metric, options, dist) {
+      if !passes_threshold(self.config.metric, params.options, dist) {
         continue;
       }
 
-      update_heap(heap, vector_id, dist, k);
+      update_heap(heap, vector_id, dist, params.k);
     }
   }
 
@@ -609,6 +604,15 @@ fn update_heap(heap: &mut MaxHeap, vector_id: u64, dist: f32, k: usize) {
       heap.push(vector_id, dist);
     }
   }
+}
+
+struct SearchClusterParams<'a> {
+  manifest: &'a VectorManifest,
+  query_vec: &'a [f32],
+  options: &'a SearchOptions,
+  fragment_map: &'a HashMap<usize, &'a Fragment>,
+  distance_fn: fn(&[f32], &[f32]) -> f32,
+  k: usize,
 }
 
 // ============================================================================

@@ -1173,11 +1173,10 @@ impl SingleFileDB {
       }
     }
 
-    let vc_guard = if let Some(mvcc) = self.mvcc.as_ref() {
-      Some(mvcc.version_chain.lock())
-    } else {
-      None
-    };
+    let vc_guard = self
+      .mvcc
+      .as_ref()
+      .map(|mvcc| mvcc.version_chain.lock());
 
     let delta = self.delta.read();
 

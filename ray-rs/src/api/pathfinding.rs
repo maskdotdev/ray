@@ -753,8 +753,8 @@ where
     let prev_path_nodes = &prev_path.path;
 
     // For each node in the previous path (except the last), use it as a spur node
-    for spur_idx in 0..prev_path_nodes.len().saturating_sub(1) {
-      let spur_node = prev_path_nodes[spur_idx];
+    let max_spur_idx = prev_path_nodes.len().saturating_sub(1);
+    for (spur_idx, &spur_node) in prev_path_nodes.iter().enumerate().take(max_spur_idx) {
 
       // Root path: path from source to spur node
       let (root_path, root_edges) = root_segments(prev_path, spur_idx);
