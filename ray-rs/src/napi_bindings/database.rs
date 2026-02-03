@@ -17,7 +17,8 @@ use crate::api::traversal::{
 use crate::backup as core_backup;
 use crate::core::single_file::{
   close_single_file, is_single_file_path, open_single_file, single_file_extension,
-  SingleFileDB as RustSingleFileDB, SingleFileOpenOptions as RustOpenOptions,
+  ResizeWalOptions as RustResizeWalOptions, SingleFileDB as RustSingleFileDB,
+  SingleFileOpenOptions as RustOpenOptions,
   SingleFileOptimizeOptions as RustSingleFileOptimizeOptions,
   SnapshotParseMode as RustSnapshotParseMode, SyncMode as RustSyncMode,
   VacuumOptions as RustVacuumOptions,
@@ -234,6 +235,25 @@ impl From<VacuumOptions> for RustVacuumOptions {
     Self {
       shrink_wal: opts.shrink_wal.unwrap_or(true),
       min_wal_size,
+    }
+  }
+}
+
+/// Options for resizing WAL
+#[napi(object)]
+#[derive(Debug, Default)]
+pub struct ResizeWalOptions {
+  /// Allow shrinking WAL size (default false)
+  pub allow_shrink: Option<bool>,
+  /// Perform checkpoint before resizing (default true)
+  pub checkpoint: Option<bool>,
+}
+
+impl From<ResizeWalOptions> for RustResizeWalOptions {
+  fn from(opts: ResizeWalOptions) -> Self {
+    Self {
+      allow_shrink: opts.allow_shrink.unwrap_or(false),
+      checkpoint: opts.checkpoint.unwrap_or(true),
     }
   }
 }
@@ -2289,6 +2309,21 @@ impl Database {
   #[napi(js_name = "vacuumSingleFile")]
   pub fn vacuum_single_file(&mut self, options: Option<VacuumOptions>) -> Result<()> {
     self.vacuum(options)
+  }
+
+  /// Resize the WAL region (single-file only)
+  #[napi(js_name = "resizeWal")]
+  pub fn resize_wal(&mut self, size_bytes: i64, options: Option<ResizeWalOptions>) -> Result<()> {
+    if size_bytes <= 0 {
+      return Err(Error::from_reason("sizeBytes must be greater than 0"));
+    }
+
+    match self.inner.as_mut() {
+      Some(DatabaseInner::SingleFile(db)) => db
+        .resize_wal(size_bytes as usize, options.map(Into::into))
+        .map_err(|e| Error::from_reason(format!("Failed to resize WAL: {e}"))),
+      None => Err(Error::from_reason("Database is closed")),
+    }
   }
 
   /// Get database statistics

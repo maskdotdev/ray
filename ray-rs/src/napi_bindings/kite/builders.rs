@@ -14,7 +14,7 @@ use crate::api::kite::{Kite as RustKite, NodeRef};
 use crate::types::{NodeId, PropValue};
 
 use super::conversion::{js_props_to_map, js_value_to_prop_value, key_suffix_from_js};
-use super::helpers::node_to_js;
+use super::helpers::{get_node_props, node_to_js};
 use super::key_spec::KeySpec;
 
 // =============================================================================
@@ -409,7 +409,6 @@ fn upsert_single_returning(
     .as_mut()
     .ok_or_else(|| Error::from_reason("Kite is closed"))?;
 
-  let props_for_return = props.clone();
   let node_ref = ray
     .upsert(node_type)
     .map_err(|e| Error::from_reason(e.to_string()))?
@@ -418,6 +417,7 @@ fn upsert_single_returning(
     .returning()
     .map_err(|e| Error::from_reason(e.to_string()))?;
 
+  let props_for_return = get_node_props(ray, node_ref.id);
   Ok((node_ref, props_for_return))
 }
 
@@ -447,9 +447,6 @@ fn upsert_many(
     return Ok(Vec::new());
   }
 
-  let props_for_return: Vec<HashMap<String, PropValue>> =
-    entries.iter().map(|(_, props)| props.clone()).collect();
-
   let node_refs = ray
     .upsert(node_type)
     .map_err(|e| Error::from_reason(e.to_string()))?
@@ -461,8 +458,10 @@ fn upsert_many(
   Ok(
     node_refs
       .into_iter()
-      .zip(props_for_return)
-      .map(|(node_ref, props)| (node_ref, Some(props)))
+      .map(|node_ref| {
+        let props = get_node_props(ray, node_ref.id);
+        (node_ref, Some(props))
+      })
       .collect(),
   )
 }
