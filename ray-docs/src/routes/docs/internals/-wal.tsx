@@ -528,6 +528,16 @@ export function WALPage() {
 
 			<CheckpointTriggers />
 
+			<h2 id="overflow">Avoiding WAL Overflow</h2>
+
+			<p>
+				The WAL has a fixed size once the file is created. For large ingests,
+				use <code>resizeWal</code> (offline) to grow it, or rebuild into a new
+				file. To prevent single transactions from overfilling the active WAL
+				region, split work into smaller commits (see <code>bulkWrite</code>) and
+				consider disabling background checkpoints during ingest.
+			</p>
+
 			<h2 id="next">Next Steps</h2>
 			<ul>
 				<li>

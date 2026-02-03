@@ -230,7 +230,7 @@ database/
 │           Header (4KB)                 │  ← Atomic updates, checksummed
 ├────────────────────────────────────────┤
 │                                        │
-│        WAL Area (~64MB)                │  ← Linear buffer
+│        WAL Area (configurable)         │  ← Linear buffer
 │   ┌─────────────────────────────┐     │
 │   │  Primary Region (75%)       │     │  ← Normal writes
 │   ├─────────────────────────────┤     │
@@ -253,6 +253,12 @@ Header contents:
 - Snapshot generation
 - Max node ID, next TX ID
 - Checksums (header + footer)
+
+Notes:
+- Default single-file `walSize` is **1MB**; increase for heavy ingest or large batch commits.
+- `autoCheckpoint` is **on by default** and triggers when WAL usage exceeds `checkpointThreshold` (default **0.8** of the active region).
+- All three are configurable via open options.
+- WAL size is fixed once the file is created; change it via `resizeWal` (offline) or rebuild into a new `.kitedb`.
 
 ---
 

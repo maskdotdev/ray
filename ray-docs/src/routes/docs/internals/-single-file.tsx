@@ -401,6 +401,10 @@ function FileGrowthDiagram() {
 			<h4 class="text-sm font-semibold text-slate-400 mb-4">
 				File Size Examples
 			</h4>
+			<p class="text-xs text-slate-500 mb-4">
+				Example below assumes a 64MB WAL. Default WAL size is 1MB and
+				configurable.
+			</p>
 
 			<div class="space-y-4">
 				{/* Initial */}
@@ -408,15 +412,13 @@ function FileGrowthDiagram() {
 					<div class="w-20 text-xs text-slate-500">Initial</div>
 					<div class="flex-1 flex items-center gap-1">
 						<div class="h-6 w-1 bg-cyan-500/60 rounded" title="Header 4KB" />
-						<div class="h-6 flex-1 bg-violet-500/40 rounded" title="WAL 64MB" />
+						<div class="h-6 flex-1 bg-violet-500/40 rounded" title="WAL 64MB (example)" />
 						<div
 							class="h-6 w-1 bg-emerald-500/40 rounded"
 							title="Empty snapshot"
 						/>
 					</div>
-					<div class="w-20 text-right text-xs text-slate-400 font-mono">
-						~64 MB
-					</div>
+					<div class="w-20 text-right text-xs text-slate-400 font-mono">~64 MB</div>
 				</div>
 
 				{/* 100K nodes */}
@@ -563,6 +565,12 @@ export function SingleFilePage() {
 			<h2 id="wal-area">WAL Area</h2>
 
 			<p>The WAL area is a circular buffer divided into two regions:</p>
+			<p class="text-sm text-slate-400">
+				Default WAL size is 1MB. Auto-checkpoint is enabled by default and
+				triggers when WAL usage exceeds 80% of the active region. Increase WAL
+				size for high-throughput ingest. WAL size is fixed at creation; change it
+				via `resizeWal` (offline) or rebuild into a new file.
+			</p>
 
 			<WALDualRegion />
 
