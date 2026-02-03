@@ -900,6 +900,19 @@ impl Kite {
             dst: dst as NodeId,
           });
         }
+        "linkWithProps" => {
+          let src: i64 = op.get_named_property("src")?;
+          let dst: i64 = op.get_named_property("dst")?;
+          let edge_type: String = op.get_named_property("edgeType")?;
+          let props: Option<Object> = op.get_named_property("props")?;
+          let props_map = js_props_to_map(&env, props)?;
+          rust_ops.push(BatchOp::LinkWithProps {
+            src: src as NodeId,
+            edge_type,
+            dst: dst as NodeId,
+            props: props_map,
+          });
+        }
         "unlink" => {
           let src: i64 = op.get_named_property("src")?;
           let dst: i64 = op.get_named_property("dst")?;

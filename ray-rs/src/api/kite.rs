@@ -1167,18 +1167,22 @@ impl Kite {
       .ok_or_else(|| KiteError::InvalidSchema("Edge type not initialized".into()))?;
 
     let mut handle = begin_tx(&self.db)?;
-    add_edge(&mut handle, src, etype_id, dst)?;
-
-    let mut prop_pairs = Vec::with_capacity(props.len());
-    for (prop_name, value) in props {
-      let prop_key_id = if let Some(&id) = edge_def.prop_key_ids.get(&prop_name) {
-        id
-      } else {
-        handle.db.get_or_create_propkey(&prop_name)
-      };
-      prop_pairs.push((prop_key_id, value));
+    if props.is_empty() {
+      add_edge(&mut handle, src, etype_id, dst)?;
+    } else {
+      let mut prop_pairs = Vec::with_capacity(props.len());
+      for (prop_name, value) in props {
+        let prop_key_id = if let Some(&id) = edge_def.prop_key_ids.get(&prop_name) {
+          id
+        } else {
+          handle.db.get_or_create_propkey(&prop_name)
+        };
+        prop_pairs.push((prop_key_id, value));
+      }
+      handle
+        .db
+        .add_edge_with_props(src, etype_id, dst, prop_pairs)?;
     }
-    handle.db.set_edge_props(src, etype_id, dst, prop_pairs)?;
 
     commit(&mut handle)?;
     Ok(())
@@ -2368,6 +2372,13 @@ pub enum BatchOp {
     edge_type: String,
     dst: NodeId,
   },
+  /// Create an edge with properties
+  LinkWithProps {
+    src: NodeId,
+    edge_type: String,
+    dst: NodeId,
+    props: HashMap<String, PropValue>,
+  },
   /// Remove an edge
   Unlink {
     src: NodeId,
@@ -2416,6 +2427,40 @@ pub enum BatchResult {
   PropDeleted,
 }
 
+#[derive(Debug, Clone)]
+struct EdgeCacheEntry {
+  etype_id: ETypeId,
+  prop_key_ids: HashMap<String, PropKeyId>,
+}
+
+fn resolve_edge_cache_entry<'a>(
+  edge_cache: &'a mut HashMap<String, EdgeCacheEntry>,
+  edges: &HashMap<String, EdgeDef>,
+  edge_type: &str,
+) -> Result<&'a mut EdgeCacheEntry> {
+  if edge_cache.contains_key(edge_type) {
+    return Ok(edge_cache.get_mut(edge_type).unwrap());
+  }
+
+  let edge_def = edges.get(edge_type).ok_or_else(|| {
+    KiteError::InvalidSchema(format!("Unknown edge type: {edge_type}").into())
+  })?;
+
+  let etype_id = edge_def
+    .etype_id
+    .ok_or_else(|| KiteError::InvalidSchema("Edge type not initialized".into()))?;
+
+  edge_cache.insert(
+    edge_type.to_string(),
+    EdgeCacheEntry {
+      etype_id,
+      prop_key_ids: edge_def.prop_key_ids.clone(),
+    },
+  );
+
+  Ok(edge_cache.get_mut(edge_type).unwrap())
+}
+
 impl Kite {
   /// Execute multiple operations atomically in a single transaction
   ///
@@ -2448,6 +2493,7 @@ impl Kite {
   pub fn batch(&mut self, ops: Vec<BatchOp>) -> Result<Vec<BatchResult>> {
     let mut handle = begin_tx(&self.db)?;
     let mut results = Vec::with_capacity(ops.len());
+    let mut edge_cache: HashMap<String, EdgeCacheEntry> = HashMap::new();
 
     for op in ops {
       let result = match op {
@@ -2489,15 +2535,38 @@ impl Kite {
           edge_type,
           dst,
         } => {
-          let edge_def = self.edges.get(&edge_type).ok_or_else(|| {
-            KiteError::InvalidSchema(format!("Unknown edge type: {edge_type}").into())
-          })?;
-
-          let etype_id = edge_def
-            .etype_id
-            .ok_or_else(|| KiteError::InvalidSchema("Edge type not initialized".into()))?;
-
+          let entry = resolve_edge_cache_entry(&mut edge_cache, &self.edges, &edge_type)?;
+          let etype_id = entry.etype_id;
           add_edge(&mut handle, src, etype_id, dst)?;
+          BatchResult::EdgeCreated
+        }
+
+        BatchOp::LinkWithProps {
+          src,
+          edge_type,
+          dst,
+          props,
+        } => {
+          let entry = resolve_edge_cache_entry(&mut edge_cache, &self.edges, &edge_type)?;
+          let etype_id = entry.etype_id;
+
+          if props.is_empty() {
+            add_edge(&mut handle, src, etype_id, dst)?;
+          } else {
+            let mut prop_pairs = Vec::with_capacity(props.len());
+            for (prop_name, value) in props {
+              let prop_key_id = if let Some(&id) = entry.prop_key_ids.get(&prop_name) {
+                id
+              } else {
+                let key_id = handle.db.get_or_create_propkey(&prop_name);
+                entry.prop_key_ids.insert(prop_name.clone(), key_id);
+                key_id
+              };
+              prop_pairs.push((prop_key_id, value));
+            }
+            handle.db.add_edge_with_props(src, etype_id, dst, prop_pairs)?;
+          }
+
           BatchResult::EdgeCreated
         }
 
@@ -2536,18 +2605,15 @@ impl Kite {
           prop_name,
           value,
         } => {
-          let edge_def = self.edges.get(&edge_type).ok_or_else(|| {
-            KiteError::InvalidSchema(format!("Unknown edge type: {edge_type}").into())
-          })?;
+          let entry = resolve_edge_cache_entry(&mut edge_cache, &self.edges, &edge_type)?;
+          let etype_id = entry.etype_id;
 
-          let etype_id = edge_def
-            .etype_id
-            .ok_or_else(|| KiteError::InvalidSchema("Edge type not initialized".into()))?;
-
-          let prop_key_id = if let Some(&id) = edge_def.prop_key_ids.get(&prop_name) {
+          let prop_key_id = if let Some(&id) = entry.prop_key_ids.get(&prop_name) {
             id
           } else {
-            handle.db.get_or_create_propkey(&prop_name)
+            let key_id = handle.db.get_or_create_propkey(&prop_name);
+            entry.prop_key_ids.insert(prop_name.clone(), key_id);
+            key_id
           };
 
           set_edge_prop(&mut handle, src, etype_id, dst, prop_key_id, value)?;
@@ -2560,20 +2626,17 @@ impl Kite {
           dst,
           props,
         } => {
-          let edge_def = self.edges.get(&edge_type).ok_or_else(|| {
-            KiteError::InvalidSchema(format!("Unknown edge type: {edge_type}").into())
-          })?;
-
-          let etype_id = edge_def
-            .etype_id
-            .ok_or_else(|| KiteError::InvalidSchema("Edge type not initialized".into()))?;
+          let entry = resolve_edge_cache_entry(&mut edge_cache, &self.edges, &edge_type)?;
+          let etype_id = entry.etype_id;
 
           let mut prop_pairs = Vec::with_capacity(props.len());
           for (prop_name, value) in props {
-            let prop_key_id = if let Some(&id) = edge_def.prop_key_ids.get(&prop_name) {
+            let prop_key_id = if let Some(&id) = entry.prop_key_ids.get(&prop_name) {
               id
             } else {
-              handle.db.get_or_create_propkey(&prop_name)
+              let key_id = handle.db.get_or_create_propkey(&prop_name);
+              entry.prop_key_ids.insert(prop_name.clone(), key_id);
+              key_id
             };
             prop_pairs.push((prop_key_id, value));
           }
@@ -2842,6 +2905,23 @@ impl TxBuilder {
       src,
       edge_type: edge_type.into(),
       dst,
+    });
+    self
+  }
+
+  /// Add a link operation with properties
+  pub fn link_with_props(
+    mut self,
+    src: NodeId,
+    edge_type: impl Into<String>,
+    dst: NodeId,
+    props: HashMap<String, PropValue>,
+  ) -> Self {
+    self.ops.push(BatchOp::LinkWithProps {
+      src,
+      edge_type: edge_type.into(),
+      dst,
+      props,
     });
     self
   }
@@ -4183,6 +4263,42 @@ mod tests {
 
     // Verify edge was created
     assert!(ray.has_edge(alice_id, "FOLLOWS", bob_id).unwrap());
+
+    ray.close().unwrap();
+  }
+
+  #[test]
+  fn test_batch_link_with_props() {
+    let temp_dir = tempdir().unwrap();
+    let options = create_test_schema();
+
+    let mut ray = Kite::open(temp_db_path(&temp_dir), options).unwrap();
+
+    let alice = ray.create_node("User", "alice", HashMap::new()).unwrap();
+    let bob = ray.create_node("User", "bob", HashMap::new()).unwrap();
+
+    let mut props = HashMap::new();
+    props.insert("weight".to_string(), PropValue::F64(0.9));
+    props.insert("since".to_string(), PropValue::String("2025".into()));
+
+    ray
+      .batch(vec![BatchOp::LinkWithProps {
+        src: alice.id,
+        edge_type: "FOLLOWS".into(),
+        dst: bob.id,
+        props,
+      }])
+      .unwrap();
+
+    let weight = ray
+      .get_edge_prop(alice.id, "FOLLOWS", bob.id, "weight")
+      .unwrap();
+    assert_eq!(weight, Some(PropValue::F64(0.9)));
+
+    let since = ray
+      .get_edge_prop(alice.id, "FOLLOWS", bob.id, "since")
+      .unwrap();
+    assert_eq!(since, Some(PropValue::String("2025".into())));
 
     ray.close().unwrap();
   }

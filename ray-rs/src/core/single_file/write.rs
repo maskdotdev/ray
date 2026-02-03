@@ -8,7 +8,8 @@ use crate::core::wal::record::{
   build_define_etype_payload, build_define_label_payload, build_define_propkey_payload,
   build_del_edge_prop_payload, build_del_node_prop_payload, build_delete_edge_payload,
   build_delete_node_payload, build_remove_node_label_payload, build_set_edge_prop_payload,
-  build_set_edge_props_payload, build_set_node_prop_payload, WalRecord,
+  build_set_edge_props_payload, build_set_node_prop_payload, build_add_edge_props_payload,
+  WalRecord,
 };
 use crate::error::{KiteError, Result};
 use crate::types::*;
@@ -207,6 +208,84 @@ impl SingleFileDB {
     }
 
     // Invalidate cache (traversal cache for both src and dst)
+    self.cache_invalidate_edge(src, etype, dst);
+
+    Ok(())
+  }
+
+  /// Add an edge with properties in a single WAL record
+  pub fn add_edge_with_props(
+    &self,
+    src: NodeId,
+    etype: ETypeId,
+    dst: NodeId,
+    props: Vec<(PropKeyId, PropValue)>,
+  ) -> Result<()> {
+    if props.is_empty() {
+      return self.add_edge(src, etype, dst);
+    }
+
+    let (txid, tx_handle) = self.require_write_tx_handle()?;
+
+    let record = WalRecord::new(
+      WalRecordType::AddEdgeProps,
+      txid,
+      build_add_edge_props_payload(src, etype, dst, &props),
+    );
+    self.write_wal(record)?;
+
+    if let Some(mvcc) = self.mvcc.as_ref() {
+      let mut tx_mgr = mvcc.tx_manager.lock();
+      tx_mgr.record_write(txid, TxKey::Edge { src, etype, dst });
+      tx_mgr.record_write(
+        txid,
+        TxKey::NeighborsOut {
+          node_id: src,
+          etype: None,
+        },
+      );
+      tx_mgr.record_write(
+        txid,
+        TxKey::NeighborsIn {
+          node_id: dst,
+          etype: None,
+        },
+      );
+      tx_mgr.record_write(
+        txid,
+        TxKey::NeighborsOut {
+          node_id: src,
+          etype: Some(etype),
+        },
+      );
+      tx_mgr.record_write(
+        txid,
+        TxKey::NeighborsIn {
+          node_id: dst,
+          etype: Some(etype),
+        },
+      );
+      for (key_id, _) in props.iter() {
+        tx_mgr.record_write(
+          txid,
+          TxKey::EdgeProp {
+            src,
+            etype,
+            dst,
+            key_id: *key_id,
+          },
+        );
+      }
+    }
+
+    {
+      let mut tx = tx_handle.lock();
+      tx.pending.add_edge(src, etype, dst);
+      for (key_id, value) in props.into_iter() {
+        tx.pending.set_edge_prop(src, etype, dst, key_id, value);
+      }
+    }
+
     self.cache_invalidate_edge(src, etype, dst);
 
     Ok(())

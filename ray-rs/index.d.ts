@@ -642,6 +642,11 @@ export declare class Kite {
   hasTransaction(): boolean
   /** Execute a batch of operations atomically */
   batch(ops: Array<object>): Array<object>
+  /**
+   * Execute batch operations with adaptive splitting on WAL buffer full.
+   * Non-atomic across the full list; opt-in.
+   */
+  batchAdaptive(ops: Array<object>, options?: { maxBatch?: number; minBatch?: number } | undefined | null): Array<object>
   /** Begin a traversal from a node ID */
   from(nodeId: number): KiteTraversal
   /** Begin a traversal from multiple nodes */

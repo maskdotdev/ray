@@ -169,29 +169,29 @@ fn build_code_graph_fixture(
 
 fn apply_code_graph_edges(ray: &mut Kite, fixture: &CodeGraphFixture) {
   for (src, dst, order) in fixture.contains.iter() {
-    let _ = ray.link(*src, "CONTAINS", *dst);
-    let _ = ray.set_edge_prop(*src, "CONTAINS", *dst, "order", PropValue::I64(*order));
+    let mut props = HashMap::with_capacity(1);
+    props.insert("order".to_string(), PropValue::I64(*order));
+    let _ = ray.link_with_props(*src, "CONTAINS", *dst, props);
   }
 
   for (src, dst, line, role) in fixture.references.iter() {
-    let _ = ray.link(*src, "REFERENCES", *dst);
     let mut props = HashMap::with_capacity(2);
     props.insert("line".to_string(), PropValue::I64(*line));
     props.insert("role".to_string(), PropValue::I64(*role));
-    let _ = ray.set_edge_props(*src, "REFERENCES", *dst, props);
+    let _ = ray.link_with_props(*src, "REFERENCES", *dst, props);
   }
 
   for (src, dst, line, weight) in fixture.calls.iter() {
-    let _ = ray.link(*src, "CALLS", *dst);
     let mut props = HashMap::with_capacity(2);
     props.insert("line".to_string(), PropValue::I64(*line));
     props.insert("weight".to_string(), PropValue::F64(*weight));
-    let _ = ray.set_edge_props(*src, "CALLS", *dst, props);
+    let _ = ray.link_with_props(*src, "CALLS", *dst, props);
   }
 
   for (src, dst, line) in fixture.imports.iter() {
-    let _ = ray.link(*src, "IMPORTS", *dst);
-    let _ = ray.set_edge_prop(*src, "IMPORTS", *dst, "line", PropValue::I64(*line));
+    let mut props = HashMap::with_capacity(1);
+    props.insert("line".to_string(), PropValue::I64(*line));
+    let _ = ray.link_with_props(*src, "IMPORTS", *dst, props);
   }
 }
 
@@ -210,14 +210,9 @@ fn apply_code_graph_edges_batched(ray: &mut Kite, fixture: &CodeGraphFixture, ba
   };
 
   for (src, dst, order) in fixture.contains.iter() {
-    ops.push(BatchOp::Link {
-      src: *src,
-      edge_type: "CONTAINS".into(),
-      dst: *dst,
-    });
     let mut props = HashMap::with_capacity(1);
     props.insert("order".to_string(), PropValue::I64(*order));
-    ops.push(BatchOp::SetEdgeProps {
+    ops.push(BatchOp::LinkWithProps {
       src: *src,
       edge_type: "CONTAINS".into(),
       dst: *dst,
@@ -229,15 +224,10 @@ fn apply_code_graph_edges_batched(ray: &mut Kite, fixture: &CodeGraphFixture, ba
   }
 
   for (src, dst, line, role) in fixture.references.iter() {
-    ops.push(BatchOp::Link {
-      src: *src,
-      edge_type: "REFERENCES".into(),
-      dst: *dst,
-    });
     let mut props = HashMap::with_capacity(2);
     props.insert("line".to_string(), PropValue::I64(*line));
     props.insert("role".to_string(), PropValue::I64(*role));
-    ops.push(BatchOp::SetEdgeProps {
+    ops.push(BatchOp::LinkWithProps {
       src: *src,
       edge_type: "REFERENCES".into(),
       dst: *dst,
@@ -249,15 +239,10 @@ fn apply_code_graph_edges_batched(ray: &mut Kite, fixture: &CodeGraphFixture, ba
   }
 
   for (src, dst, line, weight) in fixture.calls.iter() {
-    ops.push(BatchOp::Link {
-      src: *src,
-      edge_type: "CALLS".into(),
-      dst: *dst,
-    });
     let mut props = HashMap::with_capacity(2);
     props.insert("line".to_string(), PropValue::I64(*line));
     props.insert("weight".to_string(), PropValue::F64(*weight));
-    ops.push(BatchOp::SetEdgeProps {
+    ops.push(BatchOp::LinkWithProps {
       src: *src,
       edge_type: "CALLS".into(),
       dst: *dst,
@@ -269,14 +254,9 @@ fn apply_code_graph_edges_batched(ray: &mut Kite, fixture: &CodeGraphFixture, ba
   }
 
   for (src, dst, line) in fixture.imports.iter() {
-    ops.push(BatchOp::Link {
-      src: *src,
-      edge_type: "IMPORTS".into(),
-      dst: *dst,
-    });
     let mut props = HashMap::with_capacity(1);
     props.insert("line".to_string(), PropValue::I64(*line));
-    ops.push(BatchOp::SetEdgeProps {
+    ops.push(BatchOp::LinkWithProps {
       src: *src,
       edge_type: "IMPORTS".into(),
       dst: *dst,

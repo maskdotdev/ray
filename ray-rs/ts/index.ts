@@ -557,6 +557,7 @@ export class Kite extends NativeKite {
       'createNode',
       'deleteNode',
       'link',
+      'linkWithProps',
       'unlink',
       'setProp',
       'setEdgeProp',
@@ -615,6 +616,44 @@ export class Kite extends NativeKite {
       }
       throw err
     }
+  }
+
+  batchAdaptive(
+    operations: Array<any>,
+    options?: { maxBatch?: number; minBatch?: number } | null,
+  ): any[] {
+    if (operations.length === 0) {
+      return []
+    }
+
+    let maxBatch = options?.maxBatch ?? 3000
+    let minBatch = options?.minBatch ?? 1
+    if (maxBatch < 1) maxBatch = 1
+    if (minBatch < 1) minBatch = 1
+    if (minBatch > maxBatch) minBatch = maxBatch
+
+    const results: any[] = []
+    let cursor = 0
+    let batchSize = Math.min(maxBatch, operations.length)
+
+    while (cursor < operations.length) {
+      const end = Math.min(cursor + batchSize, operations.length)
+      const slice = operations.slice(cursor, end)
+      try {
+        const out = this.batch(slice)
+        results.push(...out)
+        cursor = end
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        if (/wal buffer full/i.test(message) && batchSize > minBatch) {
+          batchSize = Math.max(minBatch, Math.floor(batchSize / 2))
+          continue
+        }
+        throw err
+      }
+    }
+
+    return results
   }
 
   get(nodeType: NodeLike, key: unknown, props?: NodePropsSelection): object | null {
@@ -829,6 +868,10 @@ export interface Kite {
     propName: string,
     value: unknown,
   ): void
+  batchAdaptive(
+    operations: Array<any>,
+    options?: { maxBatch?: number; minBatch?: number } | null,
+  ): Array<any>
   setEdgeProps(
     src: NodeIdLike,
     edgeType: EdgeLike,
