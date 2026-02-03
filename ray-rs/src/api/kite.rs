@@ -13,7 +13,7 @@
 
 use crate::core::single_file::{
   close_single_file, is_single_file_path, open_single_file, single_file_extension, FullEdge,
-  SingleFileDB, SingleFileOpenOptions,
+  SingleFileDB, SingleFileOpenOptions, SyncMode,
 };
 use crate::error::{KiteError, Result};
 use crate::types::*;
@@ -531,6 +531,8 @@ pub struct KiteOptions {
   pub read_only: bool,
   /// Create database if it doesn't exist
   pub create_if_missing: bool,
+  /// Synchronization mode for WAL writes (default: Full)
+  pub sync_mode: SyncMode,
   /// Enable MVCC (snapshot isolation + conflict detection)
   pub mvcc: bool,
   /// MVCC GC interval in ms
@@ -548,6 +550,7 @@ impl KiteOptions {
       edges: Vec::new(),
       read_only: false,
       create_if_missing: true,
+      sync_mode: SyncMode::Full,
       mvcc: false,
       mvcc_gc_interval_ms: None,
       mvcc_retention_ms: None,
@@ -567,6 +570,23 @@ impl KiteOptions {
 
   pub fn read_only(mut self, value: bool) -> Self {
     self.read_only = value;
+    self
+  }
+
+  pub fn sync_mode(mut self, mode: SyncMode) -> Self {
+    self.sync_mode = mode;
+    self
+  }
+
+  /// Set sync mode to Normal (fsync on checkpoint only)
+  pub fn sync_normal(mut self) -> Self {
+    self.sync_mode = SyncMode::Normal;
+    self
+  }
+
+  /// Set sync mode to Off (no fsync)
+  pub fn sync_off(mut self) -> Self {
+    self.sync_mode = SyncMode::Off;
     self
   }
 
@@ -641,6 +661,7 @@ impl Kite {
     let mut db_options = SingleFileOpenOptions::new()
       .read_only(options.read_only)
       .create_if_missing(options.create_if_missing)
+      .sync_mode(options.sync_mode)
       .mvcc(options.mvcc);
     if let Some(v) = options.mvcc_gc_interval_ms {
       db_options = db_options.mvcc_gc_interval_ms(v);
@@ -874,6 +895,25 @@ impl Kite {
 
     let mut handle = begin_tx(&self.db)?;
     set_node_prop(&mut handle, node_id, prop_key_id, value)?;
+    commit(&mut handle)?;
+    Ok(())
+  }
+
+  /// Set multiple node properties in a single transaction
+  pub fn set_props(
+    &mut self,
+    node_id: NodeId,
+    props: HashMap<String, PropValue>,
+  ) -> Result<()> {
+    if props.is_empty() {
+      return Ok(());
+    }
+
+    let mut handle = begin_tx(&self.db)?;
+    for (prop_name, value) in props {
+      let prop_key_id = self.db.get_or_create_propkey(&prop_name);
+      set_node_prop(&mut handle, node_id, prop_key_id, value)?;
+    }
     commit(&mut handle)?;
     Ok(())
   }

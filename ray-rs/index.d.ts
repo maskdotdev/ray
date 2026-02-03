@@ -570,6 +570,8 @@ export declare class Kite {
   getProp(nodeId: number, propName: string): JsPropValue | null
   /** Set a node property value */
   setProp(nodeId: number, propName: string, value: unknown): void
+  /** Set multiple node properties */
+  setProps(nodeId: number, props: Record<string, unknown>): void
   /** Check if a node exists */
   exists(nodeId: number): boolean
   /** Delete a node by ID */
@@ -1076,6 +1078,7 @@ export interface JsKiteOptions {
   edges: Array<JsEdgeSpec>
   readOnly?: boolean
   createIfMissing?: boolean
+  syncMode?: JsSyncMode
   lockFile?: boolean
   mvcc?: boolean
   mvccGcIntervalMs?: number

@@ -17,7 +17,7 @@ use tempfile::tempdir;
 
 extern crate kitedb;
 use kitedb::api::kite::{EdgeDef, Kite, KiteOptions, NodeDef, PropDef};
-use kitedb::core::single_file::{open_single_file, SingleFileOpenOptions};
+use kitedb::core::single_file::{open_single_file, SingleFileOpenOptions, SyncMode};
 use kitedb::mvcc::TxManager;
 use kitedb::types::{PropValue, TxKey};
 
@@ -33,7 +33,10 @@ fn create_test_schema() -> KiteOptions {
 
   let follows = EdgeDef::new("FOLLOWS");
 
-  KiteOptions::new().node(user).edge(follows)
+  KiteOptions::new()
+    .node(user)
+    .edge(follows)
+    .sync_mode(SyncMode::Normal)
 }
 
 fn temp_db_path(temp_dir: &tempfile::TempDir) -> std::path::PathBuf {
@@ -469,7 +472,11 @@ fn bench_single_file_sequential_reads(c: &mut Criterion) {
 
   // Setup database
   {
-    let db = open_single_file(&db_path, SingleFileOpenOptions::new()).unwrap();
+    let db = open_single_file(
+      &db_path,
+      SingleFileOpenOptions::new().sync_mode(SyncMode::Normal),
+    )
+    .unwrap();
     db.begin(false).unwrap();
     for i in 0..1000 {
       let key = format!("node{i}");
@@ -481,7 +488,11 @@ fn bench_single_file_sequential_reads(c: &mut Criterion) {
     kitedb::core::single_file::close_single_file(db).unwrap();
   }
 
-  let db = open_single_file(&db_path, SingleFileOpenOptions::new()).unwrap();
+  let db = open_single_file(
+    &db_path,
+    SingleFileOpenOptions::new().sync_mode(SyncMode::Normal),
+  )
+  .unwrap();
 
   group.throughput(Throughput::Elements(1000));
 

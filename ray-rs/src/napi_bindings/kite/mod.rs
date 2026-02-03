@@ -123,6 +123,9 @@ impl Kite {
     kite_opts.mvcc_gc_interval_ms = options.mvcc_gc_interval_ms.map(|v| v as u64);
     kite_opts.mvcc_retention_ms = options.mvcc_retention_ms.map(|v| v as u64);
     kite_opts.mvcc_max_chain_depth = options.mvcc_max_chain_depth.map(|v| v as usize);
+    if let Some(mode) = options.sync_mode {
+      kite_opts.sync_mode = mode.into();
+    }
 
     for node in options.nodes {
       let key_spec = Arc::new(parse_key_spec(&node.name, node.key)?);
@@ -323,6 +326,17 @@ impl Kite {
     self.with_kite_mut(|ray| {
       ray
         .set_prop(node_id as NodeId, &prop_name, prop_value)
+        .map_err(|e| Error::from_reason(e.to_string()))
+    })
+  }
+
+  /// Set multiple node property values
+  #[napi]
+  pub fn set_props(&self, env: Env, node_id: i64, props: Object) -> Result<()> {
+    let props_map = js_props_to_map(&env, Some(props))?;
+    self.with_kite_mut(|ray| {
+      ray
+        .set_props(node_id as NodeId, props_map)
         .map_err(|e| Error::from_reason(e.to_string()))
     })
   }

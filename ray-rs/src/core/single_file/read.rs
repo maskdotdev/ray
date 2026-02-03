@@ -594,8 +594,20 @@ impl SingleFileDB {
       return Vec::new();
     }
 
-    let mut edges = Vec::new();
     let snapshot = self.snapshot.read();
+    let mut capacity = 0usize;
+    if let Some(ref snap) = *snapshot {
+      if let Some(phys) = snap.get_phys_node(node_id) {
+        capacity = capacity.saturating_add(snap.get_out_degree(phys).unwrap_or(0));
+      }
+    }
+    if let Some(added_edges) = delta.out_add.get(&node_id) {
+      capacity = capacity.saturating_add(added_edges.len());
+    }
+    if let Some(added_edges) = pending.and_then(|p| p.out_add.get(&node_id)) {
+      capacity = capacity.saturating_add(added_edges.len());
+    }
+    let mut edges = Vec::with_capacity(capacity);
 
     // Get edges from snapshot
     if let Some(ref snap) = *snapshot {
@@ -675,7 +687,8 @@ impl SingleFileDB {
     }
 
     // Sort by (etype, dst) for consistent ordering
-    edges.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
+    edges.sort_unstable_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
+    edges.dedup();
 
     if let Some(mvcc) = self.mvcc.as_ref() {
       if txid != 0 {
@@ -732,8 +745,20 @@ impl SingleFileDB {
       return Vec::new();
     }
 
-    let mut edges = Vec::new();
     let snapshot = self.snapshot.read();
+    let mut capacity = 0usize;
+    if let Some(ref snap) = *snapshot {
+      if let Some(phys) = snap.get_phys_node(node_id) {
+        capacity = capacity.saturating_add(snap.get_in_degree(phys).unwrap_or(0));
+      }
+    }
+    if let Some(added_edges) = delta.in_add.get(&node_id) {
+      capacity = capacity.saturating_add(added_edges.len());
+    }
+    if let Some(added_edges) = pending.and_then(|p| p.in_add.get(&node_id)) {
+      capacity = capacity.saturating_add(added_edges.len());
+    }
+    let mut edges = Vec::with_capacity(capacity);
 
     // Get edges from snapshot
     if let Some(ref snap) = *snapshot {
@@ -813,7 +838,8 @@ impl SingleFileDB {
     }
 
     // Sort by (etype, src) for consistent ordering
-    edges.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
+    edges.sort_unstable_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
+    edges.dedup();
 
     if let Some(mvcc) = self.mvcc.as_ref() {
       if txid != 0 {

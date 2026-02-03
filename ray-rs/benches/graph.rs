@@ -8,6 +8,7 @@ use tempfile::tempdir;
 
 extern crate kitedb;
 use kitedb::api::kite::{BatchOp, EdgeDef, Kite, KiteOptions, NodeDef, PropDef};
+use kitedb::core::single_file::SyncMode;
 use kitedb::types::PropValue;
 
 fn temp_db_path(temp_dir: &tempfile::TempDir) -> std::path::PathBuf {
@@ -21,7 +22,10 @@ fn create_test_schema() -> KiteOptions {
 
   let follows = EdgeDef::new("FOLLOWS");
 
-  KiteOptions::new().node(user).edge(follows)
+  KiteOptions::new()
+    .node(user)
+    .edge(follows)
+    .sync_mode(SyncMode::Normal)
 }
 
 // =============================================================================
@@ -85,6 +89,40 @@ fn bench_get_node_by_key(c: &mut Criterion) {
   });
 
   group.bench_function("get_nonexistent", |bencher| {
+    bencher.iter(|| {
+      let _ = black_box(ray.get("User", "nonexistent"));
+    });
+  });
+
+  group.finish();
+  ray.close().unwrap();
+}
+
+fn bench_get_node_by_key_micro(c: &mut Criterion) {
+  let mut group = c.benchmark_group("node_get_by_key_micro");
+
+  let temp_dir = tempdir().unwrap();
+  let mut ray = Kite::open(temp_db_path(&temp_dir), create_test_schema()).unwrap();
+
+  let mut keys = Vec::with_capacity(1000);
+  for i in 0..1000 {
+    let key = format!("user{i}");
+    ray
+      .create_node("User", &key, HashMap::new())
+      .unwrap();
+    keys.push(key);
+  }
+
+  group.bench_function("existing_prebuilt", |bencher| {
+    let mut i = 0usize;
+    bencher.iter(|| {
+      let key = &keys[i % keys.len()];
+      let _ = black_box(ray.get("User", key));
+      i = i.wrapping_add(1);
+    });
+  });
+
+  group.bench_function("nonexistent_prebuilt", |bencher| {
     bencher.iter(|| {
       let _ = black_box(ray.get("User", "nonexistent"));
     });
@@ -388,6 +426,31 @@ fn bench_set_prop(c: &mut Criterion) {
   group.finish();
 }
 
+fn bench_set_prop_tx(c: &mut Criterion) {
+  let mut group = c.benchmark_group("property_set_tx");
+
+  group.bench_function("set_string_tx_100", |bencher| {
+    bencher.iter_with_setup(
+      || {
+        let temp_dir = tempdir().unwrap();
+        let mut ray = Kite::open(temp_db_path(&temp_dir), create_test_schema()).unwrap();
+        let node = ray.create_node("User", "testuser", HashMap::new()).unwrap();
+        (temp_dir, ray, node.id)
+      },
+      |(_temp_dir, mut ray, node_id)| {
+        let _ = black_box(ray.transaction(|ctx| {
+          for i in 0..100 {
+            ctx.set_prop(node_id, "name", PropValue::String(format!("Name{i}")))?;
+          }
+          Ok(())
+        }));
+      },
+    );
+  });
+
+  group.finish();
+}
+
 // =============================================================================
 // Pathfinding Benchmarks
 // =============================================================================
@@ -523,6 +586,7 @@ criterion_group!(
   bench_create_node,
   bench_batch_create_node,
   bench_get_node_by_key,
+  bench_get_node_by_key_micro,
   bench_node_exists,
   bench_link,
   bench_has_edge,
@@ -530,6 +594,7 @@ criterion_group!(
   bench_multi_hop_traversal,
   bench_get_prop,
   bench_set_prop,
+  bench_set_prop_tx,
   bench_shortest_path,
   bench_count,
 );

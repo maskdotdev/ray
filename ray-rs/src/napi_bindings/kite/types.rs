@@ -6,7 +6,7 @@
 use napi_derive::napi;
 use std::collections::HashMap;
 
-use super::super::database::JsPropValue;
+use super::super::database::{JsPropValue, JsSyncMode};
 
 // =============================================================================
 // Schema Input Types
@@ -78,4 +78,6 @@ pub struct JsKiteOptions {
   pub mvcc_retention_ms: Option<i64>,
   /// MVCC max version chain depth
   pub mvcc_max_chain_depth: Option<i64>,
+  /// Sync mode: "Full", "Normal", or "Off" (default: "Full")
+  pub sync_mode: Option<JsSyncMode>,
 }
