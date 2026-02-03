@@ -24,6 +24,47 @@ const makeDbPath = () => {
   return path.join(dir, 'test.kitedb')
 }
 
+test('default auto-checkpoint prevents WAL overflow on repeated commits', (t) => {
+  const db = Database.open(makeDbPath(), {
+    walSize: 128 * 1024,
+    backgroundCheckpoint: false,
+  })
+  let failure: unknown = null
+
+  try {
+    for (let i = 0; i < 5000; i += 1) {
+      db.begin()
+      db.createNode(`n-${i}`)
+      db.commit()
+    }
+  } catch (err) {
+    failure = err
+  } finally {
+    db.close()
+  }
+
+  t.is(failure, null)
+})
+
+test('resizeWal updates WAL size for existing db', (t) => {
+  const dbPath = makeDbPath()
+  const db = Database.open(dbPath, {
+    walSize: 64 * 1024,
+    backgroundCheckpoint: false,
+  })
+
+  db.begin()
+  db.createNode('a')
+  db.commit()
+
+  db.resizeWal(1024 * 1024)
+  db.close()
+
+  const reopened = Database.open(dbPath, { walSize: 1024 * 1024 })
+  t.truthy(reopened.getNodeByKey('a'))
+  reopened.close()
+})
+
 test('sync function from native code', (t) => {
   const fixture = 42
   t.is(plus100(fixture), fixture + 100)

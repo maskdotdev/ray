@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-import { kite, kiteSync, node, edge, prop, optional } from '../dist/index.js'
+import { kite, kiteSync, node, edge, prop, optional, Database, bulkWrite } from '../dist/index.js'
 
 const makeDbPath = () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kitedb-schema-'))
@@ -95,6 +95,22 @@ test('edge() without props', (t) => {
   const follows = edge('follows')
   t.is(follows.name, 'follows')
   t.is(follows.props, undefined)
+})
+
+test('bulkWrite auto-commits in chunks', (t) => {
+  const db = Database.open(makeDbPath(), {
+    walSize: 64 * 1024,
+    autoCheckpoint: false,
+    backgroundCheckpoint: false,
+  })
+
+  const ops: Array<(ctx: Database) => void> = Array.from({ length: 1000 }, (_, i) => {
+    return (ctx) => ctx.createNode(`n-${i}`)
+  })
+
+  bulkWrite(db, ops, { chunkSize: 100 })
+  t.is(db.countNodes(), 1000)
+  db.close()
 })
 
 // =============================================================================
