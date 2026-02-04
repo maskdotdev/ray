@@ -106,7 +106,7 @@ impl KiteInsertExecutorSingle {
 
   /// Execute the insert and return the node
   #[napi]
-  pub fn returning(&mut self, env: Env) -> Result<Object> {
+  pub fn returning(&mut self, env: Env) -> Result<Object<'_>> {
     let props = std::mem::take(&mut self.props);
     let (node_ref, props) =
       insert_single_returning(&self.ray, &self.node_type, &self.key_suffix, props)?;
@@ -135,7 +135,7 @@ impl KiteInsertExecutorMany {
 
   /// Execute the inserts and return nodes
   #[napi]
-  pub fn returning(&mut self, env: Env) -> Result<Vec<Object>> {
+  pub fn returning(&mut self, env: Env) -> Result<Vec<Object<'_>>> {
     let entries = std::mem::take(&mut self.entries);
     let results = insert_many(&self.ray, &self.node_type, entries, true)?;
     let mut out = Vec::with_capacity(results.len());
@@ -327,7 +327,7 @@ impl KiteUpsertExecutorSingle {
 
   /// Execute the upsert and return the node
   #[napi]
-  pub fn returning(&mut self, env: Env) -> Result<Object> {
+  pub fn returning(&mut self, env: Env) -> Result<Object<'_>> {
     let props = std::mem::take(&mut self.props);
     let (node_ref, props) =
       upsert_single_returning(&self.ray, &self.node_type, &self.key_suffix, props)?;
@@ -356,7 +356,7 @@ impl KiteUpsertExecutorMany {
 
   /// Execute the upserts and return nodes
   #[napi]
-  pub fn returning(&mut self, env: Env) -> Result<Vec<Object>> {
+  pub fn returning(&mut self, env: Env) -> Result<Vec<Object<'_>>> {
     let entries = std::mem::take(&mut self.entries);
     let results = upsert_many(&self.ray, &self.node_type, entries, true)?;
     let mut out = Vec::with_capacity(results.len());

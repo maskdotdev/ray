@@ -25,7 +25,7 @@ export declare class Database {
   /** Create a new node */
   createNode(key?: string | undefined | null): number
   /** Create multiple nodes in a single WAL record (fast path) */
-  createNodesBatch(keys: Array<string | null | undefined>): Array<number>
+  createNodesBatch(keys: Array<string | undefined | null>): Array<number>
   /** Upsert a node by key (create if missing, update props) */
   upsertNode(key: string, props: Array<JsNodeProp>): number
   /** Upsert a node by ID (create if missing, update props) */
@@ -807,6 +807,9 @@ export declare class VectorIndex {
   clear(): void
 }
 
+/** Inspect a backup without restoring it */
+export declare function backupInfo(backupPath: string): BackupResult
+
 /** Options for creating a backup */
 export interface BackupOptions {
   /** Force a checkpoint before backup (single-file only) */
@@ -956,9 +959,6 @@ export interface ExportResult {
   edgeCount: number
 }
 
-/** Inspect a backup without restoring it */
-export declare function getBackupInfo(backupPath: string): BackupResult
-
 export declare function healthCheck(db: Database): HealthCheckResult
 
 /** Health check entry */
@@ -1059,18 +1059,19 @@ export interface JsEdgeSpec {
   props?: Record<string, JsPropSpec>
 }
 
-/** Full edge representation for JS (src, etype, dst) */
-export interface JsFullEdge {
-  src: number
-  etype: number
-  dst: number
-}
-
+/** Edge input with properties for batch operations */
 export interface JsEdgeWithPropsInput {
   src: number
   etype: number
   dst: number
   props: Array<JsNodeProp>
+}
+
+/** Full edge representation for JS (src, etype, dst) */
+export interface JsFullEdge {
+  src: number
+  etype: number
+  dst: number
 }
 
 /** Configuration for IVF index */

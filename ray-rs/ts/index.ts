@@ -1028,7 +1028,7 @@ export {
   openDatabase,
   createBackup,
   restoreBackup,
-  getBackupInfo,
+  backupInfo,
   createOfflineBackup,
   collectMetrics,
   healthCheck,
@@ -1125,8 +1125,6 @@ export interface KiteOptions {
   groupCommitEnabled?: boolean
   /** Group commit window in milliseconds */
   groupCommitWindowMs?: number
-  /** Acquire file lock (default: true) */
-  lockFile?: boolean
   /** WAL size in megabytes (default: 1MB) */
   walSizeMb?: number
   /** WAL usage threshold (0.0-1.0) to trigger auto-checkpoint */
@@ -1187,7 +1185,6 @@ function optionsToNative(options: KiteOptions): JsKiteOptions {
     syncMode: options.syncMode,
     groupCommitEnabled: options.groupCommitEnabled,
     groupCommitWindowMs: options.groupCommitWindowMs,
-    lockFile: options.lockFile,
     walSizeMb: options.walSizeMb,
     checkpointThreshold: options.checkpointThreshold,
   }

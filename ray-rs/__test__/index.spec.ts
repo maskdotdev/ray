@@ -11,7 +11,7 @@ import {
   collectMetrics,
   createBackup,
   createOfflineBackup,
-  getBackupInfo,
+  backupInfo,
   healthCheck,
   pathConfig,
   plus100,
@@ -320,7 +320,7 @@ test('backup/restore APIs', (t) => {
   const backup = createBackup(db, backupBase)
   t.true(backup.path.endsWith('.kitedb'))
 
-  const info = getBackupInfo(backup.path)
+  const info = backupInfo(backup.path)
   t.is(info.path, backup.path)
 
   db.close()

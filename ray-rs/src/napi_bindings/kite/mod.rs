@@ -195,7 +195,7 @@ impl Kite {
     node_type: String,
     key: Unknown,
     props: Option<Vec<String>>,
-  ) -> Result<Option<Object>> {
+  ) -> Result<Option<Object<'_>>> {
     let key_suffix = {
       let spec = self.key_spec(&node_type)?;
       key_suffix_from_js(&env, spec.as_ref(), key)?
@@ -225,7 +225,7 @@ impl Kite {
     env: Env,
     node_id: i64,
     props: Option<Vec<String>>,
-  ) -> Result<Option<Object>> {
+  ) -> Result<Option<Object<'_>>> {
     let selected_props = props.map(|props| props.into_iter().collect::<HashSet<String>>());
     self.with_kite(move |ray| {
       let node_ref = ray
@@ -245,7 +245,7 @@ impl Kite {
 
   /// Get a lightweight node reference by key (no properties)
   #[napi]
-  pub fn get_ref(&self, env: Env, node_type: String, key: Unknown) -> Result<Option<Object>> {
+  pub fn get_ref(&self, env: Env, node_type: String, key: Unknown) -> Result<Option<Object<'_>>> {
     let key_suffix = {
       let spec = self.key_spec(&node_type)?;
       key_suffix_from_js(&env, spec.as_ref(), key)?
@@ -290,7 +290,7 @@ impl Kite {
     env: Env,
     node_ids: Vec<i64>,
     props: Option<Vec<String>>,
-  ) -> Result<Vec<Object>> {
+  ) -> Result<Vec<Object<'_>>> {
     if node_ids.is_empty() {
       return Ok(Vec::new());
     }
@@ -642,7 +642,7 @@ impl Kite {
 
   /// List all nodes of a type (returns array of node objects)
   #[napi]
-  pub fn all(&self, env: Env, node_type: String) -> Result<Vec<Object>> {
+  pub fn all(&self, env: Env, node_type: String) -> Result<Vec<Object<'_>>> {
     self.with_kite(|ray| {
       let nodes = ray
         .all(&node_type)
@@ -871,7 +871,7 @@ impl Kite {
 
   /// Execute a batch of operations atomically
   #[napi]
-  pub fn batch(&self, env: Env, ops: Vec<Object>) -> Result<Vec<Object>> {
+  pub fn batch(&self, env: Env, ops: Vec<Object>) -> Result<Vec<Object<'_>>> {
     let mut rust_ops = Vec::with_capacity(ops.len());
 
     for op in ops {

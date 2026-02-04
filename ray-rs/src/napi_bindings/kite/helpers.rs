@@ -20,7 +20,7 @@ use super::key_spec::KeySpec;
 // =============================================================================
 
 /// Convert a PropValue to a JS Unknown value
-pub(crate) fn prop_value_to_js(env: &Env, value: PropValue) -> Result<Unknown> {
+pub(crate) fn prop_value_to_js(env: &Env, value: PropValue) -> Result<Unknown<'_>> {
   match value {
     PropValue::Null => Null.into_unknown(env),
     PropValue::Bool(v) => v.into_unknown(env),

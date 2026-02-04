@@ -266,7 +266,7 @@ impl KiteTraversal {
   }
 
   #[napi(js_name = "nodesWithProps")]
-  pub fn nodes_with_props(&self, env: Env) -> Result<Vec<Object>> {
+  pub fn nodes_with_props(&self, env: Env) -> Result<Vec<Object<'_>>> {
     let builder = self.build_builder();
     let selected_props = builder
       .selected_properties()
