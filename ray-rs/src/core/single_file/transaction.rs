@@ -443,7 +443,7 @@ impl SingleFileDB {
     self.apply_mvcc_commit(commit_ts_for_mvcc, txid, &pending, &delta);
 
     // Apply pending vector operations
-    self.apply_pending_vectors(&pending.pending_vectors);
+    self.apply_pending_vectors(&pending.pending_vectors)?;
 
     merge_pending_delta(&mut delta, pending);
     if bulk_load {

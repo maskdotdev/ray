@@ -738,7 +738,11 @@ pub fn open_single_file<P: AsRef<Path>>(
           let config = VectorStoreConfig::new(vector.len());
           create_vector_store(config)
         });
-        let _ = vector_store_insert(store, node_id, vector.as_ref());
+        vector_store_insert(store, node_id, vector.as_ref()).map_err(|e| {
+          KiteError::InvalidWal(format!(
+            "Failed to apply vector insert during WAL replay for node {node_id} (prop {prop_key_id}): {e}"
+          ))
+        })?;
       }
       None => {
         // Delete operation

@@ -454,7 +454,7 @@ fn maybe_seal_fragment(manifest: &mut VectorManifest, fragment_idx: usize) {
 }
 
 /// Validate vector for NaN, Infinity, and zero vectors
-fn validate_vector(vector: &[f32]) -> Result<(), VectorStoreError> {
+pub(crate) fn validate_vector(vector: &[f32]) -> Result<(), VectorStoreError> {
   let mut all_zero = true;
 
   for &val in vector {

@@ -9,7 +9,8 @@ use crate::core::wal::record::{
 use crate::error::{KiteError, Result};
 use crate::types::*;
 use crate::vector::store::{
-  create_vector_store, vector_store_delete, vector_store_get, vector_store_has, vector_store_insert,
+  create_vector_store, validate_vector, vector_store_delete, vector_store_get, vector_store_has,
+  vector_store_insert,
 };
 use crate::vector::types::{VectorManifest, VectorStoreConfig};
 use std::collections::HashMap;
@@ -42,6 +43,30 @@ impl SingleFileDB {
         }
       }
     }
+
+    // If the store doesn't exist yet, enforce dimensions against any pending vector
+    // operations for the same property key in this transaction.
+    {
+      let tx = tx_handle.lock();
+      for (&(_pending_node_id, pending_prop_key_id), pending_op) in &tx.pending.pending_vectors {
+        if pending_prop_key_id != prop_key_id {
+          continue;
+        }
+        let Some(existing) = pending_op.as_ref() else {
+          continue;
+        };
+        if existing.len() != vector.len() {
+          return Err(KiteError::VectorDimensionMismatch {
+            expected: existing.len(),
+            got: vector.len(),
+          });
+        }
+        break;
+      }
+    }
+
+    // Validate vector before WAL write / queuing pending ops.
+    validate_vector(vector).map_err(|e| KiteError::InvalidQuery(e.to_string().into()))?;
 
     // Write WAL record
     let record = WalRecord::new(
@@ -184,7 +209,7 @@ impl SingleFileDB {
   pub(crate) fn apply_pending_vectors(
     &self,
     pending_vectors: &HashMap<(NodeId, PropKeyId), Option<VectorRef>>,
-  ) {
+  ) -> Result<()> {
     let mut stores = self.vector_stores.write();
 
     for (&(node_id, prop_key_id), operation) in pending_vectors {
@@ -197,7 +222,11 @@ impl SingleFileDB {
           });
 
           // Insert (this handles replacement of existing vectors)
-          let _ = vector_store_insert(store, node_id, vector.as_ref());
+          vector_store_insert(store, node_id, vector.as_ref()).map_err(|e| {
+            KiteError::Internal(format!(
+              "Failed to apply vector insert during commit for node {node_id} (prop {prop_key_id}): {e}"
+            ))
+          })?;
         }
         None => {
           // Delete operation
@@ -207,6 +236,8 @@ impl SingleFileDB {
         }
       }
     }
+
+    Ok(())
   }
 }
 
@@ -264,6 +295,31 @@ mod tests {
   use tempfile::tempdir;
 
   #[test]
+  fn test_set_node_vector_rejects_invalid_vectors() {
+    let temp_dir = tempdir().unwrap();
+    let db_path = temp_dir.path().join("invalid-vectors.kitedb");
+
+    let db = open_single_file(&db_path, SingleFileOpenOptions::new()).unwrap();
+    db.begin(false).unwrap();
+
+    let node_id = db.create_node(None).unwrap();
+    let prop_key_id = db.define_propkey("embedding").unwrap();
+
+    // All-zero vector should be rejected (would otherwise be silently dropped on commit).
+    assert!(db
+      .set_node_vector(node_id, prop_key_id, &[0.0, 0.0, 0.0])
+      .is_err());
+
+    // NaN should be rejected.
+    assert!(db
+      .set_node_vector(node_id, prop_key_id, &[0.1, f32::NAN, 0.3])
+      .is_err());
+
+    db.rollback().unwrap();
+    close_single_file(db).unwrap();
+  }
+
+  #[test]
   fn test_vector_persistence_across_checkpoint() {
     let temp_dir = tempdir().unwrap();
     let db_path = temp_dir.path().join("vectors.kitedb");
@@ -283,6 +339,32 @@ mod tests {
 
     // Reopen and verify vector is restored from snapshot
     let db = open_single_file(&db_path, SingleFileOpenOptions::new()).unwrap();
+    let vec = db.node_vector(node_id, prop_key_id).unwrap();
+    let expected = normalize(&[0.1, 0.2, 0.3]);
+    assert_eq!(vec.len(), expected.len());
+    for (got, exp) in vec.iter().zip(expected.iter()) {
+      assert!((got - exp).abs() < 1e-6);
+    }
+    close_single_file(db).unwrap();
+  }
+
+  #[test]
+  fn test_vector_persistence_across_wal_replay() {
+    let temp_dir = tempdir().unwrap();
+    let db_path = temp_dir.path().join("vectors-wal.kitedb");
+
+    // Commit without checkpoint; close; reopen; expect WAL replay to restore vectors.
+    let options = SingleFileOpenOptions::new().auto_checkpoint(false);
+    let db = open_single_file(&db_path, options.clone()).unwrap();
+    db.begin(false).unwrap();
+    let node_id = db.create_node(None).unwrap();
+    let prop_key_id = db.define_propkey("embedding").unwrap();
+    db.set_node_vector(node_id, prop_key_id, &[0.1, 0.2, 0.3])
+      .unwrap();
+    db.commit().unwrap();
+    close_single_file(db).unwrap();
+
+    let db = open_single_file(&db_path, options).unwrap();
     let vec = db.node_vector(node_id, prop_key_id).unwrap();
     let expected = normalize(&[0.1, 0.2, 0.3]);
     assert_eq!(vec.len(), expected.len());
