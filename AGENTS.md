@@ -16,3 +16,9 @@ Mask owns this. Start: say hi + 1 motivating line. Work style: telegraph; noun-p
 
 When I report a bug, don't start by trying to fix it. Instead, write a test that reproduces the bug and fails.
 Then spawn a subagent that tries to fix the bug. If it fails, the test fails. If it succeeds, the test passes.
+
+## Release Notes
+
+CI release gating reads the latest commit message. Use `all|js|ts|py|rs|core: X.Y.Z`.
+Exact match `all|js|ts|py|rs|core: X.Y.Z` triggers release publishes. Extra text after version routes npm to `next`.
+Tag release workflow expects git tag `vX.Y.Z` and `ray-rs/package.json` version must match tag.
