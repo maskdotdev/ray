@@ -10,7 +10,7 @@ use parking_lot::{Mutex, RwLock};
 
 use crate::cache::manager::CacheManager;
 use crate::constants::*;
-use crate::core::pager::{create_pager, is_valid_page_size, open_pager, pages_to_store};
+use crate::core::pager::{create_pager, is_valid_page_size, open_pager, pages_to_store, FilePager};
 use crate::core::snapshot::reader::SnapshotData;
 use crate::core::wal::buffer::WalBuffer;
 use crate::error::{KiteError, Result};
@@ -21,7 +21,7 @@ use crate::util::mmap::map_file;
 use crate::vector::store::{create_vector_store, vector_store_delete, vector_store_insert};
 use crate::vector::types::VectorStoreConfig;
 
-use super::recovery::{get_committed_transactions, replay_wal_record, scan_wal_records};
+use super::recovery::{committed_transactions, replay_wal_record, scan_wal_records};
 use super::vector::vector_stores_from_snapshot;
 use super::{CheckpointStatus, SingleFileDB};
 
@@ -247,6 +247,305 @@ impl SingleFileOpenOptions {
   }
 }
 
+fn load_snapshot_and_schema(
+  header: &DbHeaderV1,
+  pager: &mut FilePager,
+  options: &SingleFileOpenOptions,
+  label_names: &mut HashMap<String, LabelId>,
+  label_ids: &mut HashMap<LabelId, String>,
+  etype_names: &mut HashMap<String, ETypeId>,
+  etype_ids: &mut HashMap<ETypeId, String>,
+  propkey_names: &mut HashMap<String, PropKeyId>,
+  propkey_ids: &mut HashMap<PropKeyId, String>,
+  next_node_id: &mut NodeId,
+  next_label_id: &mut LabelId,
+  next_etype_id: &mut ETypeId,
+  next_propkey_id: &mut PropKeyId,
+) -> Result<Option<SnapshotData>> {
+  if header.snapshot_page_count == 0 {
+    return Ok(None);
+  }
+
+  let snapshot_offset = (header.snapshot_start_page * header.page_size as u64) as usize;
+
+  let mut parse_options = crate::core::snapshot::reader::ParseSnapshotOptions::default();
+  if matches!(options.snapshot_parse_mode, SnapshotParseMode::Salvage) {
+    parse_options.skip_crc_validation = true;
+  }
+
+  let parse_result = SnapshotData::parse_at_offset(
+    std::sync::Arc::new({
+      // Safety handled inside map_file (native mmap) or in-memory read (wasm).
+      map_file(pager.file())?
+    }),
+    snapshot_offset,
+    &parse_options,
+  );
+
+  match parse_result {
+    Ok(snap) => {
+      // Load schema from snapshot
+      for i in 1..=snap.header.num_labels as u32 {
+        if let Some(name) = snap.label_name(i) {
+          label_names.insert(name.to_string(), i);
+          label_ids.insert(i, name.to_string());
+        }
+      }
+      for i in 1..=snap.header.num_etypes as u32 {
+        if let Some(name) = snap.etype_name(i) {
+          etype_names.insert(name.to_string(), i);
+          etype_ids.insert(i, name.to_string());
+        }
+      }
+      for i in 1..=snap.header.num_propkeys as u32 {
+        if let Some(name) = snap.propkey_name(i) {
+          propkey_names.insert(name.to_string(), i);
+          propkey_ids.insert(i, name.to_string());
+        }
+      }
+
+      // Update ID allocators from snapshot
+      *next_node_id = snap.header.max_node_id + 1;
+      *next_label_id = snap.header.num_labels as u32 + 1;
+      *next_etype_id = snap.header.num_etypes as u32 + 1;
+      *next_propkey_id = snap.header.num_propkeys as u32 + 1;
+
+      Ok(Some(snap))
+    }
+    Err(e) => match options.snapshot_parse_mode {
+      SnapshotParseMode::Strict => Err(e),
+      SnapshotParseMode::Salvage => {
+        eprintln!("Warning: Failed to parse snapshot: {e}");
+        Ok(None)
+      }
+    },
+  }
+}
+
+fn init_mvcc_from_wal(
+  options: &SingleFileOpenOptions,
+  next_tx_id: TxId,
+  next_commit_ts: u64,
+  committed_in_order: &[(TxId, Vec<&crate::core::wal::record::ParsedWalRecord>)],
+  delta: &DeltaState,
+) -> Option<std::sync::Arc<MvccManager>> {
+  if !options.mvcc {
+    return None;
+  }
+
+  let mut gc_config = GcConfig::default();
+  if let Some(v) = options.mvcc_gc_interval_ms {
+    gc_config.interval_ms = v;
+  }
+  if let Some(v) = options.mvcc_retention_ms {
+    gc_config.retention_ms = v;
+  }
+  if let Some(v) = options.mvcc_max_chain_depth {
+    gc_config.max_chain_depth = v;
+  }
+
+  let mvcc = std::sync::Arc::new(MvccManager::new(next_tx_id, next_commit_ts, gc_config));
+
+  if !committed_in_order.is_empty() {
+    use crate::core::wal::record::{
+      parse_add_edge_payload, parse_add_edge_props_payload, parse_add_edges_batch_payload,
+      parse_add_edges_props_batch_payload, parse_add_node_label_payload, parse_create_node_payload,
+      parse_create_nodes_batch_payload, parse_del_edge_prop_payload, parse_del_node_prop_payload,
+      parse_delete_edge_payload, parse_delete_node_payload, parse_remove_node_label_payload,
+      parse_set_edge_prop_payload, parse_set_edge_props_payload, parse_set_node_prop_payload,
+    };
+
+    let mut commit_ts: u64 = 1;
+    for (txid, records) in committed_in_order {
+      for record in records {
+        match record.record_type {
+          WalRecordType::CreateNode => {
+            if let Some(data) = parse_create_node_payload(&record.payload) {
+              if let Some(node_delta) = delta.created_nodes.get(&data.node_id) {
+                let mut vc = mvcc.version_chain.lock();
+                vc.append_node_version(
+                  data.node_id,
+                  NodeVersionData {
+                    node_id: data.node_id,
+                    delta: node_delta.for_version(),
+                  },
+                  *txid,
+                  commit_ts,
+                );
+              }
+            }
+          }
+          WalRecordType::CreateNodesBatch => {
+            if let Some(nodes) = parse_create_nodes_batch_payload(&record.payload) {
+              for data in nodes {
+                if let Some(node_delta) = delta.created_nodes.get(&data.node_id) {
+                  let mut vc = mvcc.version_chain.lock();
+                  vc.append_node_version(
+                    data.node_id,
+                    NodeVersionData {
+                      node_id: data.node_id,
+                      delta: node_delta.for_version(),
+                    },
+                    *txid,
+                    commit_ts,
+                  );
+                }
+              }
+            }
+          }
+          WalRecordType::DeleteNode => {
+            if let Some(data) = parse_delete_node_payload(&record.payload) {
+              let mut vc = mvcc.version_chain.lock();
+              vc.delete_node_version(data.node_id, *txid, commit_ts);
+            }
+          }
+          WalRecordType::AddEdge => {
+            if let Some(data) = parse_add_edge_payload(&record.payload) {
+              let mut vc = mvcc.version_chain.lock();
+              vc.append_edge_version(data.src, data.etype, data.dst, true, *txid, commit_ts);
+            }
+          }
+          WalRecordType::AddEdgesBatch => {
+            if let Some(edges) = parse_add_edges_batch_payload(&record.payload) {
+              let mut vc = mvcc.version_chain.lock();
+              for data in edges {
+                vc.append_edge_version(data.src, data.etype, data.dst, true, *txid, commit_ts);
+              }
+            }
+          }
+          WalRecordType::AddEdgeProps => {
+            if let Some(data) = parse_add_edge_props_payload(&record.payload) {
+              let mut vc = mvcc.version_chain.lock();
+              vc.append_edge_version(data.src, data.etype, data.dst, true, *txid, commit_ts);
+              for (key_id, value) in data.props {
+                vc.append_edge_prop_version(
+                  data.src,
+                  data.etype,
+                  data.dst,
+                  key_id,
+                  Some(std::sync::Arc::new(value)),
+                  *txid,
+                  commit_ts,
+                );
+              }
+            }
+          }
+          WalRecordType::AddEdgesPropsBatch => {
+            if let Some(edges) = parse_add_edges_props_batch_payload(&record.payload) {
+              let mut vc = mvcc.version_chain.lock();
+              for data in edges {
+                vc.append_edge_version(data.src, data.etype, data.dst, true, *txid, commit_ts);
+                for (key_id, value) in data.props {
+                  vc.append_edge_prop_version(
+                    data.src,
+                    data.etype,
+                    data.dst,
+                    key_id,
+                    Some(std::sync::Arc::new(value)),
+                    *txid,
+                    commit_ts,
+                  );
+                }
+              }
+            }
+          }
+          WalRecordType::DeleteEdge => {
+            if let Some(data) = parse_delete_edge_payload(&record.payload) {
+              let mut vc = mvcc.version_chain.lock();
+              vc.append_edge_version(data.src, data.etype, data.dst, false, *txid, commit_ts);
+            }
+          }
+          WalRecordType::SetNodeProp => {
+            if let Some(data) = parse_set_node_prop_payload(&record.payload) {
+              let mut vc = mvcc.version_chain.lock();
+              vc.append_node_prop_version(
+                data.node_id,
+                data.key_id,
+                Some(std::sync::Arc::new(data.value)),
+                *txid,
+                commit_ts,
+              );
+            }
+          }
+          WalRecordType::DelNodeProp => {
+            if let Some(data) = parse_del_node_prop_payload(&record.payload) {
+              let mut vc = mvcc.version_chain.lock();
+              vc.append_node_prop_version(data.node_id, data.key_id, None, *txid, commit_ts);
+            }
+          }
+          WalRecordType::SetEdgeProp => {
+            if let Some(data) = parse_set_edge_prop_payload(&record.payload) {
+              let mut vc = mvcc.version_chain.lock();
+              vc.append_edge_prop_version(
+                data.src,
+                data.etype,
+                data.dst,
+                data.key_id,
+                Some(std::sync::Arc::new(data.value)),
+                *txid,
+                commit_ts,
+              );
+            }
+          }
+          WalRecordType::SetEdgeProps => {
+            if let Some(data) = parse_set_edge_props_payload(&record.payload) {
+              let mut vc = mvcc.version_chain.lock();
+              for (key_id, value) in data.props {
+                vc.append_edge_prop_version(
+                  data.src,
+                  data.etype,
+                  data.dst,
+                  key_id,
+                  Some(std::sync::Arc::new(value)),
+                  *txid,
+                  commit_ts,
+                );
+              }
+            }
+          }
+          WalRecordType::DelEdgeProp => {
+            if let Some(data) = parse_del_edge_prop_payload(&record.payload) {
+              let mut vc = mvcc.version_chain.lock();
+              vc.append_edge_prop_version(
+                data.src,
+                data.etype,
+                data.dst,
+                data.key_id,
+                None,
+                *txid,
+                commit_ts,
+              );
+            }
+          }
+          WalRecordType::AddNodeLabel => {
+            if let Some(data) = parse_add_node_label_payload(&record.payload) {
+              let mut vc = mvcc.version_chain.lock();
+              vc.append_node_label_version(
+                data.node_id,
+                data.label_id,
+                Some(true),
+                *txid,
+                commit_ts,
+              );
+            }
+          }
+          WalRecordType::RemoveNodeLabel => {
+            if let Some(data) = parse_remove_node_label_payload(&record.payload) {
+              let mut vc = mvcc.version_chain.lock();
+              vc.append_node_label_version(data.node_id, data.label_id, None, *txid, commit_ts);
+            }
+          }
+          _ => {}
+        }
+      }
+      commit_ts += 1;
+    }
+  }
+
+  mvcc.start();
+  Some(mvcc)
+}
+
 // ============================================================================
 // Open / Close
 // ============================================================================
@@ -368,65 +667,21 @@ pub fn open_single_file<P: AsRef<Path>>(
   let mut propkey_ids: HashMap<PropKeyId, String> = HashMap::new();
 
   // Load snapshot if exists
-  let snapshot = if header.snapshot_page_count > 0 {
-    // Calculate snapshot offset in bytes
-    let snapshot_offset = (header.snapshot_start_page * header.page_size as u64) as usize;
-
-    let mut parse_options = crate::core::snapshot::reader::ParseSnapshotOptions::default();
-    if matches!(options.snapshot_parse_mode, SnapshotParseMode::Salvage) {
-      parse_options.skip_crc_validation = true;
-    }
-
-    let parse_result = SnapshotData::parse_at_offset(
-      std::sync::Arc::new({
-        // Safety handled inside map_file (native mmap) or in-memory read (wasm).
-        map_file(pager.file())?
-      }),
-      snapshot_offset,
-      &parse_options,
-    );
-
-    match parse_result {
-      Ok(snap) => {
-        // Load schema from snapshot
-        for i in 1..=snap.header.num_labels as u32 {
-          if let Some(name) = snap.get_label_name(i) {
-            label_names.insert(name.to_string(), i);
-            label_ids.insert(i, name.to_string());
-          }
-        }
-        for i in 1..=snap.header.num_etypes as u32 {
-          if let Some(name) = snap.get_etype_name(i) {
-            etype_names.insert(name.to_string(), i);
-            etype_ids.insert(i, name.to_string());
-          }
-        }
-        for i in 1..=snap.header.num_propkeys as u32 {
-          if let Some(name) = snap.get_propkey_name(i) {
-            propkey_names.insert(name.to_string(), i);
-            propkey_ids.insert(i, name.to_string());
-          }
-        }
-
-        // Update ID allocators from snapshot
-        next_node_id = snap.header.max_node_id + 1;
-        next_label_id = snap.header.num_labels as u32 + 1;
-        next_etype_id = snap.header.num_etypes as u32 + 1;
-        next_propkey_id = snap.header.num_propkeys as u32 + 1;
-
-        Some(snap)
-      }
-      Err(e) => match options.snapshot_parse_mode {
-        SnapshotParseMode::Strict => return Err(e),
-        SnapshotParseMode::Salvage => {
-          eprintln!("Warning: Failed to parse snapshot: {e}");
-          None
-        }
-      },
-    }
-  } else {
-    None
-  };
+  let snapshot = load_snapshot_and_schema(
+    &header,
+    &mut pager,
+    &options,
+    &mut label_names,
+    &mut label_ids,
+    &mut etype_names,
+    &mut etype_ids,
+    &mut propkey_names,
+    &mut propkey_ids,
+    &mut next_node_id,
+    &mut next_label_id,
+    &mut next_etype_id,
+    &mut next_propkey_id,
+  )?;
 
   // Replay WAL for recovery (if not a new database)
   let mut _wal_records_storage: Option<Vec<crate::core::wal::record::ParsedWalRecord>>;
@@ -492,222 +747,13 @@ pub fn open_single_file<P: AsRef<Path>>(
   let cache = options.cache.map(CacheManager::new);
 
   // Initialize MVCC if enabled (after WAL replay)
-  let mvcc = if options.mvcc {
-    let mut gc_config = GcConfig::default();
-    if let Some(v) = options.mvcc_gc_interval_ms {
-      gc_config.interval_ms = v;
-    }
-    if let Some(v) = options.mvcc_retention_ms {
-      gc_config.retention_ms = v;
-    }
-    if let Some(v) = options.mvcc_max_chain_depth {
-      gc_config.max_chain_depth = v;
-    }
-
-    let mvcc = std::sync::Arc::new(MvccManager::new(next_tx_id, next_commit_ts, gc_config));
-
-    if !committed_in_order.is_empty() {
-      use crate::core::wal::record::{
-        parse_add_edge_payload, parse_add_edge_props_payload, parse_add_edges_batch_payload,
-        parse_add_edges_props_batch_payload, parse_add_node_label_payload,
-        parse_create_node_payload, parse_create_nodes_batch_payload, parse_del_edge_prop_payload,
-        parse_del_node_prop_payload, parse_delete_edge_payload, parse_delete_node_payload,
-        parse_remove_node_label_payload, parse_set_edge_prop_payload, parse_set_edge_props_payload,
-        parse_set_node_prop_payload,
-      };
-
-      let mut commit_ts: u64 = 1;
-      for (txid, records) in &committed_in_order {
-        for record in records {
-          match record.record_type {
-            WalRecordType::CreateNode => {
-              if let Some(data) = parse_create_node_payload(&record.payload) {
-                if let Some(node_delta) = delta.created_nodes.get(&data.node_id) {
-                  let mut vc = mvcc.version_chain.lock();
-                  vc.append_node_version(
-                    data.node_id,
-                    NodeVersionData {
-                      node_id: data.node_id,
-                      delta: node_delta.for_version(),
-                    },
-                    *txid,
-                    commit_ts,
-                  );
-                }
-              }
-            }
-            WalRecordType::CreateNodesBatch => {
-              if let Some(nodes) = parse_create_nodes_batch_payload(&record.payload) {
-                for data in nodes {
-                  if let Some(node_delta) = delta.created_nodes.get(&data.node_id) {
-                    let mut vc = mvcc.version_chain.lock();
-                    vc.append_node_version(
-                      data.node_id,
-                      NodeVersionData {
-                        node_id: data.node_id,
-                        delta: node_delta.for_version(),
-                      },
-                      *txid,
-                      commit_ts,
-                    );
-                  }
-                }
-              }
-            }
-            WalRecordType::DeleteNode => {
-              if let Some(data) = parse_delete_node_payload(&record.payload) {
-                let mut vc = mvcc.version_chain.lock();
-                vc.delete_node_version(data.node_id, *txid, commit_ts);
-              }
-            }
-            WalRecordType::AddEdge => {
-              if let Some(data) = parse_add_edge_payload(&record.payload) {
-                let mut vc = mvcc.version_chain.lock();
-                vc.append_edge_version(data.src, data.etype, data.dst, true, *txid, commit_ts);
-              }
-            }
-            WalRecordType::AddEdgesBatch => {
-              if let Some(edges) = parse_add_edges_batch_payload(&record.payload) {
-                let mut vc = mvcc.version_chain.lock();
-                for data in edges {
-                  vc.append_edge_version(data.src, data.etype, data.dst, true, *txid, commit_ts);
-                }
-              }
-            }
-            WalRecordType::AddEdgeProps => {
-              if let Some(data) = parse_add_edge_props_payload(&record.payload) {
-                let mut vc = mvcc.version_chain.lock();
-                vc.append_edge_version(data.src, data.etype, data.dst, true, *txid, commit_ts);
-                for (key_id, value) in data.props {
-                  vc.append_edge_prop_version(
-                    data.src,
-                    data.etype,
-                    data.dst,
-                    key_id,
-                    Some(std::sync::Arc::new(value)),
-                    *txid,
-                    commit_ts,
-                  );
-                }
-              }
-            }
-            WalRecordType::AddEdgesPropsBatch => {
-              if let Some(edges) = parse_add_edges_props_batch_payload(&record.payload) {
-                let mut vc = mvcc.version_chain.lock();
-                for data in edges {
-                  vc.append_edge_version(data.src, data.etype, data.dst, true, *txid, commit_ts);
-                  for (key_id, value) in data.props {
-                    vc.append_edge_prop_version(
-                      data.src,
-                      data.etype,
-                      data.dst,
-                      key_id,
-                      Some(std::sync::Arc::new(value)),
-                      *txid,
-                      commit_ts,
-                    );
-                  }
-                }
-              }
-            }
-            WalRecordType::DeleteEdge => {
-              if let Some(data) = parse_delete_edge_payload(&record.payload) {
-                let mut vc = mvcc.version_chain.lock();
-                vc.append_edge_version(data.src, data.etype, data.dst, false, *txid, commit_ts);
-              }
-            }
-            WalRecordType::SetNodeProp => {
-              if let Some(data) = parse_set_node_prop_payload(&record.payload) {
-                let mut vc = mvcc.version_chain.lock();
-                vc.append_node_prop_version(
-                  data.node_id,
-                  data.key_id,
-                  Some(std::sync::Arc::new(data.value)),
-                  *txid,
-                  commit_ts,
-                );
-              }
-            }
-            WalRecordType::DelNodeProp => {
-              if let Some(data) = parse_del_node_prop_payload(&record.payload) {
-                let mut vc = mvcc.version_chain.lock();
-                vc.append_node_prop_version(data.node_id, data.key_id, None, *txid, commit_ts);
-              }
-            }
-            WalRecordType::SetEdgeProp => {
-              if let Some(data) = parse_set_edge_prop_payload(&record.payload) {
-                let mut vc = mvcc.version_chain.lock();
-                vc.append_edge_prop_version(
-                  data.src,
-                  data.etype,
-                  data.dst,
-                  data.key_id,
-                  Some(std::sync::Arc::new(data.value)),
-                  *txid,
-                  commit_ts,
-                );
-              }
-            }
-            WalRecordType::SetEdgeProps => {
-              if let Some(data) = parse_set_edge_props_payload(&record.payload) {
-                let mut vc = mvcc.version_chain.lock();
-                for (key_id, value) in data.props {
-                  vc.append_edge_prop_version(
-                    data.src,
-                    data.etype,
-                    data.dst,
-                    key_id,
-                    Some(std::sync::Arc::new(value)),
-                    *txid,
-                    commit_ts,
-                  );
-                }
-              }
-            }
-            WalRecordType::DelEdgeProp => {
-              if let Some(data) = parse_del_edge_prop_payload(&record.payload) {
-                let mut vc = mvcc.version_chain.lock();
-                vc.append_edge_prop_version(
-                  data.src,
-                  data.etype,
-                  data.dst,
-                  data.key_id,
-                  None,
-                  *txid,
-                  commit_ts,
-                );
-              }
-            }
-            WalRecordType::AddNodeLabel => {
-              if let Some(data) = parse_add_node_label_payload(&record.payload) {
-                let mut vc = mvcc.version_chain.lock();
-                vc.append_node_label_version(
-                  data.node_id,
-                  data.label_id,
-                  Some(true),
-                  *txid,
-                  commit_ts,
-                );
-              }
-            }
-            WalRecordType::RemoveNodeLabel => {
-              if let Some(data) = parse_remove_node_label_payload(&record.payload) {
-                let mut vc = mvcc.version_chain.lock();
-                vc.append_node_label_version(data.node_id, data.label_id, None, *txid, commit_ts);
-              }
-            }
-            _ => {}
-          }
-        }
-        commit_ts += 1;
-      }
-    }
-
-    mvcc.start();
-    Some(mvcc)
-  } else {
-    None
-  };
+  let mvcc = init_mvcc_from_wal(
+    &options,
+    next_tx_id,
+    next_commit_ts,
+    &committed_in_order,
+    &delta,
+  );
 
   Ok(SingleFileDB {
     path: path.to_path_buf(),
@@ -881,8 +927,8 @@ mod tests {
 
     // Reopen and ensure both records are recovered
     let db = open_single_file(&db_path, SingleFileOpenOptions::new()).unwrap();
-    assert!(db.get_node_by_key("n1").is_some());
-    assert!(db.get_node_by_key("n2").is_some());
+    assert!(db.node_by_key("n1").is_some());
+    assert!(db.node_by_key("n2").is_some());
     close_single_file(db).unwrap();
   }
 
@@ -902,7 +948,7 @@ mod tests {
 
     db.begin(false).unwrap();
     let node_id = db.create_node(Some("n1")).unwrap();
-    let key_id = db.get_or_create_propkey("value");
+    let key_id = db.propkey_id_or_create("value");
     db.set_node_prop(node_id, key_id, crate::types::PropValue::I64(42))
       .unwrap();
     db.commit().unwrap();
@@ -920,7 +966,7 @@ mod tests {
     )
     .unwrap();
 
-    let value = reopened.get_node_prop(node_id, key_id).expect("prop value");
+    let value = reopened.node_prop(node_id, key_id).expect("prop value");
     assert_eq!(value, crate::types::PropValue::I64(42));
 
     close_single_file(reopened).unwrap();
@@ -1006,8 +1052,8 @@ mod tests {
 
     // Reopen and ensure both records are recovered
     let db = open_single_file(&db_path, SingleFileOpenOptions::new()).unwrap();
-    assert!(db.get_node_by_key("n1").is_some());
-    assert!(db.get_node_by_key("n2").is_some());
+    assert!(db.node_by_key("n1").is_some());
+    assert!(db.node_by_key("n2").is_some());
     close_single_file(db).unwrap();
   }
 
@@ -1047,7 +1093,7 @@ mod tests {
     drop(db);
 
     let db = open_single_file(&db_path, SingleFileOpenOptions::new()).unwrap();
-    assert!(db.get_node_by_key("n1").is_some());
+    assert!(db.node_by_key("n1").is_some());
     close_single_file(db).unwrap();
   }
 
@@ -1070,8 +1116,8 @@ mod tests {
     drop(db);
 
     let db = open_single_file(&db_path, SingleFileOpenOptions::new()).unwrap();
-    assert!(db.get_node_by_key("n1").is_some());
-    assert!(db.get_node_by_key("n2").is_none());
+    assert!(db.node_by_key("n1").is_some());
+    assert!(db.node_by_key("n2").is_none());
     close_single_file(db).unwrap();
   }
 
@@ -1106,7 +1152,7 @@ mod tests {
     drop(db);
 
     let db = open_single_file(&db_path, SingleFileOpenOptions::new()).unwrap();
-    assert!(db.get_node_by_key("n1").is_none());
+    assert!(db.node_by_key("n1").is_none());
     close_single_file(db).unwrap();
   }
 
@@ -1130,8 +1176,8 @@ mod tests {
     drop(db);
 
     let db = open_single_file(&db_path, SingleFileOpenOptions::new()).unwrap();
-    assert!(db.get_node_by_key("n1").is_some());
-    assert!(db.get_node_by_key("n2").is_some());
+    assert!(db.node_by_key("n1").is_some());
+    assert!(db.node_by_key("n2").is_some());
     close_single_file(db).unwrap();
   }
 }
