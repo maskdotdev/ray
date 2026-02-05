@@ -15,6 +15,7 @@
 //!
 //! Ported from src/vector/ivf-pq.ts
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -265,7 +266,8 @@ impl IvfPqIndex {
     let assignments = kmeans_result.assignments;
 
     // Step 2: Compute residuals and train PQ
-    let pq_training_data = if self.config.use_residuals {
+    // Train PQ on residuals or raw vectors (avoid cloning full training set)
+    if self.config.use_residuals {
       // Compute residuals: vector - assigned_centroid
       let mut residuals = vec![0.0f32; n * self.dimensions];
       for (i, &cluster_id) in assignments.iter().enumerate().take(n) {
@@ -278,13 +280,11 @@ impl IvfPqIndex {
             training_vectors[vec_offset + d] - self.ivf_centroids[cent_offset + d];
         }
       }
-      residuals
-    } else {
-      training_vectors.clone()
-    };
 
-    // Train PQ on residuals
-    self.train_pq(&pq_training_data, n)?;
+      self.train_pq(&residuals, n)?;
+    } else {
+      self.train_pq(&training_vectors, n)?;
+    }
 
     // Step 3: Pre-compute centroid distances for faster search
     let mut centroid_distances = vec![0.0f32; n_clusters * n_clusters];
@@ -400,11 +400,12 @@ impl IvfPqIndex {
     let distance_fn = self.config.ivf.metric.distance_fn();
 
     // Prepare vector (normalize for cosine metric)
-    let query_vec = if self.config.ivf.metric == DistanceMetric::Cosine {
-      normalize(vector)
+    let query_vec: Cow<[f32]> = if self.config.ivf.metric == DistanceMetric::Cosine {
+      Cow::Owned(normalize(vector))
     } else {
-      vector.to_vec()
+      Cow::Borrowed(vector)
     };
+    let query_slice = query_vec.as_ref();
 
     // Find nearest centroid
     let mut best_cluster = 0;
@@ -413,7 +414,7 @@ impl IvfPqIndex {
     for c in 0..self.config.ivf.n_clusters {
       let cent_offset = c * self.dimensions;
       let centroid = &self.ivf_centroids[cent_offset..cent_offset + self.dimensions];
-      let dist = distance_fn(&query_vec, centroid);
+      let dist = distance_fn(query_slice, centroid);
 
       if dist < best_dist {
         best_dist = dist;
@@ -422,19 +423,18 @@ impl IvfPqIndex {
     }
 
     // Compute residual or use raw vector
-    let vector_to_encode = if self.config.use_residuals {
+    // Encode with PQ (avoid allocation for non-residual paths)
+    let codes = if self.config.use_residuals {
       let cent_offset = best_cluster * self.dimensions;
-      query_vec
+      let residuals: Vec<f32> = query_slice
         .iter()
         .zip(&self.ivf_centroids[cent_offset..cent_offset + self.dimensions])
         .map(|(v, c)| v - c)
-        .collect::<Vec<f32>>()
+        .collect();
+      self.encode_single_vector(&residuals)
     } else {
-      query_vec
+      self.encode_single_vector(query_slice)
     };
-
-    // Encode with PQ
-    let codes = self.encode_single_vector(&vector_to_encode);
 
     // Add to inverted list
     self
@@ -494,11 +494,12 @@ impl IvfPqIndex {
     let distance_fn = self.config.ivf.metric.distance_fn();
 
     // Prepare vector (normalize for cosine metric)
-    let query_vec = if self.config.ivf.metric == DistanceMetric::Cosine {
-      normalize(vector)
+    let query_vec: Cow<[f32]> = if self.config.ivf.metric == DistanceMetric::Cosine {
+      Cow::Owned(normalize(vector))
     } else {
-      vector.to_vec()
+      Cow::Borrowed(vector)
     };
+    let query_slice = query_vec.as_ref();
 
     // Find which cluster it's in
     let mut best_cluster = 0;
@@ -507,7 +508,7 @@ impl IvfPqIndex {
     for c in 0..self.config.ivf.n_clusters {
       let cent_offset = c * self.dimensions;
       let centroid = &self.ivf_centroids[cent_offset..cent_offset + self.dimensions];
-      let dist = distance_fn(&query_vec, centroid);
+      let dist = distance_fn(query_slice, centroid);
 
       if dist < best_dist {
         best_dist = dist;
@@ -549,21 +550,22 @@ impl IvfPqIndex {
     let n_probe = options.n_probe.unwrap_or(self.config.ivf.n_probe);
 
     // Normalize query for cosine metric
-    let query_for_search = if self.config.ivf.metric == DistanceMetric::Cosine {
-      normalize(query)
+    let query_for_search: Cow<[f32]> = if self.config.ivf.metric == DistanceMetric::Cosine {
+      Cow::Owned(normalize(query))
     } else {
-      query.to_vec()
+      Cow::Borrowed(query)
     };
+    let query_slice = query_for_search.as_ref();
 
     // Find top n_probe nearest centroids
-    let probe_clusters = self.find_nearest_centroids(&query_for_search, n_probe);
+    let probe_clusters = self.find_nearest_centroids(query_slice, n_probe);
 
     // Use max-heap to track top-k candidates
     let mut heap = MaxHeap::new();
 
     // For non-residual mode, build the distance table ONCE
     let shared_dist_table = if !self.config.use_residuals {
-      Some(self.build_distance_table(&query_for_search))
+      Some(self.build_distance_table(query_slice))
     } else {
       None
     };
@@ -633,7 +635,7 @@ impl IvfPqIndex {
       if self.config.use_residuals {
         // Query residual = query - centroid (requires per-cluster table)
         let cent_offset = cluster * self.dimensions;
-        let query_residual: Vec<f32> = query_for_search
+        let query_residual: Vec<f32> = query_slice
           .iter()
           .zip(&self.ivf_centroids[cent_offset..cent_offset + self.dimensions])
           .map(|(q, c)| q - c)
@@ -735,6 +737,10 @@ impl IvfPqIndex {
     let distance_fn = self.config.ivf.metric.distance_fn();
     let n_clusters = self.config.ivf.n_clusters;
 
+    if n == 0 {
+      return Vec::new();
+    }
+
     let mut centroid_dists: Vec<(usize, f32)> = (0..n_clusters)
       .map(|c| {
         let cent_offset = c * self.dimensions;
@@ -744,9 +750,18 @@ impl IvfPqIndex {
       })
       .collect();
 
-    centroid_dists.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+    if n >= n_clusters {
+      centroid_dists.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+      return centroid_dists.into_iter().map(|(c, _)| c).collect();
+    }
 
-    centroid_dists.into_iter().take(n).map(|(c, _)| c).collect()
+    centroid_dists.select_nth_unstable_by(
+      n - 1,
+      |a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal),
+    );
+    centroid_dists[..n]
+      .sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+    centroid_dists[..n].iter().map(|(c, _)| *c).collect()
   }
 
   /// Search with multiple query vectors

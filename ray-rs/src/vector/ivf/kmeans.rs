@@ -453,10 +453,12 @@ fn assign_to_centroids_parallel(
   assignments: &mut [u32],
   distance_fn: fn(&[f32], &[f32]) -> f32,
 ) -> f32 {
-  // Parallel compute assignments and distances
-  let results: Vec<(u32, f32)> = (0..n)
-    .into_par_iter()
-    .map(|i| {
+  // Parallel compute assignments and total inertia without extra allocation
+  assignments
+    .par_iter_mut()
+    .enumerate()
+    .take(n)
+    .map(|(i, assignment)| {
       let vec_offset = i * dimensions;
       let vec = &vectors[vec_offset..vec_offset + dimensions];
 
@@ -474,18 +476,10 @@ fn assign_to_centroids_parallel(
         }
       }
 
-      (best_cluster, best_dist)
+      *assignment = best_cluster;
+      best_dist
     })
-    .collect();
-
-  // Update assignments and compute total inertia
-  let mut inertia = 0.0f32;
-  for (i, (cluster, dist)) in results.into_iter().enumerate() {
-    assignments[i] = cluster;
-    inertia += dist;
-  }
-
-  inertia
+    .sum()
 }
 
 #[cfg(target_arch = "wasm32")]
