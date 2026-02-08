@@ -138,6 +138,37 @@ Latest matrix snapshot (2026-02-08, 20k vectors, 384 dims, 200 queries, k=10):
 - IVF-PQ build time was much higher than IVF in this baseline.
 - Current recommendation: keep IVF as default ANN path for quality-first behavior; revisit IVF-PQ default candidacy after PQ tuning (subspaces/centroids/probe) and workload-specific recall targets.
 
+PQ tuning sweep:
+
+```bash
+cd ray-rs
+./scripts/vector-ann-pq-tuning.sh
+```
+
+Latest tuning snapshot (2026-02-08):
+- Result artifacts:
+  - `docs/benchmarks/results/2026-02-08-vector-ann-pq-tuning.txt`
+  - `docs/benchmarks/results/2026-02-08-vector-ann-pq-tuning.csv`
+- Best recall-preserving PQ config in this sweep:
+  - `residuals=false`, `pq_subspaces=48`, `pq_centroids=256`
+  - `n_probe=8`: recall ratio vs IVF `0.6875`, p95 ratio vs IVF `0.6155`
+  - `n_probe=16`: recall ratio vs IVF `0.6636`, p95 ratio vs IVF `0.4634`
+- Current implication: this configuration is the best IVF-PQ candidate for latency-first profiles, but still below IVF recall in this workload.
+
+ANN quality/latency gate:
+
+```bash
+cd ray-rs
+./scripts/vector-ann-gate.sh
+```
+
+Defaults:
+- `ALGORITHM=ivf`, `N_PROBE=16`, `ATTEMPTS=3`
+- `MIN_RECALL_AT_K=0.25`
+- `MAX_P95_MS=6.0`
+
+Latest gate snapshot (2026-02-08): median recall@k `0.2835`, median p95 `1.1716ms` (pass).
+
 ### Index pipeline hypothesis (network-dominant)
 
 ```bash
