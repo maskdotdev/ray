@@ -276,6 +276,7 @@ const secureExport = pushReplicationMetricsOtelJsonWithOptions(
     circuitBreakerOpenMs: 30_000,
     circuitBreakerHalfOpenProbes: 2,
     circuitBreakerStateUrl: 'https://state-store.internal/otlp/breakers',
+    circuitBreakerStatePatch: true,
     circuitBreakerStateCas: true,
     circuitBreakerStateLeaseId: 'otlp-writer-a',
     circuitBreakerScopeKey: 'collector-a',

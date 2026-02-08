@@ -1891,6 +1891,7 @@ fn build_otel_push_options_py(
   circuit_breaker_half_open_probes: i64,
   circuit_breaker_state_path: Option<String>,
   circuit_breaker_state_url: Option<String>,
+  circuit_breaker_state_patch: bool,
   circuit_breaker_state_cas: bool,
   circuit_breaker_state_lease_id: Option<String>,
   circuit_breaker_scope_key: Option<String>,
@@ -2004,6 +2005,11 @@ fn build_otel_push_options_py(
       "circuit_breaker_state_path and circuit_breaker_state_url are mutually exclusive",
     ));
   }
+  if circuit_breaker_state_patch && circuit_breaker_state_url.is_none() {
+    return Err(PyRuntimeError::new_err(
+      "circuit_breaker_state_patch requires circuit_breaker_state_url",
+    ));
+  }
   if circuit_breaker_state_cas && circuit_breaker_state_url.is_none() {
     return Err(PyRuntimeError::new_err(
       "circuit_breaker_state_cas requires circuit_breaker_state_url",
@@ -2044,6 +2050,7 @@ fn build_otel_push_options_py(
     circuit_breaker_half_open_probes: circuit_breaker_half_open_probes as u32,
     circuit_breaker_state_path,
     circuit_breaker_state_url,
+    circuit_breaker_state_patch,
     circuit_breaker_state_cas,
     circuit_breaker_state_lease_id,
     circuit_breaker_scope_key,
@@ -2075,6 +2082,7 @@ fn build_otel_push_options_py(
   circuit_breaker_half_open_probes=1,
   circuit_breaker_state_path=None,
   circuit_breaker_state_url=None,
+  circuit_breaker_state_patch=false,
   circuit_breaker_state_cas=false,
   circuit_breaker_state_lease_id=None,
   circuit_breaker_scope_key=None,
@@ -2101,6 +2109,7 @@ pub fn push_replication_metrics_otel_json(
   circuit_breaker_half_open_probes: i64,
   circuit_breaker_state_path: Option<String>,
   circuit_breaker_state_url: Option<String>,
+  circuit_breaker_state_patch: bool,
   circuit_breaker_state_cas: bool,
   circuit_breaker_state_lease_id: Option<String>,
   circuit_breaker_scope_key: Option<String>,
@@ -2125,6 +2134,7 @@ pub fn push_replication_metrics_otel_json(
     circuit_breaker_half_open_probes,
     circuit_breaker_state_path,
     circuit_breaker_state_url,
+    circuit_breaker_state_patch,
     circuit_breaker_state_cas,
     circuit_breaker_state_lease_id,
     circuit_breaker_scope_key,
@@ -2169,6 +2179,7 @@ pub fn push_replication_metrics_otel_json(
   circuit_breaker_half_open_probes=1,
   circuit_breaker_state_path=None,
   circuit_breaker_state_url=None,
+  circuit_breaker_state_patch=false,
   circuit_breaker_state_cas=false,
   circuit_breaker_state_lease_id=None,
   circuit_breaker_scope_key=None,
@@ -2195,6 +2206,7 @@ pub fn push_replication_metrics_otel_protobuf(
   circuit_breaker_half_open_probes: i64,
   circuit_breaker_state_path: Option<String>,
   circuit_breaker_state_url: Option<String>,
+  circuit_breaker_state_patch: bool,
   circuit_breaker_state_cas: bool,
   circuit_breaker_state_lease_id: Option<String>,
   circuit_breaker_scope_key: Option<String>,
@@ -2219,6 +2231,7 @@ pub fn push_replication_metrics_otel_protobuf(
     circuit_breaker_half_open_probes,
     circuit_breaker_state_path,
     circuit_breaker_state_url,
+    circuit_breaker_state_patch,
     circuit_breaker_state_cas,
     circuit_breaker_state_lease_id,
     circuit_breaker_scope_key,
@@ -2263,6 +2276,7 @@ pub fn push_replication_metrics_otel_protobuf(
   circuit_breaker_half_open_probes=1,
   circuit_breaker_state_path=None,
   circuit_breaker_state_url=None,
+  circuit_breaker_state_patch=false,
   circuit_breaker_state_cas=false,
   circuit_breaker_state_lease_id=None,
   circuit_breaker_scope_key=None,
@@ -2289,6 +2303,7 @@ pub fn push_replication_metrics_otel_grpc(
   circuit_breaker_half_open_probes: i64,
   circuit_breaker_state_path: Option<String>,
   circuit_breaker_state_url: Option<String>,
+  circuit_breaker_state_patch: bool,
   circuit_breaker_state_cas: bool,
   circuit_breaker_state_lease_id: Option<String>,
   circuit_breaker_scope_key: Option<String>,
@@ -2313,6 +2328,7 @@ pub fn push_replication_metrics_otel_grpc(
     circuit_breaker_half_open_probes,
     circuit_breaker_state_path,
     circuit_breaker_state_url,
+    circuit_breaker_state_patch,
     circuit_breaker_state_cas,
     circuit_breaker_state_lease_id,
     circuit_breaker_scope_key,

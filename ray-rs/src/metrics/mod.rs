@@ -206,6 +206,7 @@ pub struct OtlpHttpPushOptions {
   pub circuit_breaker_half_open_probes: u32,
   pub circuit_breaker_state_path: Option<String>,
   pub circuit_breaker_state_url: Option<String>,
+  pub circuit_breaker_state_patch: bool,
   pub circuit_breaker_state_cas: bool,
   pub circuit_breaker_state_lease_id: Option<String>,
   pub circuit_breaker_scope_key: Option<String>,
@@ -230,6 +231,7 @@ impl Default for OtlpHttpPushOptions {
       circuit_breaker_half_open_probes: 1,
       circuit_breaker_state_path: None,
       circuit_breaker_state_url: None,
+      circuit_breaker_state_patch: false,
       circuit_breaker_state_cas: false,
       circuit_breaker_state_lease_id: None,
       circuit_breaker_scope_key: None,
@@ -793,6 +795,11 @@ fn validate_otel_push_options(options: &OtlpHttpPushOptions) -> Result<()> {
       "circuit_breaker_state_path and circuit_breaker_state_url are mutually exclusive".into(),
     ));
   }
+  if options.circuit_breaker_state_patch && options.circuit_breaker_state_url.is_none() {
+    return Err(KiteError::InvalidQuery(
+      "circuit_breaker_state_patch requires circuit_breaker_state_url".into(),
+    ));
+  }
   if options.circuit_breaker_state_cas && options.circuit_breaker_state_url.is_none() {
     return Err(KiteError::InvalidQuery(
       "circuit_breaker_state_cas requires circuit_breaker_state_url".into(),
@@ -930,6 +937,14 @@ fn circuit_breaker_state_url(options: &OtlpHttpPushOptions) -> Option<&str> {
     .filter(|value| !value.is_empty())
 }
 
+fn circuit_breaker_state_url_etag_key(url: &str, key: Option<&str>, patch_mode: bool) -> String {
+  if patch_mode {
+    format!("{url}::{}", key.unwrap_or_default())
+  } else {
+    url.to_string()
+  }
+}
+
 fn load_persisted_breakers_from_path(path: &str) -> HashMap<String, OtlpCircuitBreakerState> {
   let raw = match fs::read(path) {
     Ok(bytes) => bytes,
@@ -957,13 +972,57 @@ fn load_persisted_breakers_from_url(
   };
   if options.circuit_breaker_state_cas {
     if let Some(etag) = response.header("etag") {
-      otlp_circuit_breaker_state_url_etags()
-        .lock()
-        .insert(url.to_string(), etag.to_string());
+      otlp_circuit_breaker_state_url_etags().lock().insert(
+        circuit_breaker_state_url_etag_key(url, None, false),
+        etag.to_string(),
+      );
     }
   }
   let body = response.into_string().unwrap_or_default();
   serde_json::from_str::<HashMap<String, OtlpCircuitBreakerState>>(&body).unwrap_or_default()
+}
+
+fn load_persisted_breaker_from_url_patch(
+  url: &str,
+  key: &str,
+  options: &OtlpHttpPushOptions,
+) -> Option<OtlpCircuitBreakerState> {
+  let timeout = Duration::from_millis(options.timeout_ms.max(1));
+  let agent = match build_otel_http_agent(url, options, timeout) {
+    Ok(agent) => agent,
+    Err(_) => return None,
+  };
+  let mut request = agent
+    .get(url)
+    .set("x-kitedb-breaker-mode", "patch-v1")
+    .set("x-kitedb-breaker-key", key)
+    .timeout(timeout);
+  if let Some(lease_id) = options.circuit_breaker_state_lease_id.as_deref() {
+    request = request.set("x-kitedb-breaker-lease", lease_id);
+  }
+  let response = match request.call() {
+    Ok(response) => response,
+    Err(ureq::Error::Status(404, _)) => return None,
+    Err(_) => return None,
+  };
+  if options.circuit_breaker_state_cas {
+    if let Some(etag) = response.header("etag") {
+      otlp_circuit_breaker_state_url_etags().lock().insert(
+        circuit_breaker_state_url_etag_key(url, Some(key), true),
+        etag.to_string(),
+      );
+    }
+  }
+  let body = response.into_string().unwrap_or_default();
+  if body.trim().is_empty() {
+    return None;
+  }
+  if let Ok(state) = serde_json::from_str::<OtlpCircuitBreakerState>(&body) {
+    return Some(state);
+  }
+  let wrapper = serde_json::from_str::<Value>(&body).ok()?;
+  let state = wrapper.get("state")?;
+  serde_json::from_value::<OtlpCircuitBreakerState>(state.clone()).ok()
 }
 
 fn load_persisted_breaker_state(
@@ -974,6 +1033,9 @@ fn load_persisted_breaker_state(
     return load_persisted_breakers_from_path(path).get(key).cloned();
   }
   if let Some(url) = circuit_breaker_state_url(options) {
+    if options.circuit_breaker_state_patch {
+      return load_persisted_breaker_from_url_patch(url, key, options);
+    }
     return load_persisted_breakers_from_url(url, options)
       .get(key)
       .cloned();
@@ -1007,7 +1069,7 @@ fn persist_breakers_to_url(
   if options.circuit_breaker_state_cas {
     if let Some(etag) = otlp_circuit_breaker_state_url_etags()
       .lock()
-      .get(url)
+      .get(&circuit_breaker_state_url_etag_key(url, None, false))
       .cloned()
     {
       request = request.set("if-match", &etag);
@@ -1022,18 +1084,82 @@ fn persist_breakers_to_url(
     Ok(response) => {
       if options.circuit_breaker_state_cas {
         if let Some(etag) = response.header("etag") {
-          otlp_circuit_breaker_state_url_etags()
-            .lock()
-            .insert(url.to_string(), etag.to_string());
+          otlp_circuit_breaker_state_url_etags().lock().insert(
+            circuit_breaker_state_url_etag_key(url, None, false),
+            etag.to_string(),
+          );
         }
       }
     }
     Err(ureq::Error::Status(status, response)) => {
       if options.circuit_breaker_state_cas && (status == 409 || status == 412) {
         if let Some(etag) = response.header("etag") {
-          otlp_circuit_breaker_state_url_etags()
-            .lock()
-            .insert(url.to_string(), etag.to_string());
+          otlp_circuit_breaker_state_url_etags().lock().insert(
+            circuit_breaker_state_url_etag_key(url, None, false),
+            etag.to_string(),
+          );
+        }
+      }
+    }
+    Err(_) => {}
+  }
+}
+
+fn persist_breaker_to_url_patch(
+  url: &str,
+  key: &str,
+  state: Option<&OtlpCircuitBreakerState>,
+  options: &OtlpHttpPushOptions,
+) {
+  let payload = json!({
+    "key": key,
+    "state": state,
+  });
+  let Ok(serialized) = serde_json::to_vec(&payload) else {
+    return;
+  };
+  let timeout = Duration::from_millis(options.timeout_ms.max(1));
+  let Ok(agent) = build_otel_http_agent(url, options, timeout) else {
+    return;
+  };
+  let mut request = agent
+    .request("PATCH", url)
+    .set("content-type", "application/json")
+    .set("x-kitedb-breaker-mode", "patch-v1")
+    .set("x-kitedb-breaker-key", key)
+    .timeout(timeout);
+  if options.circuit_breaker_state_cas {
+    if let Some(etag) = otlp_circuit_breaker_state_url_etags()
+      .lock()
+      .get(&circuit_breaker_state_url_etag_key(url, Some(key), true))
+      .cloned()
+    {
+      request = request.set("if-match", &etag);
+    } else {
+      request = request.set("if-match", "*");
+    }
+  }
+  if let Some(lease_id) = options.circuit_breaker_state_lease_id.as_deref() {
+    request = request.set("x-kitedb-breaker-lease", lease_id);
+  }
+  match request.send_bytes(&serialized) {
+    Ok(response) => {
+      if options.circuit_breaker_state_cas {
+        if let Some(etag) = response.header("etag") {
+          otlp_circuit_breaker_state_url_etags().lock().insert(
+            circuit_breaker_state_url_etag_key(url, Some(key), true),
+            etag.to_string(),
+          );
+        }
+      }
+    }
+    Err(ureq::Error::Status(status, response)) => {
+      if options.circuit_breaker_state_cas && (status == 409 || status == 412) {
+        if let Some(etag) = response.header("etag") {
+          otlp_circuit_breaker_state_url_etags().lock().insert(
+            circuit_breaker_state_url_etag_key(url, Some(key), true),
+            etag.to_string(),
+          );
         }
       }
     }
@@ -1043,12 +1169,17 @@ fn persist_breakers_to_url(
 
 fn persist_breakers(
   options: &OtlpHttpPushOptions,
+  key: &str,
   states: &HashMap<String, OtlpCircuitBreakerState>,
 ) {
   if let Some(path) = circuit_breaker_state_path(options) {
     persist_breakers_to_path(path, states);
   } else if let Some(url) = circuit_breaker_state_url(options) {
-    persist_breakers_to_url(url, options, states);
+    if options.circuit_breaker_state_patch {
+      persist_breaker_to_url_patch(url, key, states.get(key), options);
+    } else {
+      persist_breakers_to_url(url, options, states);
+    }
   }
 }
 
@@ -1143,7 +1274,7 @@ fn check_circuit_breaker_open(endpoint: &str, options: &OtlpHttpPushOptions) -> 
     }
   };
   if let Some(snapshot) = snapshot {
-    persist_breakers(options, &snapshot);
+    persist_breakers(options, &key, &snapshot);
   }
   Ok(())
 }
@@ -1181,7 +1312,7 @@ fn record_circuit_breaker_success(endpoint: &str, options: &OtlpHttpPushOptions)
     }
     states.clone()
   };
-  persist_breakers(options, &snapshot);
+  persist_breakers(options, &key, &snapshot);
 }
 
 fn record_circuit_breaker_failure(endpoint: &str, options: &OtlpHttpPushOptions) {
@@ -1196,7 +1327,7 @@ fn record_circuit_breaker_failure(endpoint: &str, options: &OtlpHttpPushOptions)
   let snapshot = {
     let mut states = otlp_circuit_breakers().lock();
     merge_persisted_breaker_state(&key, persisted_state, &mut states);
-    let state = states.entry(key).or_default();
+    let state = states.entry(key.clone()).or_default();
     let alpha = options.adaptive_retry_ewma_alpha.clamp(0.0, 1.0);
     state.ewma_error_score = ((1.0 - alpha) * state.ewma_error_score + alpha).clamp(0.0, 1.0);
     if options.circuit_breaker_failure_threshold > 0 && options.circuit_breaker_open_ms > 0 {
@@ -1218,7 +1349,7 @@ fn record_circuit_breaker_failure(endpoint: &str, options: &OtlpHttpPushOptions)
     }
     states.clone()
   };
-  persist_breakers(options, &snapshot);
+  persist_breakers(options, &key, &snapshot);
 }
 
 fn encode_http_request_payload(payload: &[u8], compression_gzip: bool) -> Result<Vec<u8>> {

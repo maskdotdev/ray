@@ -896,6 +896,7 @@ export interface PushReplicationMetricsOtelOptions {
   circuitBreakerHalfOpenProbes?: number
   circuitBreakerStatePath?: string
   circuitBreakerStateUrl?: string
+  circuitBreakerStatePatch?: boolean
   circuitBreakerStateCas?: boolean
   circuitBreakerStateLeaseId?: string
   circuitBreakerScopeKey?: string

@@ -516,6 +516,103 @@ fn spawn_state_store_cas_lease_server(expected_lease: String) -> (String, thread
   (endpoint, handle)
 }
 
+fn spawn_state_store_patch_server(expected_key: String) -> (String, thread::JoinHandle<()>) {
+  let listener = TcpListener::bind("127.0.0.1:0").expect("bind state store patch");
+  let address = listener.local_addr().expect("state store patch local addr");
+  let endpoint = format!("http://{address}/breaker-state");
+  let handle = thread::spawn(move || {
+    for expected_method in ["GET", "GET", "PATCH"] {
+      let (mut stream, _) = listener.accept().expect("accept state store patch");
+      stream
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .expect("set state store patch read timeout");
+
+      let mut buffer = Vec::new();
+      let mut chunk = [0u8; 1024];
+      let mut header_end: Option<usize> = None;
+      let mut content_length = 0usize;
+      loop {
+        match stream.read(&mut chunk) {
+          Ok(0) => break,
+          Ok(read) => {
+            buffer.extend_from_slice(&chunk[..read]);
+            if header_end.is_none() {
+              if let Some(position) = find_subsequence(&buffer, b"\r\n\r\n") {
+                let end = position + 4;
+                header_end = Some(end);
+                let headers_text = String::from_utf8_lossy(&buffer[..end]);
+                for line in headers_text.lines().skip(1) {
+                  let Some((name, value)) = line.split_once(':') else {
+                    continue;
+                  };
+                  if name.eq_ignore_ascii_case("content-length") {
+                    content_length = value.trim().parse::<usize>().unwrap_or(0);
+                  }
+                }
+              }
+            }
+            if let Some(end) = header_end {
+              if buffer.len() >= end + content_length {
+                break;
+              }
+            }
+          }
+          Err(error) => panic!("read state store patch request failed: {error}"),
+        }
+      }
+
+      let end = header_end.expect("state store patch header terminator");
+      let request_text = String::from_utf8_lossy(&buffer[..end]);
+      let request_line = request_text.lines().next().unwrap_or_default();
+      assert!(
+        request_line.starts_with(&format!("{expected_method} /breaker-state HTTP/1.1")),
+        "unexpected state store patch request line: {request_line}"
+      );
+
+      let mut headers = HashMap::new();
+      for line in request_text.lines().skip(1) {
+        let Some((name, value)) = line.split_once(':') else {
+          continue;
+        };
+        headers.insert(name.trim().to_ascii_lowercase(), value.trim().to_string());
+      }
+
+      assert_eq!(
+        headers.get("x-kitedb-breaker-mode").map(String::as_str),
+        Some("patch-v1"),
+        "patch mode header mismatch"
+      );
+      assert_eq!(
+        headers.get("x-kitedb-breaker-key").map(String::as_str),
+        Some(expected_key.as_str()),
+        "patch key header mismatch"
+      );
+
+      if expected_method == "PATCH" {
+        let body_end = (end + content_length).min(buffer.len());
+        let payload: serde_json::Value =
+          serde_json::from_slice(&buffer[end..body_end]).expect("parse patch payload");
+        assert_eq!(payload["key"].as_str(), Some(expected_key.as_str()));
+        assert!(payload["state"].is_object(), "missing patch state object");
+      }
+
+      let (status_line, etag, body) = if expected_method == "PATCH" {
+        ("HTTP/1.1 200 OK", "p2", "")
+      } else {
+        ("HTTP/1.1 200 OK", "p1", "{}")
+      };
+      let response = format!(
+        "{status_line}\r\nContent-Type: application/json\r\nETag: {etag}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        body.len()
+      );
+      stream
+        .write_all(response.as_bytes())
+        .expect("write state store patch response");
+    }
+  });
+  (endpoint, handle)
+}
+
 fn spawn_grpc_capture_server(
   fail_first_attempts: usize,
 ) -> (
@@ -1033,6 +1130,24 @@ fn otlp_push_payload_rejects_state_cas_without_url() {
 }
 
 #[test]
+fn otlp_push_payload_rejects_state_patch_without_url() {
+  let options = OtlpHttpPushOptions {
+    timeout_ms: 2_000,
+    circuit_breaker_state_patch: true,
+    ..OtlpHttpPushOptions::default()
+  };
+  let error = push_replication_metrics_otel_json_payload_with_options(
+    "{}",
+    "http://127.0.0.1:4318/v1/metrics",
+    &options,
+  )
+  .expect_err("state patch without url must fail");
+  assert!(error
+    .to_string()
+    .contains("circuit_breaker_state_patch requires circuit_breaker_state_url"));
+}
+
+#[test]
 fn otlp_push_payload_rejects_state_lease_without_url() {
   let options = OtlpHttpPushOptions {
     timeout_ms: 2_000,
@@ -1285,6 +1400,35 @@ fn otlp_push_payload_shared_state_url_applies_cas_and_lease_headers() {
   );
 
   state_handle.join().expect("state store cas lease thread");
+}
+
+#[test]
+fn otlp_push_payload_shared_state_url_patch_protocol_uses_key_scoped_updates() {
+  let scope_key = "shared-patch-breaker";
+  let (state_url, state_handle) = spawn_state_store_patch_server(scope_key.to_string());
+  let options = OtlpHttpPushOptions {
+    timeout_ms: 200,
+    retry_max_attempts: 1,
+    circuit_breaker_failure_threshold: 1,
+    circuit_breaker_open_ms: 2_000,
+    circuit_breaker_state_url: Some(state_url),
+    circuit_breaker_state_patch: true,
+    circuit_breaker_scope_key: Some(scope_key.to_string()),
+    ..OtlpHttpPushOptions::default()
+  };
+
+  let first = push_replication_metrics_otel_json_payload_with_options(
+    "{}",
+    "http://127.0.0.1:9/v1/metrics",
+    &options,
+  )
+  .expect_err("first call should fail transport and persist key-scoped patch");
+  assert!(
+    first.to_string().contains("transport"),
+    "unexpected first error: {first}"
+  );
+
+  state_handle.join().expect("state store patch thread");
 }
 
 #[test]
