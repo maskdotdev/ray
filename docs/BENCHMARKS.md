@@ -155,6 +155,11 @@ Latest tuning snapshot (2026-02-08):
   - `n_probe=16`: recall ratio vs IVF `0.6636`, p95 ratio vs IVF `0.4634`
 - Current implication: this configuration is the best IVF-PQ candidate for latency-first profiles, but still below IVF recall in this workload.
 
+CI tracking:
+- Main workflow (`.github/workflows/ray-rs.yml`) includes non-blocking `ann-pq-tracking`
+  (weekly schedule + manual dispatch) running `./scripts/vector-ann-pq-tuning.sh`.
+- Results are uploaded as artifact `ann-pq-tracking-logs`.
+
 ANN quality/latency gate:
 
 ```bash

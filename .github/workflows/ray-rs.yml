@@ -12,6 +12,8 @@ on:
     paths:
       - "ray-rs/**"
       - ".github/workflows/ray-rs.yml"
+  schedule:
+    - cron: "0 9 * * 1"
   workflow_dispatch:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -119,6 +121,42 @@ jobs:
         with:
           name: ann-quality-gate-logs
           path: docs/benchmarks/results/*vector-ann-gate*.txt
+          if-no-files-found: ignore
+  ann-pq-tracking:
+    name: ANN PQ Tracking
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            ray-rs/target/
+          key: ann-pq-tracking-${{ hashFiles('ray-rs/Cargo.lock') }}
+      - name: Run ANN PQ tuning sweep
+        run: ./scripts/vector-ann-pq-tuning.sh
+        env:
+          # Keep this lightweight enough for periodic trend tracking.
+          VECTORS: "15000"
+          QUERIES: "150"
+          N_PROBES: "8 16"
+          PQ_SUBSPACES_SET: "24 48"
+          PQ_CENTROIDS_SET: "128 256"
+          RESIDUALS_SET: "false"
+      - name: Upload ANN PQ tuning logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ann-pq-tracking-logs
+          path: |
+            docs/benchmarks/results/*vector-ann-pq-tuning*.txt
+            docs/benchmarks/results/*vector-ann-pq-tuning*.csv
           if-no-files-found: ignore
   # ===========================================
   # Node.js Builds (napi-rs)
