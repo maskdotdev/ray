@@ -725,6 +725,59 @@ fn otlp_push_payload_rejects_zero_retry_attempts() {
 }
 
 #[test]
+fn otlp_push_payload_rejects_invalid_retry_jitter_ratio() {
+  let options = OtlpHttpPushOptions {
+    timeout_ms: 2_000,
+    retry_jitter_ratio: 1.5,
+    ..OtlpHttpPushOptions::default()
+  };
+  let error = push_replication_metrics_otel_json_payload_with_options(
+    "{}",
+    "http://127.0.0.1:4318/v1/metrics",
+    &options,
+  )
+  .expect_err("invalid jitter ratio must fail");
+  assert!(error.to_string().contains("retry_jitter_ratio"));
+}
+
+#[test]
+fn otlp_push_payload_circuit_breaker_opens_after_failure() {
+  let probe = TcpListener::bind("127.0.0.1:0").expect("bind probe");
+  let port = probe.local_addr().expect("probe addr").port();
+  drop(probe);
+  let endpoint = format!("http://127.0.0.1:{port}/v1/metrics");
+  let options = OtlpHttpPushOptions {
+    timeout_ms: 100,
+    retry_max_attempts: 1,
+    circuit_breaker_failure_threshold: 1,
+    circuit_breaker_open_ms: 50,
+    ..OtlpHttpPushOptions::default()
+  };
+
+  let first = push_replication_metrics_otel_json_payload_with_options("{}", &endpoint, &options)
+    .expect_err("first call should fail transport");
+  assert!(
+    first.to_string().contains("transport"),
+    "unexpected first error: {first}"
+  );
+
+  let second = push_replication_metrics_otel_json_payload_with_options("{}", &endpoint, &options)
+    .expect_err("second call should be blocked by circuit breaker");
+  assert!(
+    second.to_string().contains("circuit breaker open"),
+    "unexpected second error: {second}"
+  );
+
+  thread::sleep(Duration::from_millis(70));
+  let third = push_replication_metrics_otel_json_payload_with_options("{}", &endpoint, &options)
+    .expect_err("third call should attempt again after breaker window");
+  assert!(
+    !third.to_string().contains("circuit breaker open"),
+    "breaker should have closed, got: {third}"
+  );
+}
+
+#[test]
 fn otlp_push_grpc_payload_posts_request_and_auth_header() {
   let payload = OtelExportMetricsServiceRequest {
     resource_metrics: Vec::new(),

@@ -2,9 +2,11 @@
 //!
 //! Core implementation used by bindings.
 
+use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{BufReader, Write};
 use std::sync::Arc;
+use std::sync::OnceLock;
 use std::thread;
 use std::time::{Duration, SystemTime};
 
@@ -23,7 +25,9 @@ use opentelemetry_proto::tonic::metrics::v1::{
   ScopeMetrics as OtelScopeMetrics, Sum as OtelSum,
 };
 use opentelemetry_proto::tonic::resource::v1::Resource as OtelResource;
+use parking_lot::Mutex;
 use prost::Message;
+use rand::Rng;
 use serde_json::{json, Value};
 use tonic::codec::CompressionEncoding as TonicCompressionEncoding;
 use tonic::metadata::MetadataValue;
@@ -185,6 +189,9 @@ pub struct OtlpHttpPushOptions {
   pub retry_max_attempts: u32,
   pub retry_backoff_ms: u64,
   pub retry_backoff_max_ms: u64,
+  pub retry_jitter_ratio: f64,
+  pub circuit_breaker_failure_threshold: u32,
+  pub circuit_breaker_open_ms: u64,
   pub compression_gzip: bool,
   pub tls: OtlpHttpTlsOptions,
 }
@@ -197,6 +204,9 @@ impl Default for OtlpHttpPushOptions {
       retry_max_attempts: 1,
       retry_backoff_ms: 100,
       retry_backoff_max_ms: 2_000,
+      retry_jitter_ratio: 0.0,
+      circuit_breaker_failure_threshold: 0,
+      circuit_breaker_open_ms: 0,
       compression_gzip: false,
       tls: OtlpHttpTlsOptions::default(),
     }
@@ -457,6 +467,7 @@ pub fn push_replication_metrics_otel_grpc_payload_with_options(
       "OTLP endpoint must use https when https_only is enabled".into(),
     ));
   }
+  check_circuit_breaker_open(endpoint, options)?;
 
   let request = OtelExportMetricsServiceRequest::decode(payload).map_err(|error| {
     KiteError::InvalidQuery(format!("Invalid OTLP protobuf payload: {error}").into())
@@ -547,9 +558,10 @@ fn push_replication_metrics_otel_grpc_request_with_options(
             "OTLP collector gRPC transport error: {error}"
           )));
           if attempt < options.retry_max_attempts {
-            tokio::time::sleep(retry_backoff_duration(options, attempt)).await;
+            tokio::time::sleep(retry_backoff_with_jitter_duration(options, attempt)).await;
             continue;
           }
+          record_circuit_breaker_failure(endpoint, options);
           return Err(transport_error);
         }
       };
@@ -581,6 +593,7 @@ fn push_replication_metrics_otel_grpc_request_with_options(
             ),
             None => String::new(),
           };
+          record_circuit_breaker_success(endpoint, options);
           return Ok(OtlpHttpExportResult {
             status_code: 200,
             response_body,
@@ -588,9 +601,10 @@ fn push_replication_metrics_otel_grpc_request_with_options(
         }
         Err(status) => {
           if attempt < options.retry_max_attempts && should_retry_grpc_status(status.code()) {
-            tokio::time::sleep(retry_backoff_duration(options, attempt)).await;
+            tokio::time::sleep(retry_backoff_with_jitter_duration(options, attempt)).await;
             continue;
           }
+          record_circuit_breaker_failure(endpoint, options);
           return Err(KiteError::Internal(format!(
             "OTLP collector rejected replication metrics over gRPC: {status}"
           )));
@@ -598,6 +612,7 @@ fn push_replication_metrics_otel_grpc_request_with_options(
       }
     }
 
+    record_circuit_breaker_failure(endpoint, options);
     Err(KiteError::Internal(
       "OTLP gRPC exporter exhausted retry attempts".to_string(),
     ))
@@ -622,6 +637,7 @@ fn push_replication_metrics_otel_http_payload_with_options(
       "OTLP endpoint must use https when https_only is enabled".into(),
     ));
   }
+  check_circuit_breaker_open(endpoint, options)?;
 
   let request_payload = encode_http_request_payload(payload, options.compression_gzip)?;
   for attempt in 1..=options.retry_max_attempts {
@@ -644,6 +660,7 @@ fn push_replication_metrics_otel_http_payload_with_options(
       Ok(response) => {
         let status_code = response.status() as i64;
         let response_body = response.into_string().unwrap_or_default();
+        record_circuit_breaker_success(endpoint, options);
         return Ok(OtlpHttpExportResult {
           status_code,
           response_body,
@@ -652,18 +669,20 @@ fn push_replication_metrics_otel_http_payload_with_options(
       Err(ureq::Error::Status(status_code, response)) => {
         let body = response.into_string().unwrap_or_default();
         if attempt < options.retry_max_attempts && should_retry_http_status(status_code) {
-          thread::sleep(retry_backoff_duration(options, attempt));
+          thread::sleep(retry_backoff_with_jitter_duration(options, attempt));
           continue;
         }
+        record_circuit_breaker_failure(endpoint, options);
         return Err(KiteError::Internal(format!(
           "OTLP collector rejected replication metrics: status {status_code}, body: {body}"
         )));
       }
       Err(ureq::Error::Transport(error)) => {
         if attempt < options.retry_max_attempts {
-          thread::sleep(retry_backoff_duration(options, attempt));
+          thread::sleep(retry_backoff_with_jitter_duration(options, attempt));
           continue;
         }
+        record_circuit_breaker_failure(endpoint, options);
         return Err(KiteError::Io(std::io::Error::other(format!(
           "OTLP collector transport error: {error}"
         ))));
@@ -683,6 +702,17 @@ fn validate_otel_push_options(options: &OtlpHttpPushOptions) -> Result<()> {
   if options.retry_max_attempts == 0 {
     return Err(KiteError::InvalidQuery(
       "retry_max_attempts must be > 0".into(),
+    ));
+  }
+  if !(0.0..=1.0).contains(&options.retry_jitter_ratio) {
+    return Err(KiteError::InvalidQuery(
+      "retry_jitter_ratio must be within [0.0, 1.0]".into(),
+    ));
+  }
+  if options.circuit_breaker_failure_threshold > 0 && options.circuit_breaker_open_ms == 0 {
+    return Err(KiteError::InvalidQuery(
+      "circuit_breaker_open_ms must be > 0 when circuit_breaker_failure_threshold is enabled"
+        .into(),
     ));
   }
   Ok(())
@@ -712,6 +742,82 @@ fn retry_backoff_duration(options: &OtlpHttpPushOptions, attempt: u32) -> Durati
     raw.min(options.retry_backoff_max_ms)
   };
   Duration::from_millis(backoff)
+}
+
+fn retry_backoff_with_jitter_duration(options: &OtlpHttpPushOptions, attempt: u32) -> Duration {
+  let base = retry_backoff_duration(options, attempt);
+  if options.retry_jitter_ratio <= 0.0 {
+    return base;
+  }
+  let base_ms = base.as_millis() as u64;
+  if base_ms == 0 {
+    return base;
+  }
+  let jitter_max = ((base_ms as f64) * options.retry_jitter_ratio) as u64;
+  if jitter_max == 0 {
+    return base;
+  }
+  let jitter = rand::thread_rng().gen_range(0..=jitter_max);
+  Duration::from_millis(base_ms.saturating_add(jitter))
+}
+
+#[derive(Debug, Clone, Default)]
+struct OtlpCircuitBreakerState {
+  consecutive_failures: u32,
+  open_until_ms: u64,
+}
+
+static OTLP_CIRCUIT_BREAKERS: OnceLock<Mutex<HashMap<String, OtlpCircuitBreakerState>>> =
+  OnceLock::new();
+
+fn otlp_circuit_breakers() -> &'static Mutex<HashMap<String, OtlpCircuitBreakerState>> {
+  OTLP_CIRCUIT_BREAKERS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn circuit_breaker_now_ms() -> u64 {
+  SystemTime::now()
+    .duration_since(std::time::UNIX_EPOCH)
+    .unwrap_or_default()
+    .as_millis() as u64
+}
+
+fn check_circuit_breaker_open(endpoint: &str, options: &OtlpHttpPushOptions) -> Result<()> {
+  if options.circuit_breaker_failure_threshold == 0 {
+    return Ok(());
+  }
+  let now = circuit_breaker_now_ms();
+  let breakers = otlp_circuit_breakers();
+  let states = breakers.lock();
+  if let Some(state) = states.get(endpoint) {
+    if state.open_until_ms > now {
+      return Err(KiteError::Internal(format!(
+        "OTLP circuit breaker open for endpoint {endpoint} until {}",
+        state.open_until_ms
+      )));
+    }
+  }
+  Ok(())
+}
+
+fn record_circuit_breaker_success(endpoint: &str, options: &OtlpHttpPushOptions) {
+  if options.circuit_breaker_failure_threshold == 0 {
+    return;
+  }
+  otlp_circuit_breakers().lock().remove(endpoint);
+}
+
+fn record_circuit_breaker_failure(endpoint: &str, options: &OtlpHttpPushOptions) {
+  if options.circuit_breaker_failure_threshold == 0 || options.circuit_breaker_open_ms == 0 {
+    return;
+  }
+  let now = circuit_breaker_now_ms();
+  let mut states = otlp_circuit_breakers().lock();
+  let state = states.entry(endpoint.to_string()).or_default();
+  state.consecutive_failures = state.consecutive_failures.saturating_add(1);
+  if state.consecutive_failures >= options.circuit_breaker_failure_threshold {
+    state.open_until_ms = now.saturating_add(options.circuit_breaker_open_ms);
+    state.consecutive_failures = 0;
+  }
 }
 
 fn encode_http_request_payload(payload: &[u8], compression_gzip: bool) -> Result<Vec<u8>> {

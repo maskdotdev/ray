@@ -1882,6 +1882,9 @@ fn build_otel_push_options_py(
   retry_max_attempts: i64,
   retry_backoff_ms: i64,
   retry_backoff_max_ms: i64,
+  retry_jitter_ratio: f64,
+  circuit_breaker_failure_threshold: i64,
+  circuit_breaker_open_ms: i64,
   compression_gzip: bool,
   https_only: bool,
   ca_cert_pem_path: Option<String>,
@@ -1911,6 +1914,26 @@ fn build_otel_push_options_py(
       "retry_backoff_max_ms must be >= retry_backoff_ms when non-zero",
     ));
   }
+  if !(0.0..=1.0).contains(&retry_jitter_ratio) {
+    return Err(PyRuntimeError::new_err(
+      "retry_jitter_ratio must be within [0.0, 1.0]",
+    ));
+  }
+  if circuit_breaker_failure_threshold < 0 {
+    return Err(PyRuntimeError::new_err(
+      "circuit_breaker_failure_threshold must be non-negative",
+    ));
+  }
+  if circuit_breaker_open_ms < 0 {
+    return Err(PyRuntimeError::new_err(
+      "circuit_breaker_open_ms must be non-negative",
+    ));
+  }
+  if circuit_breaker_failure_threshold > 0 && circuit_breaker_open_ms == 0 {
+    return Err(PyRuntimeError::new_err(
+      "circuit_breaker_open_ms must be > 0 when circuit_breaker_failure_threshold is enabled",
+    ));
+  }
 
   Ok(core_metrics::OtlpHttpPushOptions {
     timeout_ms: timeout_ms as u64,
@@ -1918,6 +1941,9 @@ fn build_otel_push_options_py(
     retry_max_attempts: retry_max_attempts as u32,
     retry_backoff_ms: retry_backoff_ms as u64,
     retry_backoff_max_ms: retry_backoff_max_ms as u64,
+    retry_jitter_ratio,
+    circuit_breaker_failure_threshold: circuit_breaker_failure_threshold as u32,
+    circuit_breaker_open_ms: circuit_breaker_open_ms as u64,
     compression_gzip,
     tls: core_metrics::OtlpHttpTlsOptions {
       https_only,
@@ -1937,6 +1963,9 @@ fn build_otel_push_options_py(
   retry_max_attempts=1,
   retry_backoff_ms=100,
   retry_backoff_max_ms=2000,
+  retry_jitter_ratio=0.0,
+  circuit_breaker_failure_threshold=0,
+  circuit_breaker_open_ms=0,
   compression_gzip=false,
   https_only=false,
   ca_cert_pem_path=None,
@@ -1951,6 +1980,9 @@ pub fn push_replication_metrics_otel_json(
   retry_max_attempts: i64,
   retry_backoff_ms: i64,
   retry_backoff_max_ms: i64,
+  retry_jitter_ratio: f64,
+  circuit_breaker_failure_threshold: i64,
+  circuit_breaker_open_ms: i64,
   compression_gzip: bool,
   https_only: bool,
   ca_cert_pem_path: Option<String>,
@@ -1963,6 +1995,9 @@ pub fn push_replication_metrics_otel_json(
     retry_max_attempts,
     retry_backoff_ms,
     retry_backoff_max_ms,
+    retry_jitter_ratio,
+    circuit_breaker_failure_threshold,
+    circuit_breaker_open_ms,
     compression_gzip,
     https_only,
     ca_cert_pem_path,
@@ -1995,6 +2030,9 @@ pub fn push_replication_metrics_otel_json(
   retry_max_attempts=1,
   retry_backoff_ms=100,
   retry_backoff_max_ms=2000,
+  retry_jitter_ratio=0.0,
+  circuit_breaker_failure_threshold=0,
+  circuit_breaker_open_ms=0,
   compression_gzip=false,
   https_only=false,
   ca_cert_pem_path=None,
@@ -2009,6 +2047,9 @@ pub fn push_replication_metrics_otel_protobuf(
   retry_max_attempts: i64,
   retry_backoff_ms: i64,
   retry_backoff_max_ms: i64,
+  retry_jitter_ratio: f64,
+  circuit_breaker_failure_threshold: i64,
+  circuit_breaker_open_ms: i64,
   compression_gzip: bool,
   https_only: bool,
   ca_cert_pem_path: Option<String>,
@@ -2021,6 +2062,9 @@ pub fn push_replication_metrics_otel_protobuf(
     retry_max_attempts,
     retry_backoff_ms,
     retry_backoff_max_ms,
+    retry_jitter_ratio,
+    circuit_breaker_failure_threshold,
+    circuit_breaker_open_ms,
     compression_gzip,
     https_only,
     ca_cert_pem_path,
@@ -2053,6 +2097,9 @@ pub fn push_replication_metrics_otel_protobuf(
   retry_max_attempts=1,
   retry_backoff_ms=100,
   retry_backoff_max_ms=2000,
+  retry_jitter_ratio=0.0,
+  circuit_breaker_failure_threshold=0,
+  circuit_breaker_open_ms=0,
   compression_gzip=false,
   https_only=false,
   ca_cert_pem_path=None,
@@ -2067,6 +2114,9 @@ pub fn push_replication_metrics_otel_grpc(
   retry_max_attempts: i64,
   retry_backoff_ms: i64,
   retry_backoff_max_ms: i64,
+  retry_jitter_ratio: f64,
+  circuit_breaker_failure_threshold: i64,
+  circuit_breaker_open_ms: i64,
   compression_gzip: bool,
   https_only: bool,
   ca_cert_pem_path: Option<String>,
@@ -2079,6 +2129,9 @@ pub fn push_replication_metrics_otel_grpc(
     retry_max_attempts,
     retry_backoff_ms,
     retry_backoff_max_ms,
+    retry_jitter_ratio,
+    circuit_breaker_failure_threshold,
+    circuit_breaker_open_ms,
     compression_gzip,
     https_only,
     ca_cert_pem_path,

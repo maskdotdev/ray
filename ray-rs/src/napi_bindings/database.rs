@@ -853,6 +853,9 @@ pub struct PushReplicationMetricsOtelOptions {
   pub retry_max_attempts: Option<i64>,
   pub retry_backoff_ms: Option<i64>,
   pub retry_backoff_max_ms: Option<i64>,
+  pub retry_jitter_ratio: Option<f64>,
+  pub circuit_breaker_failure_threshold: Option<i64>,
+  pub circuit_breaker_open_ms: Option<i64>,
   pub compression_gzip: Option<bool>,
   pub https_only: Option<bool>,
   pub ca_cert_pem_path: Option<String>,
@@ -3464,6 +3467,29 @@ fn build_core_otel_push_options(
       "retryBackoffMaxMs must be >= retryBackoffMs when non-zero",
     ));
   }
+  let retry_jitter_ratio = options.retry_jitter_ratio.unwrap_or(0.0);
+  if !(0.0..=1.0).contains(&retry_jitter_ratio) {
+    return Err(Error::from_reason(
+      "retryJitterRatio must be within [0.0, 1.0]",
+    ));
+  }
+  let circuit_breaker_failure_threshold = options.circuit_breaker_failure_threshold.unwrap_or(0);
+  if circuit_breaker_failure_threshold < 0 {
+    return Err(Error::from_reason(
+      "circuitBreakerFailureThreshold must be non-negative",
+    ));
+  }
+  let circuit_breaker_open_ms = options.circuit_breaker_open_ms.unwrap_or(0);
+  if circuit_breaker_open_ms < 0 {
+    return Err(Error::from_reason(
+      "circuitBreakerOpenMs must be non-negative",
+    ));
+  }
+  if circuit_breaker_failure_threshold > 0 && circuit_breaker_open_ms == 0 {
+    return Err(Error::from_reason(
+      "circuitBreakerOpenMs must be positive when circuitBreakerFailureThreshold is set",
+    ));
+  }
 
   Ok(core_metrics::OtlpHttpPushOptions {
     timeout_ms: timeout_ms as u64,
@@ -3471,6 +3497,9 @@ fn build_core_otel_push_options(
     retry_max_attempts: retry_max_attempts as u32,
     retry_backoff_ms: retry_backoff_ms as u64,
     retry_backoff_max_ms: retry_backoff_max_ms as u64,
+    retry_jitter_ratio,
+    circuit_breaker_failure_threshold: circuit_breaker_failure_threshold as u32,
+    circuit_breaker_open_ms: circuit_breaker_open_ms as u64,
     compression_gzip: options.compression_gzip.unwrap_or(false),
     tls: core_metrics::OtlpHttpTlsOptions {
       https_only: options.https_only.unwrap_or(false),
