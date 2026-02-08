@@ -433,9 +433,11 @@ impl PyDatabase {
   fn export_replication_snapshot_transport_json(&self, include_data: bool) -> PyResult<String> {
     dispatch!(
       self,
-      |db| db.primary_export_snapshot_transport_json(include_data).map_err(|e| {
-        PyRuntimeError::new_err(format!("Failed to export replication snapshot: {e}"))
-      }),
+      |db| db
+        .primary_export_snapshot_transport_json(include_data)
+        .map_err(|e| {
+          PyRuntimeError::new_err(format!("Failed to export replication snapshot: {e}"))
+        }),
       |_db| { unreachable!("multi-file database support removed") }
     )
   }
@@ -1809,6 +1811,20 @@ pub fn collect_replication_metrics_otel_json(db: &PyDatabase) -> PyResult<String
 }
 
 #[pyfunction]
+pub fn collect_replication_metrics_otel_protobuf(db: &PyDatabase) -> PyResult<Vec<u8>> {
+  let guard = db
+    .inner
+    .read()
+    .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+  match guard.as_ref() {
+    Some(DatabaseInner::SingleFile(d)) => {
+      Ok(core_metrics::collect_replication_metrics_otel_protobuf_single_file(d))
+    }
+    None => Err(PyRuntimeError::new_err("Database is closed")),
+  }
+}
+
+#[pyfunction]
 #[pyo3(signature = (db, include_data=false))]
 pub fn collect_replication_snapshot_transport_json(
   db: &PyDatabase,
@@ -1902,6 +1918,58 @@ pub fn push_replication_metrics_otel_json(
   match guard.as_ref() {
     Some(DatabaseInner::SingleFile(d)) => {
       let result = core_metrics::push_replication_metrics_otel_json_single_file_with_options(
+        d, &endpoint, &options,
+      )
+      .map_err(|e| PyRuntimeError::new_err(format!("Failed to push replication metrics: {e}")))?;
+      Ok((result.status_code, result.response_body))
+    }
+    None => Err(PyRuntimeError::new_err("Database is closed")),
+  }
+}
+
+#[pyfunction]
+#[pyo3(signature = (
+  db,
+  endpoint,
+  timeout_ms=5000,
+  bearer_token=None,
+  https_only=false,
+  ca_cert_pem_path=None,
+  client_cert_pem_path=None,
+  client_key_pem_path=None
+))]
+pub fn push_replication_metrics_otel_protobuf(
+  db: &PyDatabase,
+  endpoint: String,
+  timeout_ms: i64,
+  bearer_token: Option<String>,
+  https_only: bool,
+  ca_cert_pem_path: Option<String>,
+  client_cert_pem_path: Option<String>,
+  client_key_pem_path: Option<String>,
+) -> PyResult<(i64, String)> {
+  if timeout_ms <= 0 {
+    return Err(PyRuntimeError::new_err("timeout_ms must be positive"));
+  }
+
+  let options = core_metrics::OtlpHttpPushOptions {
+    timeout_ms: timeout_ms as u64,
+    bearer_token,
+    tls: core_metrics::OtlpHttpTlsOptions {
+      https_only,
+      ca_cert_pem_path,
+      client_cert_pem_path,
+      client_key_pem_path,
+    },
+  };
+
+  let guard = db
+    .inner
+    .read()
+    .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+  match guard.as_ref() {
+    Some(DatabaseInner::SingleFile(d)) => {
+      let result = core_metrics::push_replication_metrics_otel_protobuf_single_file_with_options(
         d, &endpoint, &options,
       )
       .map_err(|e| PyRuntimeError::new_err(format!("Failed to push replication metrics: {e}")))?;

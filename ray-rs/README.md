@@ -190,11 +190,14 @@ import { Database } from 'kitedb'
 import {
   collectReplicationLogTransportJson,
   collectReplicationMetricsOtelJson,
+  collectReplicationMetricsOtelProtobuf,
   collectReplicationMetricsPrometheus,
   collectReplicationSnapshotTransportJson,
   createReplicationTransportAdapter,
   pushReplicationMetricsOtelJson,
   pushReplicationMetricsOtelJsonWithOptions,
+  pushReplicationMetricsOtelProtobuf,
+  pushReplicationMetricsOtelProtobufWithOptions,
 } from 'kitedb/native'
 
 const primary = Database.open('cluster-primary.kitedb', {
@@ -231,12 +234,22 @@ console.log(prometheus)
 const otelJson = collectReplicationMetricsOtelJson(primary)
 console.log(otelJson)
 
+const otelProtobuf = collectReplicationMetricsOtelProtobuf(primary)
+console.log(otelProtobuf.length)
+
 const exportResult = pushReplicationMetricsOtelJson(
   primary,
   'http://127.0.0.1:4318/v1/metrics',
   5_000,
 )
 console.log(exportResult.statusCode, exportResult.responseBody)
+
+const protoExport = pushReplicationMetricsOtelProtobuf(
+  primary,
+  'http://127.0.0.1:4318/v1/metrics',
+  5_000,
+)
+console.log(protoExport.statusCode, protoExport.responseBody)
 
 const secureExport = pushReplicationMetricsOtelJsonWithOptions(
   primary,
@@ -250,6 +263,19 @@ const secureExport = pushReplicationMetricsOtelJsonWithOptions(
   },
 )
 console.log(secureExport.statusCode, secureExport.responseBody)
+
+const secureProtoExport = pushReplicationMetricsOtelProtobufWithOptions(
+  primary,
+  'https://collector.internal:4318/v1/metrics',
+  {
+    timeoutMs: 5_000,
+    httpsOnly: true,
+    caCertPemPath: './tls/collector-ca.pem',
+    clientCertPemPath: './tls/client.pem',
+    clientKeyPemPath: './tls/client-key.pem',
+  },
+)
+console.log(secureProtoExport.statusCode, secureProtoExport.responseBody)
 
 const snapshotJson = collectReplicationSnapshotTransportJson(primary, false)
 console.log(snapshotJson)

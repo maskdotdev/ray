@@ -30,13 +30,25 @@ Metrics surface:
   - Rust core: `collect_replication_metrics_otel_json_single_file(...)`
   - Node NAPI: `collectReplicationMetricsOtelJson(db)`
   - Python PyO3: `collect_replication_metrics_otel_json(db)`
+- Host-runtime OpenTelemetry OTLP-protobuf export is available via:
+  - Rust core: `collect_replication_metrics_otel_protobuf_single_file(...)`
+  - Node NAPI: `collectReplicationMetricsOtelProtobuf(db)`
+  - Python PyO3: `collect_replication_metrics_otel_protobuf(db)`
 - Host-runtime OpenTelemetry collector push is available via:
   - Rust core: `push_replication_metrics_otel_json_single_file(db, endpoint, timeout_ms, bearer_token)`
     - advanced TLS/mTLS: `push_replication_metrics_otel_json_*_with_options(...)` with
       `https_only`, `ca_cert_pem_path`, `client_cert_pem_path`, `client_key_pem_path`.
+  - Rust core (protobuf): `push_replication_metrics_otel_protobuf_single_file(db, endpoint, timeout_ms, bearer_token)`
+    - advanced TLS/mTLS: `push_replication_metrics_otel_protobuf_*_with_options(...)` with
+      `https_only`, `ca_cert_pem_path`, `client_cert_pem_path`, `client_key_pem_path`.
   - Node NAPI: `pushReplicationMetricsOtelJson(db, endpoint, timeoutMs, bearerToken?)`
     - advanced TLS/mTLS: `pushReplicationMetricsOtelJsonWithOptions(db, endpoint, options)`.
+  - Node NAPI (protobuf): `pushReplicationMetricsOtelProtobuf(db, endpoint, timeoutMs, bearerToken?)`
+    - advanced TLS/mTLS: `pushReplicationMetricsOtelProtobufWithOptions(db, endpoint, options)`.
   - Python PyO3: `push_replication_metrics_otel_json(db, endpoint, timeout_ms=5000, bearer_token=None)`
+    - advanced TLS/mTLS kwargs:
+      `https_only`, `ca_cert_pem_path`, `client_cert_pem_path`, `client_key_pem_path`.
+  - Python PyO3 (protobuf): `push_replication_metrics_otel_protobuf(db, endpoint, timeout_ms=5000, bearer_token=None)`
     - advanced TLS/mTLS kwargs:
       `https_only`, `ca_cert_pem_path`, `client_cert_pem_path`, `client_key_pem_path`.
 - Host-runtime replication transport JSON export helpers are available via:
@@ -187,5 +199,5 @@ Playground curl examples:
 
 - Retention policy supports entry-window + time-window floors, but not richer SLA-aware policies.
 - Bundled HTTP admin endpoints still ship in playground runtime; host runtime now exposes transport JSON helpers for embedding custom HTTP surfaces.
-- Host-runtime OTLP export currently targets HTTP OTLP-JSON payloads only (no protobuf/gRPC exporter path).
+- Host-runtime OTLP gRPC transport path is not yet exposed; current runtime exporter path is HTTP OTLP-JSON or HTTP OTLP-protobuf.
 - `SyncMode::Normal` and `SyncMode::Off` optimize commit latency by batching sidecar frame writes in-memory and refreshing manifest fencing periodically (not every commit). For strict per-commit sidecar visibility/fencing, use `SyncMode::Full`.

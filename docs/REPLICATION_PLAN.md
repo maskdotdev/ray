@@ -364,6 +364,8 @@ Implemented:
 - Host-runtime Prometheus replication exporter API in Rust core + Node NAPI + Python PyO3 (`collect_replication_metrics_prometheus*`).
 - Host-runtime OpenTelemetry OTLP-JSON replication exporter API in Rust core + Node NAPI + Python PyO3 (`collect_replication_metrics_otel_json*`).
 - Host-runtime OpenTelemetry collector push transport (HTTP OTLP-JSON) in Rust core + Node NAPI + Python PyO3 (`push_replication_metrics_otel_json_single_file`, `pushReplicationMetricsOtelJson`, `push_replication_metrics_otel_json`).
+- Host-runtime OpenTelemetry OTLP-protobuf replication exporter API in Rust core + Node NAPI + Python PyO3 (`collect_replication_metrics_otel_protobuf*`).
+- Host-runtime OpenTelemetry collector push transport (HTTP OTLP-protobuf) in Rust core + Node NAPI + Python PyO3 (`push_replication_metrics_otel_protobuf_single_file`, `pushReplicationMetricsOtelProtobuf`, `push_replication_metrics_otel_protobuf`).
 - Host-runtime OTLP transport hardening for TLS/mTLS (HTTPS-only mode, custom CA trust, optional client cert/key auth).
 - Host-runtime replication transport JSON export surfaces for embedding HTTP endpoints beyond playground runtime:
   - snapshot export (`collectReplicationSnapshotTransportJson` / `collect_replication_snapshot_transport_json`)
@@ -395,7 +397,7 @@ Validated tests:
 
 Known limits:
 - Bundled HTTP admin endpoints currently ship in playground runtime only; host runtime provides JSON export helpers for embedding custom endpoints.
-- Host-runtime OTLP export currently targets HTTP OTLP-JSON payloads only (no protobuf/gRPC exporter path).
+- Host-runtime OTLP export currently targets HTTP OTLP-JSON and HTTP OTLP-protobuf payloads (no gRPC exporter path yet).
 
 Carry-over to next phase:
-- Optional OTLP protobuf/gRPC exporter path (current host-runtime exporter is OTLP-JSON over HTTP).
+- Optional OTLP gRPC exporter path (current host-runtime exporter is OTLP-JSON/OTLP-protobuf over HTTP).

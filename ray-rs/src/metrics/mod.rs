@@ -7,6 +7,19 @@ use std::io::BufReader;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
+use opentelemetry_proto::tonic::collector::metrics::v1::ExportMetricsServiceRequest as OtelExportMetricsServiceRequest;
+use opentelemetry_proto::tonic::common::v1::{
+  any_value as otel_any_value, AnyValue as OtelAnyValue,
+  InstrumentationScope as OtelInstrumentationScope, KeyValue as OtelKeyValue,
+};
+use opentelemetry_proto::tonic::metrics::v1::{
+  metric as otel_metric, number_data_point as otel_number_data_point,
+  AggregationTemporality as OtelAggregationTemporality, Gauge as OtelGauge, Metric as OtelMetric,
+  NumberDataPoint as OtelNumberDataPoint, ResourceMetrics as OtelResourceMetrics,
+  ScopeMetrics as OtelScopeMetrics, Sum as OtelSum,
+};
+use opentelemetry_proto::tonic::resource::v1::Resource as OtelResource;
+use prost::Message;
 use serde_json::{json, Value};
 
 use crate::cache::manager::CacheManagerStats;
@@ -250,6 +263,12 @@ pub fn collect_replication_metrics_otel_json_single_file(db: &SingleFileDB) -> S
   render_replication_metrics_otel_json(&metrics)
 }
 
+/// Collect replication-only metrics and render them as OTLP protobuf payload.
+pub fn collect_replication_metrics_otel_protobuf_single_file(db: &SingleFileDB) -> Vec<u8> {
+  let metrics = collect_metrics_single_file(db);
+  render_replication_metrics_otel_protobuf(&metrics)
+}
+
 /// Push replication OTLP-JSON payload to an OTLP collector endpoint.
 ///
 /// Expects collector HTTP endpoint (for example `/v1/metrics`).
@@ -299,6 +318,74 @@ pub fn push_replication_metrics_otel_json_payload_with_options(
   endpoint: &str,
   options: &OtlpHttpPushOptions,
 ) -> Result<OtlpHttpExportResult> {
+  push_replication_metrics_otel_http_payload_with_options(
+    payload.as_bytes(),
+    endpoint,
+    options,
+    "application/json",
+  )
+}
+
+/// Push replication OTLP-protobuf payload to an OTLP collector endpoint.
+pub fn push_replication_metrics_otel_protobuf_single_file(
+  db: &SingleFileDB,
+  endpoint: &str,
+  timeout_ms: u64,
+  bearer_token: Option<&str>,
+) -> Result<OtlpHttpExportResult> {
+  let options = OtlpHttpPushOptions {
+    timeout_ms,
+    bearer_token: bearer_token.map(ToOwned::to_owned),
+    ..OtlpHttpPushOptions::default()
+  };
+  push_replication_metrics_otel_protobuf_single_file_with_options(db, endpoint, &options)
+}
+
+/// Push replication OTLP-protobuf payload using explicit push options.
+pub fn push_replication_metrics_otel_protobuf_single_file_with_options(
+  db: &SingleFileDB,
+  endpoint: &str,
+  options: &OtlpHttpPushOptions,
+) -> Result<OtlpHttpExportResult> {
+  let payload = collect_replication_metrics_otel_protobuf_single_file(db);
+  push_replication_metrics_otel_protobuf_payload_with_options(&payload, endpoint, options)
+}
+
+/// Push pre-rendered replication OTLP-protobuf payload to an OTLP collector endpoint.
+pub fn push_replication_metrics_otel_protobuf_payload(
+  payload: &[u8],
+  endpoint: &str,
+  timeout_ms: u64,
+  bearer_token: Option<&str>,
+) -> Result<OtlpHttpExportResult> {
+  let options = OtlpHttpPushOptions {
+    timeout_ms,
+    bearer_token: bearer_token.map(ToOwned::to_owned),
+    ..OtlpHttpPushOptions::default()
+  };
+  push_replication_metrics_otel_protobuf_payload_with_options(payload, endpoint, &options)
+}
+
+/// Push pre-rendered replication OTLP-protobuf payload using explicit push options.
+pub fn push_replication_metrics_otel_protobuf_payload_with_options(
+  payload: &[u8],
+  endpoint: &str,
+  options: &OtlpHttpPushOptions,
+) -> Result<OtlpHttpExportResult> {
+  push_replication_metrics_otel_http_payload_with_options(
+    payload,
+    endpoint,
+    options,
+    "application/x-protobuf",
+  )
+}
+
+fn push_replication_metrics_otel_http_payload_with_options(
+  payload: &[u8],
+  endpoint: &str,
+  options: &OtlpHttpPushOptions,
+  content_type: &str,
+) -> Result<OtlpHttpExportResult> {
   let endpoint = endpoint.trim();
   if endpoint.is_empty() {
     return Err(KiteError::InvalidQuery(
@@ -318,7 +405,7 @@ pub fn push_replication_metrics_otel_json_payload_with_options(
   let agent = build_otel_http_agent(endpoint, options, timeout)?;
   let mut request = agent
     .post(endpoint)
-    .set("content-type", "application/json")
+    .set("content-type", content_type)
     .timeout(timeout);
 
   if let Some(token) = options.bearer_token.as_deref() {
@@ -327,7 +414,7 @@ pub fn push_replication_metrics_otel_json_payload_with_options(
     }
   }
 
-  match request.send_string(payload) {
+  match request.send_bytes(payload) {
     Ok(response) => {
       let status_code = response.status() as i64;
       let response_body = response.into_string().unwrap_or_default();
@@ -847,6 +934,172 @@ pub fn render_replication_metrics_otel_json(metrics: &DatabaseMetrics) -> String
   serde_json::to_string(&payload).unwrap_or_else(|_| "{\"resourceMetrics\":[]}".to_string())
 }
 
+/// Render replication metrics in OpenTelemetry OTLP protobuf wire format.
+pub fn render_replication_metrics_otel_protobuf(metrics: &DatabaseMetrics) -> Vec<u8> {
+  let role = metrics.replication.role.as_str();
+  let enabled = if metrics.replication.enabled { 1 } else { 0 };
+  let time_unix_nano = metric_time_unix_nano_u64(metrics);
+  let mut otel_metrics: Vec<OtelMetric> = Vec::new();
+
+  otel_metrics.push(otel_proto_gauge_metric(
+    "kitedb.replication.enabled",
+    "Whether replication is enabled for this database (1 enabled, 0 disabled).",
+    "1",
+    enabled,
+    &[("role", role)],
+    time_unix_nano,
+  ));
+
+  // Host-runtime export path is process-local and does not enforce HTTP auth.
+  otel_metrics.push(otel_proto_gauge_metric(
+    "kitedb.replication.auth.enabled",
+    "Whether replication admin auth is enabled for this metrics exporter.",
+    "1",
+    0,
+    &[],
+    time_unix_nano,
+  ));
+
+  if let Some(primary) = metrics.replication.primary.as_ref() {
+    otel_metrics.push(otel_proto_gauge_metric(
+      "kitedb.replication.primary.epoch",
+      "Current primary replication epoch.",
+      "1",
+      primary.epoch,
+      &[],
+      time_unix_nano,
+    ));
+    otel_metrics.push(otel_proto_gauge_metric(
+      "kitedb.replication.primary.head_log_index",
+      "Current primary head log index.",
+      "1",
+      primary.head_log_index,
+      &[],
+      time_unix_nano,
+    ));
+    otel_metrics.push(otel_proto_gauge_metric(
+      "kitedb.replication.primary.retained_floor",
+      "Current primary retained floor log index.",
+      "1",
+      primary.retained_floor,
+      &[],
+      time_unix_nano,
+    ));
+    otel_metrics.push(otel_proto_gauge_metric(
+      "kitedb.replication.primary.replica_count",
+      "Replica progress reporters known by this primary.",
+      "1",
+      primary.replica_count,
+      &[],
+      time_unix_nano,
+    ));
+    otel_metrics.push(otel_proto_gauge_metric(
+      "kitedb.replication.primary.stale_epoch_replica_count",
+      "Replica reporters currently on stale epochs.",
+      "1",
+      primary.stale_epoch_replica_count,
+      &[],
+      time_unix_nano,
+    ));
+    otel_metrics.push(otel_proto_gauge_metric(
+      "kitedb.replication.primary.max_replica_lag",
+      "Maximum reported lag (log frames) across replicas.",
+      "1",
+      primary.max_replica_lag,
+      &[],
+      time_unix_nano,
+    ));
+    otel_metrics.push(otel_proto_sum_metric(
+      "kitedb.replication.primary.append_attempts",
+      "Total replication append attempts on the primary commit path.",
+      "1",
+      primary.append_attempts,
+      true,
+      &[],
+      time_unix_nano,
+    ));
+    otel_metrics.push(otel_proto_sum_metric(
+      "kitedb.replication.primary.append_failures",
+      "Total replication append failures on the primary commit path.",
+      "1",
+      primary.append_failures,
+      true,
+      &[],
+      time_unix_nano,
+    ));
+    otel_metrics.push(otel_proto_sum_metric(
+      "kitedb.replication.primary.append_successes",
+      "Total replication append successes on the primary commit path.",
+      "1",
+      primary.append_successes,
+      true,
+      &[],
+      time_unix_nano,
+    ));
+  }
+
+  if let Some(replica) = metrics.replication.replica.as_ref() {
+    otel_metrics.push(otel_proto_gauge_metric(
+      "kitedb.replication.replica.applied_epoch",
+      "Replica applied epoch.",
+      "1",
+      replica.applied_epoch,
+      &[],
+      time_unix_nano,
+    ));
+    otel_metrics.push(otel_proto_gauge_metric(
+      "kitedb.replication.replica.applied_log_index",
+      "Replica applied log index.",
+      "1",
+      replica.applied_log_index,
+      &[],
+      time_unix_nano,
+    ));
+    otel_metrics.push(otel_proto_gauge_metric(
+      "kitedb.replication.replica.needs_reseed",
+      "Whether replica currently requires snapshot reseed (1 yes, 0 no).",
+      "1",
+      if replica.needs_reseed { 1 } else { 0 },
+      &[],
+      time_unix_nano,
+    ));
+    otel_metrics.push(otel_proto_gauge_metric(
+      "kitedb.replication.replica.last_error_present",
+      "Whether replica currently has a non-empty last_error value (1 yes, 0 no).",
+      "1",
+      if replica.last_error.is_some() { 1 } else { 0 },
+      &[],
+      time_unix_nano,
+    ));
+  }
+
+  let request = OtelExportMetricsServiceRequest {
+    resource_metrics: vec![OtelResourceMetrics {
+      resource: Some(OtelResource {
+        attributes: vec![
+          otel_proto_attr_string("service.name", "kitedb"),
+          otel_proto_attr_string("kitedb.database.path", metrics.path.as_str()),
+          otel_proto_attr_string("kitedb.metrics.scope", "replication"),
+        ],
+        dropped_attributes_count: 0,
+        entity_refs: Vec::new(),
+      }),
+      scope_metrics: vec![OtelScopeMetrics {
+        scope: Some(OtelInstrumentationScope {
+          name: "kitedb.metrics.replication".to_string(),
+          version: env!("CARGO_PKG_VERSION").to_string(),
+          attributes: Vec::new(),
+          dropped_attributes_count: 0,
+        }),
+        metrics: otel_metrics,
+        schema_url: String::new(),
+      }],
+      schema_url: String::new(),
+    }],
+  };
+  request.encode_to_vec()
+}
+
 pub fn health_check_single_file(db: &SingleFileDB) -> HealthCheckResult {
   let mut checks = Vec::new();
 
@@ -1140,8 +1393,12 @@ fn push_prometheus_sample(
 }
 
 fn metric_time_unix_nano(metrics: &DatabaseMetrics) -> String {
+  metric_time_unix_nano_u64(metrics).to_string()
+}
+
+fn metric_time_unix_nano_u64(metrics: &DatabaseMetrics) -> u64 {
   let millis = metrics.collected_at_ms.max(0) as u64;
-  millis.saturating_mul(1_000_000).to_string()
+  millis.saturating_mul(1_000_000)
 }
 
 fn otel_attr_string(key: &str, value: &str) -> Value {
@@ -1208,4 +1465,76 @@ fn otel_sum_metric(
       ]
     }
   })
+}
+
+fn otel_proto_attr_string(key: &str, value: &str) -> OtelKeyValue {
+  OtelKeyValue {
+    key: key.to_string(),
+    value: Some(OtelAnyValue {
+      value: Some(otel_any_value::Value::StringValue(value.to_string())),
+    }),
+  }
+}
+
+fn otel_proto_attributes(labels: &[(&str, &str)]) -> Vec<OtelKeyValue> {
+  labels
+    .iter()
+    .map(|(key, value)| otel_proto_attr_string(key, value))
+    .collect()
+}
+
+fn otel_proto_number_data_point(
+  value: i64,
+  labels: &[(&str, &str)],
+  time_unix_nano: u64,
+) -> OtelNumberDataPoint {
+  OtelNumberDataPoint {
+    attributes: otel_proto_attributes(labels),
+    start_time_unix_nano: 0,
+    time_unix_nano,
+    exemplars: Vec::new(),
+    flags: 0,
+    value: Some(otel_number_data_point::Value::AsInt(value)),
+  }
+}
+
+fn otel_proto_gauge_metric(
+  name: &str,
+  description: &str,
+  unit: &str,
+  value: i64,
+  labels: &[(&str, &str)],
+  time_unix_nano: u64,
+) -> OtelMetric {
+  OtelMetric {
+    name: name.to_string(),
+    description: description.to_string(),
+    unit: unit.to_string(),
+    metadata: Vec::new(),
+    data: Some(otel_metric::Data::Gauge(OtelGauge {
+      data_points: vec![otel_proto_number_data_point(value, labels, time_unix_nano)],
+    })),
+  }
+}
+
+fn otel_proto_sum_metric(
+  name: &str,
+  description: &str,
+  unit: &str,
+  value: i64,
+  is_monotonic: bool,
+  labels: &[(&str, &str)],
+  time_unix_nano: u64,
+) -> OtelMetric {
+  OtelMetric {
+    name: name.to_string(),
+    description: description.to_string(),
+    unit: unit.to_string(),
+    metadata: Vec::new(),
+    data: Some(otel_metric::Data::Sum(OtelSum {
+      data_points: vec![otel_proto_number_data_point(value, labels, time_unix_nano)],
+      aggregation_temporality: OtelAggregationTemporality::Cumulative as i32,
+      is_monotonic,
+    })),
+  }
 }

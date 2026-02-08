@@ -8,11 +8,15 @@ use std::time::Duration;
 use kitedb::core::single_file::{close_single_file, open_single_file, SingleFileOpenOptions};
 use kitedb::metrics::{
   collect_metrics_single_file, collect_replication_metrics_otel_json_single_file,
+  collect_replication_metrics_otel_protobuf_single_file,
   collect_replication_metrics_prometheus_single_file, push_replication_metrics_otel_json_payload,
-  push_replication_metrics_otel_json_payload_with_options, render_replication_metrics_prometheus,
+  push_replication_metrics_otel_json_payload_with_options,
+  push_replication_metrics_otel_protobuf_payload, render_replication_metrics_prometheus,
   OtlpHttpPushOptions, OtlpHttpTlsOptions,
 };
 use kitedb::replication::types::ReplicationRole;
+use opentelemetry_proto::tonic::collector::metrics::v1::ExportMetricsServiceRequest as OtelExportMetricsServiceRequest;
+use prost::Message;
 
 fn open_primary(
   path: &std::path::Path,
@@ -50,7 +54,7 @@ fn open_replica(
 struct CapturedHttpRequest {
   request_line: String,
   headers: HashMap<String, String>,
-  body: String,
+  body: Vec<u8>,
 }
 
 fn find_subsequence(haystack: &[u8], needle: &[u8]) -> Option<usize> {
@@ -129,7 +133,7 @@ fn spawn_http_capture_server(
     }
 
     let body_end = (end + content_length).min(buffer.len());
-    let body = String::from_utf8_lossy(&buffer[end..body_end]).to_string();
+    let body = buffer[end..body_end].to_vec();
     tx.send(CapturedHttpRequest {
       request_line,
       headers,
@@ -173,6 +177,7 @@ fn collect_metrics_exposes_primary_replication_fields() {
 
   let metrics = collect_metrics_single_file(&primary);
   let otel = collect_replication_metrics_otel_json_single_file(&primary);
+  let otel_protobuf = collect_replication_metrics_otel_protobuf_single_file(&primary);
   let prometheus = collect_replication_metrics_prometheus_single_file(&primary);
   assert!(metrics.replication.enabled);
   assert_eq!(metrics.replication.role, "primary");
@@ -207,6 +212,23 @@ fn collect_metrics_exposes_primary_replication_fields() {
     .as_array()
     .map(|values| !values.is_empty())
     .unwrap_or(false));
+  let otel_proto = OtelExportMetricsServiceRequest::decode(otel_protobuf.as_slice())
+    .expect("decode otel protobuf request");
+  assert_eq!(otel_proto.resource_metrics.len(), 1);
+  let metric_names = otel_proto.resource_metrics[0]
+    .scope_metrics
+    .iter()
+    .flat_map(|scope| scope.metrics.iter().map(|metric| metric.name.clone()))
+    .collect::<Vec<_>>();
+  assert!(metric_names
+    .iter()
+    .any(|name| name == "kitedb.replication.enabled"));
+  assert!(metric_names
+    .iter()
+    .any(|name| name == "kitedb.replication.primary.head_log_index"));
+  assert!(metric_names
+    .iter()
+    .any(|name| name == "kitedb.replication.primary.append_attempts"));
 
   close_single_file(primary).expect("close primary");
 }
@@ -342,6 +364,34 @@ fn otlp_push_payload_posts_json_and_auth_header() {
   assert_eq!(
     captured.headers.get("content-type").map(String::as_str),
     Some("application/json")
+  );
+  assert_eq!(
+    captured.headers.get("authorization").map(String::as_str),
+    Some("Bearer token")
+  );
+  assert_eq!(String::from_utf8_lossy(&captured.body), payload);
+
+  handle.join().expect("server thread");
+}
+
+#[test]
+fn otlp_push_protobuf_payload_posts_binary_and_auth_header() {
+  let payload = vec![0x0a, 0x03, 0x66, 0x6f, 0x6f];
+  let (endpoint, captured_rx, handle) = spawn_http_capture_server(200, "ok");
+
+  let result =
+    push_replication_metrics_otel_protobuf_payload(&payload, &endpoint, 2_000, Some("token"))
+      .expect("otlp protobuf push must succeed");
+  assert_eq!(result.status_code, 200);
+  assert_eq!(result.response_body, "ok");
+
+  let captured = captured_rx
+    .recv_timeout(Duration::from_secs(2))
+    .expect("captured request");
+  assert_eq!(captured.request_line, "POST /v1/metrics HTTP/1.1");
+  assert_eq!(
+    captured.headers.get("content-type").map(String::as_str),
+    Some("application/x-protobuf")
   );
   assert_eq!(
     captured.headers.get("authorization").map(String::as_str),

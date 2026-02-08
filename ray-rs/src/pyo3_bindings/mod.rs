@@ -126,6 +126,10 @@ pub fn kitedb(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m
   )?)?;
   m.add_function(wrap_pyfunction!(
+    database::collect_replication_metrics_otel_protobuf,
+    m
+  )?)?;
+  m.add_function(wrap_pyfunction!(
     database::collect_replication_snapshot_transport_json,
     m
   )?)?;
@@ -135,6 +139,10 @@ pub fn kitedb(m: &Bound<'_, PyModule>) -> PyResult<()> {
   )?)?;
   m.add_function(wrap_pyfunction!(
     database::push_replication_metrics_otel_json,
+    m
+  )?)?;
+  m.add_function(wrap_pyfunction!(
+    database::push_replication_metrics_otel_protobuf,
     m
   )?)?;
   m.add_function(wrap_pyfunction!(database::health_check, m)?)?;

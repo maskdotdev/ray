@@ -868,6 +868,8 @@ export declare function collectReplicationLogTransportJson(db: Database, cursor?
 
 export declare function collectReplicationMetricsOtelJson(db: Database): string
 
+export declare function collectReplicationMetricsOtelProtobuf(db: Database): Buffer
+
 export declare function collectReplicationMetricsPrometheus(db: Database): string
 
 export declare function collectReplicationSnapshotTransportJson(db: Database, includeData?: boolean | undefined | null): string
@@ -889,6 +891,10 @@ export interface PushReplicationMetricsOtelOptions {
 }
 
 export declare function pushReplicationMetricsOtelJsonWithOptions(db: Database, endpoint: string, options?: PushReplicationMetricsOtelOptions | undefined | null): OtlpHttpExportResult
+
+export declare function pushReplicationMetricsOtelProtobuf(db: Database, endpoint: string, timeoutMs: number, bearerToken?: string | undefined | null): OtlpHttpExportResult
+
+export declare function pushReplicationMetricsOtelProtobufWithOptions(db: Database, endpoint: string, options?: PushReplicationMetricsOtelOptions | undefined | null): OtlpHttpExportResult
 
 /** Compression options */
 export interface CompressionOptions {

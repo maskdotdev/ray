@@ -32,6 +32,8 @@ ureq = "2.10"
 base64 = "0.22"
 rustls-pemfile = "2.2"
 webpki-roots = "1.0"
+opentelemetry-proto = { version = "0.31", default-features = false, features = ["gen-tonic-messages", "metrics"] }
+prost = "0.14"
 
 # Binary encoding
 byteorder = "1.5"
