@@ -15,6 +15,15 @@ on:
   schedule:
     - cron: "0 9 * * 1"
   workflow_dispatch:
+    inputs:
+      ann_pq_profile:
+        description: ANN PQ tracking profile (manual runs only)
+        type: choice
+        required: false
+        default: fast
+        options:
+          - fast
+          - full
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -58,6 +67,7 @@ jobs:
 
   replication-perf-gate:
     name: Replication Perf Gate
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -92,6 +102,7 @@ jobs:
           if-no-files-found: ignore
   ann-quality-gate:
     name: ANN Quality Gate
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -139,7 +150,8 @@ jobs:
             ~/.cargo/git/db/
             ray-rs/target/
           key: ann-pq-tracking-${{ hashFiles('ray-rs/Cargo.lock') }}
-      - name: Run ANN PQ tuning sweep
+      - name: Run ANN PQ tuning sweep (fast)
+        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.ann_pq_profile != 'full')
         run: ./scripts/vector-ann-pq-tuning.sh
         env:
           # Keep this lightweight enough for periodic trend tracking.
@@ -149,6 +161,17 @@ jobs:
           PQ_SUBSPACES_SET: "24 48"
           PQ_CENTROIDS_SET: "128 256"
           RESIDUALS_SET: "false"
+      - name: Run ANN PQ tuning sweep (full)
+        if: github.event_name == 'workflow_dispatch' && inputs.ann_pq_profile == 'full'
+        run: ./scripts/vector-ann-pq-tuning.sh
+        env:
+          # Manual deep sweep for analysis (not part of push/main gating).
+          VECTORS: "20000"
+          QUERIES: "200"
+          N_PROBES: "8 16"
+          PQ_SUBSPACES_SET: "24 48"
+          PQ_CENTROIDS_SET: "128 256"
+          RESIDUALS_SET: "false true"
       - name: Upload ANN PQ tuning logs
         if: always()
         uses: actions/upload-artifact@v4
