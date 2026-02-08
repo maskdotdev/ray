@@ -1,6 +1,7 @@
 # Replication Operations Runbook (V1)
 
 Scope:
+
 - Single-file deployment mode (`.kitedb`) with sidecar replication.
 - Roles: one writable primary, one or more replicas.
 - APIs available in Rust core, Node NAPI, and Python bindings.
@@ -8,6 +9,7 @@ Scope:
 ## 1. Operational Signals
 
 Primary status fields:
+
 - `epoch`: current leadership epoch.
 - `head_log_index`: latest committed replication log index.
 - `retained_floor`: lowest retained index after pruning.
@@ -15,11 +17,13 @@ Primary status fields:
 - `append_attempts|append_failures|append_successes`: commit-path replication health.
 
 Replica status fields:
+
 - `applied_epoch`, `applied_log_index`: durable apply cursor.
 - `last_error`: latest pull/apply failure detail.
 - `needs_reseed`: continuity break or floor violation; snapshot reseed required.
 
 Metrics surface:
+
 - `collect_metrics()` now includes `replication` with role (`primary|replica|disabled`) plus
   role-specific replication counters/state for dashboards and alerting.
 - Host-runtime Prometheus text export is available via:
@@ -83,6 +87,8 @@ Metrics surface:
   - Node NAPI: `collectReplicationSnapshotTransportJson(db, includeData?)`,
     `collectReplicationLogTransportJson(db, cursor?, maxFrames?, maxBytes?, includePayload?)`
   - TypeScript adapter helper: `createReplicationTransportAdapter(db)` in `ray-rs/ts/replication_transport.ts`
+  - TypeScript admin auth helper: `createReplicationAdminAuthorizer({ mode, token, mtlsHeader, mtlsSubjectRegex, mtlsMatcher? })`
+    for `none|token|mtls|token_or_mtls|token_and_mtls` with optional native TLS verifier hook (`mtlsMatcher`).
   - Python PyO3: `collect_replication_snapshot_transport_json(db, include_data=False)`,
     `collect_replication_log_transport_json(db, cursor=None, max_frames=128, max_bytes=1048576, include_payload=True)`
   - These are intended for embedding host-side HTTP endpoints beyond playground runtime.
@@ -91,6 +97,7 @@ Metrics surface:
     - Generic middleware adapter: `docs/examples/replication_adapter_generic_middleware.ts`
 
 Alert heuristics:
+
 - `append_failures > 0` growing: primary sidecar durability issue.
 - Replica lag growth over steady traffic: pull/apply bottleneck.
 - `needs_reseed == true`: force reseed, do not keep retrying catch-up.
@@ -112,14 +119,17 @@ Alert heuristics:
 ## 3. Routine Catch-up + Retention
 
 Replica:
+
 - Poll `replica_catch_up_once(max_frames)` repeatedly.
 - Persist and monitor `applied_log_index`.
 
 Primary:
+
 - Report each replica cursor via `primary_report_replica_progress(replica_id, epoch, applied_log_index)`.
 - Run `primary_run_retention()` on an operator cadence.
 
 Tuning:
+
 - `replication_retention_min_entries`: set above worst-case expected replica lag.
 - `replication_retention_min_ms`: keep recent segments for at least this wall-clock window.
 - `replication_segment_max_bytes`: larger segments reduce file churn; smaller segments prune faster.
@@ -141,9 +151,11 @@ Goal: move write authority to a target node without split-brain writes.
 ## 5. Reseed Procedure (`needs_reseed`)
 
 Trigger:
+
 - Replica status sets `needs_reseed=true`, usually from retained-floor/continuity break.
 
 Steps:
+
 1. Stop normal catch-up loop for that replica.
 2. Execute `replica_reseed_from_snapshot()`.
 3. Resume `replica_catch_up_once(...)`.
@@ -155,14 +167,17 @@ Steps:
 ## 6. Failure Handling
 
 Corrupt/truncated segment:
+
 - Symptom: catch-up error + replica `last_error` set.
 - Action: reseed replica from snapshot.
 
 Retention floor outran replica:
+
 - Symptom: catch-up error mentions reseed/floor; `needs_reseed=true`.
 - Action: reseed; increase `replication_retention_min_entries` if frequent.
 
 Promotion race / split-brain suspicion:
+
 - Symptom: concurrent promote/write attempts.
 - Expected: exactly one writer succeeds post-promotion.
 - Action: treat stale-writer failures as correct fencing; ensure client routing points to current epoch primary.
@@ -170,10 +185,12 @@ Promotion race / split-brain suspicion:
 ## 7. Validation Checklist
 
 Before rollout:
+
 - `cargo test --no-default-features --test replication_phase_a --test replication_phase_b --test replication_phase_c --test replication_phase_d --test replication_faults_phase_d`
 - `cargo test --no-default-features replication::`
 
 Perf gate:
+
 - Run `ray-rs/scripts/replication-perf-gate.sh`.
 - Commit overhead gate: require median p95 ratio (replication-on / baseline) within `P95_MAX_RATIO` (default `1.03`, `ATTEMPTS=7`).
 - Catch-up gate: require replica throughput floors (`MIN_CATCHUP_FPS`, `MIN_THROUGHPUT_RATIO`).
@@ -182,6 +199,7 @@ Perf gate:
 ## 8. HTTP Admin Endpoints (Playground Runtime)
 
 Available endpoints in `playground/src/api/routes.ts`:
+
 - `GET /api/replication/status`
 - `GET /api/replication/metrics` (Prometheus text format)
 - `GET /api/replication/snapshot/latest`
@@ -193,6 +211,7 @@ Available endpoints in `playground/src/api/routes.ts`:
 - `POST /api/replication/promote` (runs `primary_promote_to_next_epoch`)
 
 Auth:
+
 - `REPLICATION_ADMIN_AUTH_MODE` controls admin auth:
   - `none` (no admin auth)
   - `token` (Bearer token)
@@ -214,6 +233,7 @@ Auth:
 - `status` is read-only and does not require auth.
 
 Playground curl examples:
+
 - `export BASE="http://localhost:3000"`
 - `curl "$BASE/api/replication/status"`
 - `curl -H "Authorization: Bearer $REPLICATION_ADMIN_TOKEN" "$BASE/api/replication/metrics"`

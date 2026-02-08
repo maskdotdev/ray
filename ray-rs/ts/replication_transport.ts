@@ -54,6 +54,149 @@ export interface ReplicationTransportAdapter {
   metricsOtelJson(): string
 }
 
+export type ReplicationAdminAuthMode = 'none' | 'token' | 'mtls' | 'token_or_mtls' | 'token_and_mtls'
+
+export interface ReplicationAdminAuthRequest {
+  headers?: Record<string, string | undefined> | null
+}
+
+export interface ReplicationAdminAuthConfig<
+  TRequest extends ReplicationAdminAuthRequest = ReplicationAdminAuthRequest,
+> {
+  mode?: ReplicationAdminAuthMode
+  token?: string | null
+  mtlsHeader?: string
+  mtlsSubjectRegex?: RegExp | null
+  mtlsMatcher?: (request: TRequest) => boolean
+}
+
+const REPLICATION_ADMIN_AUTH_MODES = new Set<ReplicationAdminAuthMode>([
+  'none',
+  'token',
+  'mtls',
+  'token_or_mtls',
+  'token_and_mtls',
+])
+
+type NormalizedReplicationAdminAuthConfig<TRequest extends ReplicationAdminAuthRequest = ReplicationAdminAuthRequest> =
+  {
+    mode: ReplicationAdminAuthMode
+    token: string | null
+    mtlsHeader: string
+    mtlsSubjectRegex: RegExp | null
+    mtlsMatcher: ((request: TRequest) => boolean) | null
+  }
+
+function normalizeReplicationAdminAuthConfig<
+  TRequest extends ReplicationAdminAuthRequest = ReplicationAdminAuthRequest,
+>(config: ReplicationAdminAuthConfig<TRequest>): NormalizedReplicationAdminAuthConfig<TRequest> {
+  const modeRaw = config.mode ?? 'none'
+  if (!REPLICATION_ADMIN_AUTH_MODES.has(modeRaw)) {
+    throw new Error(
+      `Invalid replication admin auth mode '${String(modeRaw)}'; expected none|token|mtls|token_or_mtls|token_and_mtls`,
+    )
+  }
+  const token = config.token?.trim() || null
+  if ((modeRaw === 'token' || modeRaw === 'token_or_mtls' || modeRaw === 'token_and_mtls') && !token) {
+    throw new Error(`replication admin auth mode '${modeRaw}' requires a non-empty token`)
+  }
+  const mtlsHeaderRaw = config.mtlsHeader?.trim().toLowerCase()
+  const mtlsHeader = mtlsHeaderRaw && mtlsHeaderRaw.length > 0 ? mtlsHeaderRaw : 'x-forwarded-client-cert'
+  return {
+    mode: modeRaw,
+    token,
+    mtlsHeader,
+    mtlsSubjectRegex: config.mtlsSubjectRegex ?? null,
+    mtlsMatcher: config.mtlsMatcher ?? null,
+  }
+}
+
+function getHeaderValue(request: ReplicationAdminAuthRequest, name: string): string | null {
+  const headers = request.headers
+  if (!headers) return null
+  const direct = headers[name]
+  if (typeof direct === 'string' && direct.trim().length > 0) {
+    return direct.trim()
+  }
+  for (const [key, value] of Object.entries(headers)) {
+    if (key.toLowerCase() !== name) continue
+    if (typeof value !== 'string') continue
+    const trimmed = value.trim()
+    if (trimmed.length > 0) return trimmed
+  }
+  return null
+}
+
+function isTokenMatch(request: ReplicationAdminAuthRequest, token: string | null): boolean {
+  if (!token) return false
+  const authorization = getHeaderValue(request, 'authorization')
+  if (!authorization) return false
+  return authorization === `Bearer ${token}`
+}
+
+function isMtlsMatch<TRequest extends ReplicationAdminAuthRequest = ReplicationAdminAuthRequest>(
+  request: TRequest,
+  config: NormalizedReplicationAdminAuthConfig<TRequest>,
+): boolean {
+  if (config.mtlsMatcher) {
+    return config.mtlsMatcher(request)
+  }
+  const certValue = getHeaderValue(request, config.mtlsHeader)
+  if (!certValue) return false
+  if (!config.mtlsSubjectRegex) return true
+  return config.mtlsSubjectRegex.test(certValue)
+}
+
+function isAuthorizedWithNormalized<TRequest extends ReplicationAdminAuthRequest = ReplicationAdminAuthRequest>(
+  request: TRequest,
+  config: NormalizedReplicationAdminAuthConfig<TRequest>,
+): boolean {
+  const tokenOk = isTokenMatch(request, config.token)
+  const mtlsOk = isMtlsMatch(request, config)
+
+  switch (config.mode) {
+    case 'none':
+      return true
+    case 'token':
+      return tokenOk
+    case 'mtls':
+      return mtlsOk
+    case 'token_or_mtls':
+      return tokenOk || mtlsOk
+    case 'token_and_mtls':
+      return tokenOk && mtlsOk
+  }
+}
+
+export function isReplicationAdminAuthorized<
+  TRequest extends ReplicationAdminAuthRequest = ReplicationAdminAuthRequest,
+>(request: TRequest, config: ReplicationAdminAuthConfig<TRequest>): boolean {
+  const normalized = normalizeReplicationAdminAuthConfig(config)
+  return isAuthorizedWithNormalized(request, normalized)
+}
+
+export function authorizeReplicationAdminRequest<
+  TRequest extends ReplicationAdminAuthRequest = ReplicationAdminAuthRequest,
+>(request: TRequest, config: ReplicationAdminAuthConfig<TRequest>): void {
+  const normalized = normalizeReplicationAdminAuthConfig(config)
+  if (isAuthorizedWithNormalized(request, normalized)) {
+    return
+  }
+  throw new Error(`Unauthorized: replication admin auth mode '${normalized.mode}' not satisfied`)
+}
+
+export function createReplicationAdminAuthorizer<
+  TRequest extends ReplicationAdminAuthRequest = ReplicationAdminAuthRequest,
+>(config: ReplicationAdminAuthConfig<TRequest>): (request: TRequest) => void {
+  const normalized = normalizeReplicationAdminAuthConfig(config)
+  return (request: TRequest): void => {
+    if (isAuthorizedWithNormalized(request, normalized)) {
+      return
+    }
+    throw new Error(`Unauthorized: replication admin auth mode '${normalized.mode}' not satisfied`)
+  }
+}
+
 function parseJson<T>(raw: string, label: string): T {
   try {
     return JSON.parse(raw) as T
@@ -63,10 +206,7 @@ function parseJson<T>(raw: string, label: string): T {
   }
 }
 
-export function readReplicationSnapshotTransport(
-  db: Database,
-  includeData = false,
-): ReplicationSnapshotTransport {
+export function readReplicationSnapshotTransport(db: Database, includeData = false): ReplicationSnapshotTransport {
   const raw = collectReplicationSnapshotTransportJson(db, includeData)
   return parseJson<ReplicationSnapshotTransport>(raw, 'replication snapshot transport JSON')
 }

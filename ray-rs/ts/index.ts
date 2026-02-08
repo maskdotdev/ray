@@ -1052,12 +1052,18 @@ export {
 } from '../index'
 
 export {
+  authorizeReplicationAdminRequest,
+  createReplicationAdminAuthorizer,
   createReplicationTransportAdapter,
+  isReplicationAdminAuthorized,
   readReplicationLogTransport,
   readReplicationSnapshotTransport,
 } from './replication_transport'
 
 export type {
+  ReplicationAdminAuthConfig,
+  ReplicationAdminAuthMode,
+  ReplicationAdminAuthRequest,
   ReplicationLogTransportFrame,
   ReplicationLogTransportOptions,
   ReplicationLogTransportPage,

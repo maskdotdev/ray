@@ -232,9 +232,11 @@ Protocol requirement: all payloads versioned to allow push transport later with 
 ### Phase A: Invariants + sidecar primitives
 
 Objective:
+
 - Freeze wire/storage invariants and build deterministic sidecar primitives.
 
 Red tests first:
+
 - Invalid token/cursor strings are rejected.
 - Token/cursor ordering comparator is monotonic and epoch-aware.
 - Corrupt segment frame checksum fails read/scan.
@@ -242,16 +244,19 @@ Red tests first:
 - Segment append/read roundtrip preserves frame boundaries and indices.
 
 Green implementation:
+
 - Add `replication` module skeleton and core types.
 - Implement versioned manifest read/write with atomic replace semantics.
 - Implement segment append/read and frame checksum verification.
 - Freeze token/cursor format and parser behavior.
 
 Robustness checks:
+
 - Fuzz/property-like tests on token/cursor parser.
 - Recovery tests for manifest reload after simulated interruption.
 
 Phase exit criteria:
+
 - All Phase A red tests green.
 - No API breakage.
 - Sidecar primitives deterministic across restart.
@@ -259,9 +264,11 @@ Phase exit criteria:
 ### Phase B: Primary commit integration
 
 Objective:
+
 - Integrate replication append/token generation into primary commit path without regressing disabled mode.
 
 Red tests first:
+
 - Commit returns monotonic token (`epoch:log_index`) for successful writes.
 - Replication-disabled mode produces no sidecar append activity.
 - Sidecar append failure causes commit failure (no token emitted).
@@ -269,16 +276,19 @@ Red tests first:
 - Crash boundary test: token is never returned for non-durable replication frame.
 
 Green implementation:
+
 - Hook replication append into `single_file::transaction::commit`.
 - Add replication config wiring in open options.
 - Emit token and expose primary replication status.
 - Add basic replication metrics counters/gauges.
 
 Robustness checks:
+
 - Regression benchmark: replication off path <3% overhead.
 - Negative-path tests for IO errors on sidecar append/fsync.
 
 Phase exit criteria:
+
 - All Phase B red tests green.
 - Disabled path performance gate passes.
 - Durability/token invariant verified by crash-boundary tests.
@@ -286,9 +296,11 @@ Phase exit criteria:
 ### Phase C: Replica bootstrap + steady-state apply
 
 Objective:
+
 - Build replica bootstrap/catch-up/apply loop with idempotency and token-wait semantics.
 
 Red tests first:
+
 - Replica bootstrap from snapshot reaches exact primary state.
 - Incremental catch-up applies committed frames in order.
 - Duplicate chunk delivery is idempotent (no double-apply).
@@ -296,16 +308,19 @@ Red tests first:
 - Token wait returns success on catch-up and timeout when lag persists.
 
 Green implementation:
+
 - Implement snapshot bootstrap flow and continuity validation.
 - Implement pull loop (`cursor`, `max_bytes`, retry/backoff).
 - Implement apply pipeline using replay semantics + applied-index persistence.
 - Add replica status surface (applied index, lag, last error).
 
 Robustness checks:
+
 - Checkpoint interleaving tests (primary background checkpoint while replica catches up).
 - Large backlog catch-up throughput and memory boundedness tests.
 
 Phase exit criteria:
+
 - All Phase C red tests green.
 - Replica apply remains deterministic across restart/retry scenarios.
 - Token-wait semantics validated end-to-end.
@@ -313,9 +328,11 @@ Phase exit criteria:
 ### Phase D: Promotion + retention + hardening
 
 Objective:
+
 - Add manual promotion with fencing and finalize retention/failure behavior.
 
 Red tests first:
+
 - Promotion increments epoch and fences stale primary writes.
 - Retention respects min active replica cursor and configured minimum window.
 - Missing segment response deterministically marks replica `needs_reseed`.
@@ -323,16 +340,19 @@ Red tests first:
 - Promotion race cases do not allow split-brain writes.
 
 Green implementation:
+
 - Implement manual promote flow and epoch fencing checks.
 - Implement replica progress tracking and retention pruning.
 - Add explicit reseed path/status when continuity is broken.
 - Finalize status/admin interfaces for ops visibility.
 
 Robustness checks:
+
 - Fault-injection sweep for corruption/network/partial transfer.
 - Soak tests at target topology (`1 + up to 5`) with lag churn.
 
 Phase exit criteria:
+
 - All Phase D red tests green.
 - No split-brain write acceptance in promotion tests.
 - Retention and reseed behavior deterministic and observable.
@@ -348,12 +368,13 @@ Phase exit criteria:
 ## 19) Open Questions
 
 - Commit overhead budget is fixed for V1 gate: `P95_MAX_RATIO=1.03` (replication-on p95 / baseline p95).
-- Host-runtime TLS client-cert enforcement design (beyond playground proxy-header mTLS checks).
+- Host-runtime default extraction strategy for native TLS client-cert signals by runtime/framework (custom verifier hook now available in TS adapter helper).
 - Whether any vector side data must be promoted to authoritative replicated state in a later phase.
 
 ## 20) Phase D Summary (February 8, 2026)
 
 Implemented:
+
 - Manual promotion API with epoch fencing (`stale primary` rejected on stale writer commit).
 - Retention controls (segment rotation threshold + min retained entries) and primary retention execution.
 - Time-window retention control (`replication_retention_min_ms`) to avoid pruning very recent segments.
@@ -373,6 +394,7 @@ Implemented:
   - snapshot export (`collectReplicationSnapshotTransportJson` / `collect_replication_snapshot_transport_json`)
   - log page export with cursor/limits (`collectReplicationLogTransportJson` / `collect_replication_log_transport_json`).
   - TypeScript adapter helper (`createReplicationTransportAdapter`) for wiring custom HTTP handlers.
+  - TypeScript admin auth helper (`createReplicationAdminAuthorizer`) with token/mTLS modes and optional native TLS matcher hook.
 - Polyglot host-runtime HTTP adapter templates:
   - Python FastAPI template (`docs/examples/replication_adapter_python_fastapi.py`)
   - generic middleware template (`docs/examples/replication_adapter_generic_middleware.ts`).
@@ -394,12 +416,15 @@ Implemented:
   - native HTTPS listener + TLS client-cert enforcement support for mTLS auth in playground runtime.
 
 Validated tests:
+
 - `ray-rs/tests/replication_phase_d.rs` (promotion, retention, reseed, split-brain race).
 - `ray-rs/tests/replication_faults_phase_d.rs` (corrupt/truncated segment fault paths + durable `last_error`).
 
 Known limits:
+
 - Bundled HTTP admin endpoints currently ship in playground runtime only; host runtime provides JSON export helpers for embedding custom endpoints.
 - Host-runtime OTLP export supports HTTP OTLP-JSON, HTTP OTLP-protobuf, and OTLP gRPC push paths.
 
 Carry-over to next phase:
+
 - None for OTLP shared-state patch transport hardening in Phase D.
