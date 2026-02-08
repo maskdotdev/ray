@@ -24,6 +24,14 @@ on:
         options:
           - fast
           - full
+      replication_soak_profile:
+        description: Replication soak tracking profile (manual runs only)
+        type: choice
+        required: false
+        default: fast
+        options:
+          - fast
+          - full
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -156,7 +164,8 @@ jobs:
             ~/.cargo/git/db/
             ray-rs/target/
           key: replication-soak-tracking-${{ hashFiles('ray-rs/Cargo.lock') }}
-      - name: Run replication soak tracking
+      - name: Run replication soak tracking (fast)
+        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.replication_soak_profile != 'full')
         run: ./scripts/replication-soak-gate.sh
         env:
           STAMP: ci-${{ github.run_id }}-${{ github.run_attempt }}
@@ -175,6 +184,27 @@ jobs:
           RETENTION_MIN: "48"
           MAX_ALLOWED_LAG: "2500"
           MIN_PROMOTIONS: "2"
+          MIN_RESEEDS: "1"
+      - name: Run replication soak tracking (full)
+        if: github.event_name == 'workflow_dispatch' && inputs.replication_soak_profile == 'full'
+        run: ./scripts/replication-soak-gate.sh
+        env:
+          STAMP: ci-${{ github.run_id }}-${{ github.run_attempt }}
+          # Manual deep soak profile for longer churn/promotion trend checks.
+          ATTEMPTS: "1"
+          REPLICAS: "5"
+          CYCLES: "24"
+          COMMITS_PER_CYCLE: "120"
+          ACTIVE_REPLICAS: "4"
+          CHURN_INTERVAL: "2"
+          PROMOTION_INTERVAL: "3"
+          RESEED_CHECK_INTERVAL: "2"
+          MAX_FRAMES: "256"
+          RECOVERY_MAX_LOOPS: "120"
+          SEGMENT_MAX_BYTES: "1"
+          RETENTION_MIN: "64"
+          MAX_ALLOWED_LAG: "3500"
+          MIN_PROMOTIONS: "4"
           MIN_RESEEDS: "1"
       - name: Upload replication soak logs
         if: always()

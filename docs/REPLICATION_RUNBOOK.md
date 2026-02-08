@@ -205,6 +205,7 @@ Perf gate:
 - Catch-up gate: require replica throughput floors (`MIN_CATCHUP_FPS`, `MIN_THROUGHPUT_RATIO`).
 - Catch-up gate retries benchmark noise by default (`ATTEMPTS=3`); increase on busy dev machines.
 - CI on `main` (`.github/workflows/ray-rs.yml`) enforces replication perf gate and uploads benchmark logs as `replication-perf-gate-logs` (run-scoped `ci-<run_id>-<run_attempt>` stamp).
+- CI also runs non-blocking replication soak tracking weekly and supports manual deep runs via workflow input `replication_soak_profile=fast|full` (artifact `replication-soak-tracking-logs`).
 
 ## 8. HTTP Admin Endpoints (Playground Runtime)
 

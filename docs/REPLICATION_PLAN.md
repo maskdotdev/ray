@@ -414,6 +414,7 @@ Implemented:
 - Replication benchmark gate script (`ray-rs/scripts/replication-bench-gate.sh`) + benchmark doc wiring.
 - Replica catch-up throughput gate (`ray-rs/scripts/replication-catchup-gate.sh`) and combined perf gate (`ray-rs/scripts/replication-perf-gate.sh`).
 - Replication soak stability harness + gate (`ray-rs/examples/replication_soak_bench.rs`, `ray-rs/scripts/replication-soak-gate.sh`) covering lag churn, promotion fencing, reseed recovery, and zero-divergence checks.
+- Non-blocking replication soak trend tracking in CI (`replication-soak-tracking` job in `.github/workflows/ray-rs.yml`, weekly schedule + manual dispatch with `replication_soak_profile=fast|full`, artifact `replication-soak-tracking-logs`, run-scoped `ci-<run_id>-<run_attempt>` stamp).
 - Release preflight script (`ray-rs/scripts/release-preflight.sh`) enforcing commit-message format and tag/package/version alignment.
 - Main-branch CI perf-gate enforcement in `ray-rs` workflow (`.github/workflows/ray-rs.yml`) with run-scoped replication benchmark log artifact upload (`ci-<run_id>-<run_attempt>` stamp).
 - Main-branch CI ANN quality-gate enforcement in `ray-rs` workflow (`.github/workflows/ray-rs.yml`) with ANN gate log artifact upload.
@@ -458,7 +459,7 @@ Carry-over to next phase:
    - Capture artifacts under `docs/benchmarks/results/` with a new date stamp.
 2. Long-run stability soak:
    - Keep running `ray-rs/scripts/replication-soak-gate.sh` in tracking mode (manual/scheduled CI) and tune thresholds from trend data.
-   - Expand scenario depth (longer cycles + higher commit load) on release-like hardware before V1 cut.
+   - Expanded scenario depth path available via CI manual dispatch profile `replication_soak_profile=full`; continue threshold tuning from trend data on release-like hardware before V1 cut.
 3. Host runtime adoption pass:
    - Keep adapter examples + Node/Python host-runtime flow tests green as API evolves.
    - Completed: proxy-terminated deployment sample with forwarded-header mTLS auth checks (`docs/examples/replication_adapter_node_proxy_forwarded.ts`).
