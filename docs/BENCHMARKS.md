@@ -108,6 +108,36 @@ Latest matrix snapshot (2026-02-08, 50k vectors, 384 dims, fragment target 5k):
 - `min_deletion_ratio=0.40` can skip moderate-churn compaction (`delete_ratio=0.35`), so stale deleted bytes remain.
 - Recommendation: keep defaults `min_deletion_ratio=0.30`, `max_fragments_per_compaction=4`, `min_vectors_to_compact=10000`.
 
+### ANN algorithm matrix (Rust: IVF vs IVF-PQ)
+
+Single run:
+
+```bash
+cd ray-rs
+cargo run --release --example vector_ann_bench --no-default-features -- \
+  --algorithm ivf --vectors 20000 --dimensions 384 --queries 200 --k 10 --n-probe 8
+```
+
+Matrix sweep:
+
+```bash
+cd ray-rs
+./scripts/vector-ann-matrix.sh
+```
+
+Latest matrix snapshot (2026-02-08, 20k vectors, 384 dims, 200 queries, k=10):
+- Result artifacts:
+  - `docs/benchmarks/results/2026-02-08-vector-ann-matrix.txt`
+  - `docs/benchmarks/results/2026-02-08-vector-ann-matrix.csv`
+- At same `n_probe`, IVF had higher recall than IVF-PQ in this baseline:
+  - `n_probe=8`: IVF `0.1660`, IVF-PQ `0.1195` (`residuals=false`)
+  - `n_probe=16`: IVF `0.2905`, IVF-PQ `0.1775` (`residuals=false`)
+- IVF-PQ (`residuals=false`) had lower search p95 latency than IVF:
+  - `n_probe=8`: `0.4508ms` vs IVF `0.7660ms`
+  - `n_probe=16`: `1.3993ms` vs IVF `4.0272ms`
+- IVF-PQ build time was much higher than IVF in this baseline.
+- Current recommendation: keep IVF as default ANN path for quality-first behavior; revisit IVF-PQ default candidacy after PQ tuning (subspaces/centroids/probe) and workload-specific recall targets.
+
 ### Index pipeline hypothesis (network-dominant)
 
 ```bash
