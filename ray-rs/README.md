@@ -265,6 +265,10 @@ const secureExport = pushReplicationMetricsOtelJsonWithOptions(
   'https://collector.internal:4318/v1/metrics',
   {
     timeoutMs: 5_000,
+    retryMaxAttempts: 3,
+    retryBackoffMs: 200,
+    retryBackoffMaxMs: 2_000,
+    compressionGzip: true,
     httpsOnly: true,
     caCertPemPath: './tls/collector-ca.pem',
     clientCertPemPath: './tls/client.pem',
@@ -278,6 +282,10 @@ const secureProtoExport = pushReplicationMetricsOtelProtobufWithOptions(
   'https://collector.internal:4318/v1/metrics',
   {
     timeoutMs: 5_000,
+    retryMaxAttempts: 3,
+    retryBackoffMs: 200,
+    retryBackoffMaxMs: 2_000,
+    compressionGzip: true,
     httpsOnly: true,
     caCertPemPath: './tls/collector-ca.pem',
     clientCertPemPath: './tls/client.pem',
@@ -291,6 +299,10 @@ const secureGrpcExport = pushReplicationMetricsOtelGrpcWithOptions(
   'https://collector.internal:4317',
   {
     timeoutMs: 5_000,
+    retryMaxAttempts: 3,
+    retryBackoffMs: 200,
+    retryBackoffMaxMs: 2_000,
+    compressionGzip: true,
     httpsOnly: true,
     caCertPemPath: './tls/collector-ca.pem',
     clientCertPemPath: './tls/client.pem',

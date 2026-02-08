@@ -1875,12 +1875,69 @@ pub fn collect_replication_log_transport_json(
   }
 }
 
+#[allow(clippy::too_many_arguments)]
+fn build_otel_push_options_py(
+  timeout_ms: i64,
+  bearer_token: Option<String>,
+  retry_max_attempts: i64,
+  retry_backoff_ms: i64,
+  retry_backoff_max_ms: i64,
+  compression_gzip: bool,
+  https_only: bool,
+  ca_cert_pem_path: Option<String>,
+  client_cert_pem_path: Option<String>,
+  client_key_pem_path: Option<String>,
+) -> PyResult<core_metrics::OtlpHttpPushOptions> {
+  if timeout_ms <= 0 {
+    return Err(PyRuntimeError::new_err("timeout_ms must be positive"));
+  }
+  if retry_max_attempts <= 0 {
+    return Err(PyRuntimeError::new_err(
+      "retry_max_attempts must be positive",
+    ));
+  }
+  if retry_backoff_ms < 0 {
+    return Err(PyRuntimeError::new_err(
+      "retry_backoff_ms must be non-negative",
+    ));
+  }
+  if retry_backoff_max_ms < 0 {
+    return Err(PyRuntimeError::new_err(
+      "retry_backoff_max_ms must be non-negative",
+    ));
+  }
+  if retry_backoff_max_ms > 0 && retry_backoff_max_ms < retry_backoff_ms {
+    return Err(PyRuntimeError::new_err(
+      "retry_backoff_max_ms must be >= retry_backoff_ms when non-zero",
+    ));
+  }
+
+  Ok(core_metrics::OtlpHttpPushOptions {
+    timeout_ms: timeout_ms as u64,
+    bearer_token,
+    retry_max_attempts: retry_max_attempts as u32,
+    retry_backoff_ms: retry_backoff_ms as u64,
+    retry_backoff_max_ms: retry_backoff_max_ms as u64,
+    compression_gzip,
+    tls: core_metrics::OtlpHttpTlsOptions {
+      https_only,
+      ca_cert_pem_path,
+      client_cert_pem_path,
+      client_key_pem_path,
+    },
+  })
+}
+
 #[pyfunction]
 #[pyo3(signature = (
   db,
   endpoint,
   timeout_ms=5000,
   bearer_token=None,
+  retry_max_attempts=1,
+  retry_backoff_ms=100,
+  retry_backoff_max_ms=2000,
+  compression_gzip=false,
   https_only=false,
   ca_cert_pem_path=None,
   client_cert_pem_path=None,
@@ -1891,25 +1948,27 @@ pub fn push_replication_metrics_otel_json(
   endpoint: String,
   timeout_ms: i64,
   bearer_token: Option<String>,
+  retry_max_attempts: i64,
+  retry_backoff_ms: i64,
+  retry_backoff_max_ms: i64,
+  compression_gzip: bool,
   https_only: bool,
   ca_cert_pem_path: Option<String>,
   client_cert_pem_path: Option<String>,
   client_key_pem_path: Option<String>,
 ) -> PyResult<(i64, String)> {
-  if timeout_ms <= 0 {
-    return Err(PyRuntimeError::new_err("timeout_ms must be positive"));
-  }
-
-  let options = core_metrics::OtlpHttpPushOptions {
-    timeout_ms: timeout_ms as u64,
+  let options = build_otel_push_options_py(
+    timeout_ms,
     bearer_token,
-    tls: core_metrics::OtlpHttpTlsOptions {
-      https_only,
-      ca_cert_pem_path,
-      client_cert_pem_path,
-      client_key_pem_path,
-    },
-  };
+    retry_max_attempts,
+    retry_backoff_ms,
+    retry_backoff_max_ms,
+    compression_gzip,
+    https_only,
+    ca_cert_pem_path,
+    client_cert_pem_path,
+    client_key_pem_path,
+  )?;
 
   let guard = db
     .inner
@@ -1933,6 +1992,10 @@ pub fn push_replication_metrics_otel_json(
   endpoint,
   timeout_ms=5000,
   bearer_token=None,
+  retry_max_attempts=1,
+  retry_backoff_ms=100,
+  retry_backoff_max_ms=2000,
+  compression_gzip=false,
   https_only=false,
   ca_cert_pem_path=None,
   client_cert_pem_path=None,
@@ -1943,25 +2006,27 @@ pub fn push_replication_metrics_otel_protobuf(
   endpoint: String,
   timeout_ms: i64,
   bearer_token: Option<String>,
+  retry_max_attempts: i64,
+  retry_backoff_ms: i64,
+  retry_backoff_max_ms: i64,
+  compression_gzip: bool,
   https_only: bool,
   ca_cert_pem_path: Option<String>,
   client_cert_pem_path: Option<String>,
   client_key_pem_path: Option<String>,
 ) -> PyResult<(i64, String)> {
-  if timeout_ms <= 0 {
-    return Err(PyRuntimeError::new_err("timeout_ms must be positive"));
-  }
-
-  let options = core_metrics::OtlpHttpPushOptions {
-    timeout_ms: timeout_ms as u64,
+  let options = build_otel_push_options_py(
+    timeout_ms,
     bearer_token,
-    tls: core_metrics::OtlpHttpTlsOptions {
-      https_only,
-      ca_cert_pem_path,
-      client_cert_pem_path,
-      client_key_pem_path,
-    },
-  };
+    retry_max_attempts,
+    retry_backoff_ms,
+    retry_backoff_max_ms,
+    compression_gzip,
+    https_only,
+    ca_cert_pem_path,
+    client_cert_pem_path,
+    client_key_pem_path,
+  )?;
 
   let guard = db
     .inner
@@ -1985,6 +2050,10 @@ pub fn push_replication_metrics_otel_protobuf(
   endpoint,
   timeout_ms=5000,
   bearer_token=None,
+  retry_max_attempts=1,
+  retry_backoff_ms=100,
+  retry_backoff_max_ms=2000,
+  compression_gzip=false,
   https_only=false,
   ca_cert_pem_path=None,
   client_cert_pem_path=None,
@@ -1995,25 +2064,27 @@ pub fn push_replication_metrics_otel_grpc(
   endpoint: String,
   timeout_ms: i64,
   bearer_token: Option<String>,
+  retry_max_attempts: i64,
+  retry_backoff_ms: i64,
+  retry_backoff_max_ms: i64,
+  compression_gzip: bool,
   https_only: bool,
   ca_cert_pem_path: Option<String>,
   client_cert_pem_path: Option<String>,
   client_key_pem_path: Option<String>,
 ) -> PyResult<(i64, String)> {
-  if timeout_ms <= 0 {
-    return Err(PyRuntimeError::new_err("timeout_ms must be positive"));
-  }
-
-  let options = core_metrics::OtlpHttpPushOptions {
-    timeout_ms: timeout_ms as u64,
+  let options = build_otel_push_options_py(
+    timeout_ms,
     bearer_token,
-    tls: core_metrics::OtlpHttpTlsOptions {
-      https_only,
-      ca_cert_pem_path,
-      client_cert_pem_path,
-      client_key_pem_path,
-    },
-  };
+    retry_max_attempts,
+    retry_backoff_ms,
+    retry_backoff_max_ms,
+    compression_gzip,
+    https_only,
+    ca_cert_pem_path,
+    client_cert_pem_path,
+    client_key_pem_path,
+  )?;
 
   let guard = db
     .inner

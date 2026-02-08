@@ -884,6 +884,10 @@ export declare function pushReplicationMetricsOtelJson(db: Database, endpoint: s
 export interface PushReplicationMetricsOtelOptions {
   timeoutMs?: number
   bearerToken?: string
+  retryMaxAttempts?: number
+  retryBackoffMs?: number
+  retryBackoffMaxMs?: number
+  compressionGzip?: boolean
   httpsOnly?: boolean
   caCertPemPath?: string
   clientCertPemPath?: string

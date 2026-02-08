@@ -34,7 +34,7 @@ rustls-pemfile = "2.2"
 webpki-roots = "1.0"
 opentelemetry-proto = { version = "0.31", default-features = false, features = ["gen-tonic", "metrics"] }
 prost = "0.14"
-tonic = { version = "0.14", features = ["transport", "tls-webpki-roots"] }
+tonic = { version = "0.14", features = ["transport", "tls-webpki-roots", "gzip"] }
 
 # Binary encoding
 byteorder = "1.5"

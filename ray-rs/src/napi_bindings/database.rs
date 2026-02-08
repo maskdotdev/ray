@@ -850,6 +850,10 @@ pub struct OtlpHttpExportResult {
 pub struct PushReplicationMetricsOtelOptions {
   pub timeout_ms: Option<i64>,
   pub bearer_token: Option<String>,
+  pub retry_max_attempts: Option<i64>,
+  pub retry_backoff_ms: Option<i64>,
+  pub retry_backoff_max_ms: Option<i64>,
+  pub compression_gzip: Option<bool>,
   pub https_only: Option<bool>,
   pub ca_cert_pem_path: Option<String>,
   pub client_cert_pem_path: Option<String>,
@@ -3436,28 +3440,54 @@ pub fn push_replication_metrics_otel_json(
   }
 }
 
-#[napi]
-pub fn push_replication_metrics_otel_json_with_options(
-  db: &Database,
-  endpoint: String,
-  options: Option<PushReplicationMetricsOtelOptions>,
-) -> Result<OtlpHttpExportResult> {
-  let options = options.unwrap_or_default();
+fn build_core_otel_push_options(
+  options: PushReplicationMetricsOtelOptions,
+) -> Result<core_metrics::OtlpHttpPushOptions> {
   let timeout_ms = options.timeout_ms.unwrap_or(5_000);
   if timeout_ms <= 0 {
     return Err(Error::from_reason("timeoutMs must be positive"));
   }
+  let retry_max_attempts = options.retry_max_attempts.unwrap_or(1);
+  if retry_max_attempts <= 0 {
+    return Err(Error::from_reason("retryMaxAttempts must be positive"));
+  }
+  let retry_backoff_ms = options.retry_backoff_ms.unwrap_or(100);
+  if retry_backoff_ms < 0 {
+    return Err(Error::from_reason("retryBackoffMs must be non-negative"));
+  }
+  let retry_backoff_max_ms = options.retry_backoff_max_ms.unwrap_or(2_000);
+  if retry_backoff_max_ms < 0 {
+    return Err(Error::from_reason("retryBackoffMaxMs must be non-negative"));
+  }
+  if retry_backoff_max_ms > 0 && retry_backoff_max_ms < retry_backoff_ms {
+    return Err(Error::from_reason(
+      "retryBackoffMaxMs must be >= retryBackoffMs when non-zero",
+    ));
+  }
 
-  let core_options = core_metrics::OtlpHttpPushOptions {
+  Ok(core_metrics::OtlpHttpPushOptions {
     timeout_ms: timeout_ms as u64,
     bearer_token: options.bearer_token,
+    retry_max_attempts: retry_max_attempts as u32,
+    retry_backoff_ms: retry_backoff_ms as u64,
+    retry_backoff_max_ms: retry_backoff_max_ms as u64,
+    compression_gzip: options.compression_gzip.unwrap_or(false),
     tls: core_metrics::OtlpHttpTlsOptions {
       https_only: options.https_only.unwrap_or(false),
       ca_cert_pem_path: options.ca_cert_pem_path,
       client_cert_pem_path: options.client_cert_pem_path,
       client_key_pem_path: options.client_key_pem_path,
     },
-  };
+  })
+}
+
+#[napi]
+pub fn push_replication_metrics_otel_json_with_options(
+  db: &Database,
+  endpoint: String,
+  options: Option<PushReplicationMetricsOtelOptions>,
+) -> Result<OtlpHttpExportResult> {
+  let core_options = build_core_otel_push_options(options.unwrap_or_default())?;
 
   match db.inner.as_ref() {
     Some(DatabaseInner::SingleFile(db)) => {
@@ -3505,22 +3535,7 @@ pub fn push_replication_metrics_otel_protobuf_with_options(
   endpoint: String,
   options: Option<PushReplicationMetricsOtelOptions>,
 ) -> Result<OtlpHttpExportResult> {
-  let options = options.unwrap_or_default();
-  let timeout_ms = options.timeout_ms.unwrap_or(5_000);
-  if timeout_ms <= 0 {
-    return Err(Error::from_reason("timeoutMs must be positive"));
-  }
-
-  let core_options = core_metrics::OtlpHttpPushOptions {
-    timeout_ms: timeout_ms as u64,
-    bearer_token: options.bearer_token,
-    tls: core_metrics::OtlpHttpTlsOptions {
-      https_only: options.https_only.unwrap_or(false),
-      ca_cert_pem_path: options.ca_cert_pem_path,
-      client_cert_pem_path: options.client_cert_pem_path,
-      client_key_pem_path: options.client_key_pem_path,
-    },
-  };
+  let core_options = build_core_otel_push_options(options.unwrap_or_default())?;
 
   match db.inner.as_ref() {
     Some(DatabaseInner::SingleFile(db)) => {
@@ -3568,22 +3583,7 @@ pub fn push_replication_metrics_otel_grpc_with_options(
   endpoint: String,
   options: Option<PushReplicationMetricsOtelOptions>,
 ) -> Result<OtlpHttpExportResult> {
-  let options = options.unwrap_or_default();
-  let timeout_ms = options.timeout_ms.unwrap_or(5_000);
-  if timeout_ms <= 0 {
-    return Err(Error::from_reason("timeoutMs must be positive"));
-  }
-
-  let core_options = core_metrics::OtlpHttpPushOptions {
-    timeout_ms: timeout_ms as u64,
-    bearer_token: options.bearer_token,
-    tls: core_metrics::OtlpHttpTlsOptions {
-      https_only: options.https_only.unwrap_or(false),
-      ca_cert_pem_path: options.ca_cert_pem_path,
-      client_cert_pem_path: options.client_cert_pem_path,
-      client_key_pem_path: options.client_key_pem_path,
-    },
-  };
+  let core_options = build_core_otel_push_options(options.unwrap_or_default())?;
 
   match db.inner.as_ref() {
     Some(DatabaseInner::SingleFile(db)) => {

@@ -37,13 +37,16 @@ Metrics surface:
 - Host-runtime OpenTelemetry collector push is available via:
   - Rust core: `push_replication_metrics_otel_json_single_file(db, endpoint, timeout_ms, bearer_token)`
     - advanced TLS/mTLS: `push_replication_metrics_otel_json_*_with_options(...)` with
-      `https_only`, `ca_cert_pem_path`, `client_cert_pem_path`, `client_key_pem_path`.
+      `https_only`, `ca_cert_pem_path`, `client_cert_pem_path`, `client_key_pem_path`,
+      `retry_max_attempts`, `retry_backoff_ms`, `retry_backoff_max_ms`, `compression_gzip`.
   - Rust core (protobuf): `push_replication_metrics_otel_protobuf_single_file(db, endpoint, timeout_ms, bearer_token)`
     - advanced TLS/mTLS: `push_replication_metrics_otel_protobuf_*_with_options(...)` with
-      `https_only`, `ca_cert_pem_path`, `client_cert_pem_path`, `client_key_pem_path`.
+      `https_only`, `ca_cert_pem_path`, `client_cert_pem_path`, `client_key_pem_path`,
+      `retry_max_attempts`, `retry_backoff_ms`, `retry_backoff_max_ms`, `compression_gzip`.
   - Rust core (gRPC): `push_replication_metrics_otel_grpc_single_file(db, endpoint, timeout_ms, bearer_token)`
     - advanced TLS/mTLS: `push_replication_metrics_otel_grpc_*_with_options(...)` with
-      `https_only`, `ca_cert_pem_path`, `client_cert_pem_path`, `client_key_pem_path`.
+      `https_only`, `ca_cert_pem_path`, `client_cert_pem_path`, `client_key_pem_path`,
+      `retry_max_attempts`, `retry_backoff_ms`, `retry_backoff_max_ms`, `compression_gzip`.
   - Node NAPI: `pushReplicationMetricsOtelJson(db, endpoint, timeoutMs, bearerToken?)`
     - advanced TLS/mTLS: `pushReplicationMetricsOtelJsonWithOptions(db, endpoint, options)`.
   - Node NAPI (protobuf): `pushReplicationMetricsOtelProtobuf(db, endpoint, timeoutMs, bearerToken?)`
@@ -52,13 +55,16 @@ Metrics surface:
     - advanced TLS/mTLS: `pushReplicationMetricsOtelGrpcWithOptions(db, endpoint, options)`.
   - Python PyO3: `push_replication_metrics_otel_json(db, endpoint, timeout_ms=5000, bearer_token=None)`
     - advanced TLS/mTLS kwargs:
-      `https_only`, `ca_cert_pem_path`, `client_cert_pem_path`, `client_key_pem_path`.
+      `https_only`, `ca_cert_pem_path`, `client_cert_pem_path`, `client_key_pem_path`,
+      `retry_max_attempts`, `retry_backoff_ms`, `retry_backoff_max_ms`, `compression_gzip`.
   - Python PyO3 (protobuf): `push_replication_metrics_otel_protobuf(db, endpoint, timeout_ms=5000, bearer_token=None)`
     - advanced TLS/mTLS kwargs:
-      `https_only`, `ca_cert_pem_path`, `client_cert_pem_path`, `client_key_pem_path`.
+      `https_only`, `ca_cert_pem_path`, `client_cert_pem_path`, `client_key_pem_path`,
+      `retry_max_attempts`, `retry_backoff_ms`, `retry_backoff_max_ms`, `compression_gzip`.
   - Python PyO3 (gRPC): `push_replication_metrics_otel_grpc(db, endpoint, timeout_ms=5000, bearer_token=None)`
     - advanced TLS/mTLS kwargs:
-      `https_only`, `ca_cert_pem_path`, `client_cert_pem_path`, `client_key_pem_path`.
+      `https_only`, `ca_cert_pem_path`, `client_cert_pem_path`, `client_key_pem_path`,
+      `retry_max_attempts`, `retry_backoff_ms`, `retry_backoff_max_ms`, `compression_gzip`.
 - Host-runtime replication transport JSON export helpers are available via:
   - Node NAPI: `collectReplicationSnapshotTransportJson(db, includeData?)`,
     `collectReplicationLogTransportJson(db, cursor?, maxFrames?, maxBytes?, includePayload?)`
@@ -207,5 +213,5 @@ Playground curl examples:
 
 - Retention policy supports entry-window + time-window floors, but not richer SLA-aware policies.
 - Bundled HTTP admin endpoints still ship in playground runtime; host runtime now exposes transport JSON helpers for embedding custom HTTP surfaces.
-- OTLP exporters do not yet provide built-in retry/backoff/compression policy controls; retries should be handled by operator runtime/scheduler.
+- OTLP retry policy is bounded attempt/backoff only; no jitter/circuit-breaker policy is included yet.
 - `SyncMode::Normal` and `SyncMode::Off` optimize commit latency by batching sidecar frame writes in-memory and refreshing manifest fencing periodically (not every commit). For strict per-commit sidecar visibility/fencing, use `SyncMode::Full`.

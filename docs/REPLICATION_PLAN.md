@@ -368,6 +368,7 @@ Implemented:
 - Host-runtime OpenTelemetry collector push transport (HTTP OTLP-protobuf) in Rust core + Node NAPI + Python PyO3 (`push_replication_metrics_otel_protobuf_single_file`, `pushReplicationMetricsOtelProtobuf`, `push_replication_metrics_otel_protobuf`).
 - Host-runtime OpenTelemetry collector push transport (OTLP gRPC Export) in Rust core + Node NAPI + Python PyO3 (`push_replication_metrics_otel_grpc_single_file`, `pushReplicationMetricsOtelGrpc`, `push_replication_metrics_otel_grpc`).
 - Host-runtime OTLP transport hardening for TLS/mTLS (HTTPS-only mode, custom CA trust, optional client cert/key auth).
+- Host-runtime OTLP retry/backoff/compression controls in Rust core + Node NAPI + Python PyO3 (`retry_max_attempts`, `retry_backoff_ms`, `retry_backoff_max_ms`, `compression_gzip`).
 - Host-runtime replication transport JSON export surfaces for embedding HTTP endpoints beyond playground runtime:
   - snapshot export (`collectReplicationSnapshotTransportJson` / `collect_replication_snapshot_transport_json`)
   - log page export with cursor/limits (`collectReplicationLogTransportJson` / `collect_replication_log_transport_json`).
@@ -401,4 +402,4 @@ Known limits:
 - Host-runtime OTLP export supports HTTP OTLP-JSON, HTTP OTLP-protobuf, and OTLP gRPC push paths.
 
 Carry-over to next phase:
-- Optional OTLP retry/backoff/compression policy controls for long-running collectors.
+- Optional OTLP retry jitter/circuit-breaker policy controls for noisy collector networks.

@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::TcpListener;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc;
 use std::sync::Mutex;
 use std::thread;
@@ -11,6 +12,7 @@ use kitedb::metrics::{
   collect_metrics_single_file, collect_replication_metrics_otel_json_single_file,
   collect_replication_metrics_otel_protobuf_single_file,
   collect_replication_metrics_prometheus_single_file, push_replication_metrics_otel_grpc_payload,
+  push_replication_metrics_otel_grpc_payload_with_options,
   push_replication_metrics_otel_json_payload,
   push_replication_metrics_otel_json_payload_with_options,
   push_replication_metrics_otel_protobuf_payload, render_replication_metrics_prometheus,
@@ -67,11 +69,14 @@ struct CapturedHttpRequest {
 struct CapturedGrpcRequest {
   authorization: Option<String>,
   resource_metrics_count: usize,
+  attempt: usize,
 }
 
 #[derive(Debug)]
 struct TestGrpcMetricsService {
   tx: Mutex<Option<mpsc::Sender<CapturedGrpcRequest>>>,
+  fail_first_attempts: usize,
+  attempts: AtomicUsize,
 }
 
 #[tonic::async_trait]
@@ -80,6 +85,10 @@ impl OtelMetricsService for TestGrpcMetricsService {
     &self,
     request: tonic::Request<OtelExportMetricsServiceRequest>,
   ) -> std::result::Result<tonic::Response<OtelExportMetricsServiceResponse>, tonic::Status> {
+    let attempt = self.attempts.fetch_add(1, Ordering::SeqCst) + 1;
+    if attempt <= self.fail_first_attempts {
+      return Err(tonic::Status::unavailable("transient"));
+    }
     let authorization = request
       .metadata()
       .get("authorization")
@@ -90,6 +99,7 @@ impl OtelMetricsService for TestGrpcMetricsService {
         .send(CapturedGrpcRequest {
           authorization,
           resource_metrics_count: request.get_ref().resource_metrics.len(),
+          attempt,
         })
         .expect("send grpc capture");
     }
@@ -197,7 +207,101 @@ fn spawn_http_capture_server(
   (endpoint, rx, handle)
 }
 
-fn spawn_grpc_capture_server() -> (
+fn spawn_http_sequence_capture_server(
+  status_codes: Vec<u16>,
+  response_body: &str,
+) -> (
+  String,
+  mpsc::Receiver<Vec<CapturedHttpRequest>>,
+  thread::JoinHandle<()>,
+) {
+  let listener = TcpListener::bind("127.0.0.1:0").expect("bind sequence test server");
+  let address = listener.local_addr().expect("sequence local addr");
+  let endpoint = format!("http://{address}/v1/metrics");
+  let response_body = response_body.to_string();
+  let (tx, rx) = mpsc::channel::<Vec<CapturedHttpRequest>>();
+
+  let handle = thread::spawn(move || {
+    let mut captured = Vec::new();
+    for status_code in status_codes {
+      let (mut stream, _) = listener.accept().expect("accept sequence");
+      stream
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .expect("set read timeout");
+
+      let mut buffer = Vec::new();
+      let mut chunk = [0u8; 1024];
+      let mut header_end: Option<usize> = None;
+      let mut content_length = 0usize;
+
+      loop {
+        match stream.read(&mut chunk) {
+          Ok(0) => break,
+          Ok(read) => {
+            buffer.extend_from_slice(&chunk[..read]);
+            if header_end.is_none() {
+              if let Some(position) = find_subsequence(&buffer, b"\r\n\r\n") {
+                let end = position + 4;
+                header_end = Some(end);
+                let headers_text = String::from_utf8_lossy(&buffer[..end]);
+                for line in headers_text.lines().skip(1) {
+                  let Some((name, value)) = line.split_once(':') else {
+                    continue;
+                  };
+                  if name.eq_ignore_ascii_case("content-length") {
+                    content_length = value.trim().parse::<usize>().unwrap_or(0);
+                  }
+                }
+              }
+            }
+            if let Some(end) = header_end {
+              if buffer.len() >= end + content_length {
+                break;
+              }
+            }
+          }
+          Err(error) => panic!("read sequence request failed: {error}"),
+        }
+      }
+
+      let end = header_end.expect("header terminator");
+      let headers_text = String::from_utf8_lossy(&buffer[..end]);
+      let mut lines = headers_text.lines();
+      let request_line = lines.next().unwrap_or_default().to_string();
+      let mut headers = HashMap::new();
+      for line in lines {
+        let Some((name, value)) = line.split_once(':') else {
+          continue;
+        };
+        headers.insert(name.trim().to_ascii_lowercase(), value.trim().to_string());
+      }
+      let body_end = (end + content_length).min(buffer.len());
+      let body = buffer[end..body_end].to_vec();
+      captured.push(CapturedHttpRequest {
+        request_line,
+        headers,
+        body,
+      });
+
+      let reason = if status_code == 200 { "OK" } else { "ERR" };
+      let response = format!(
+        "HTTP/1.1 {status_code} {reason}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        response_body.len(),
+        response_body
+      );
+      stream
+        .write_all(response.as_bytes())
+        .expect("write sequence response");
+    }
+    tx.send(captured).expect("send sequence captures");
+  });
+
+  (endpoint, rx, handle)
+}
+
+fn spawn_grpc_capture_server(
+  fail_first_attempts: usize,
+) -> (
   String,
   mpsc::Receiver<CapturedGrpcRequest>,
   tokio::sync::oneshot::Sender<()>,
@@ -218,6 +322,8 @@ fn spawn_grpc_capture_server() -> (
     runtime.block_on(async move {
       let service = TestGrpcMetricsService {
         tx: Mutex::new(Some(tx)),
+        fail_first_attempts,
+        attempts: AtomicUsize::new(0),
       };
       tonic::transport::Server::builder()
         .add_service(OtelMetricsServiceServer::new(service))
@@ -480,6 +586,70 @@ fn otlp_push_protobuf_payload_posts_binary_and_auth_header() {
 }
 
 #[test]
+fn otlp_push_payload_retries_transient_http_failure() {
+  let payload = "{\"resourceMetrics\":[]}";
+  let (endpoint, captured_rx, handle) = spawn_http_sequence_capture_server(vec![500, 200], "ok");
+  let options = OtlpHttpPushOptions {
+    timeout_ms: 2_000,
+    retry_max_attempts: 2,
+    retry_backoff_ms: 1,
+    retry_backoff_max_ms: 1,
+    ..OtlpHttpPushOptions::default()
+  };
+
+  let result =
+    push_replication_metrics_otel_json_payload_with_options(payload, &endpoint, &options)
+      .expect("second attempt should succeed");
+  assert_eq!(result.status_code, 200);
+  assert_eq!(result.response_body, "ok");
+
+  let captures = captured_rx
+    .recv_timeout(Duration::from_secs(2))
+    .expect("captured sequence requests");
+  assert_eq!(captures.len(), 2);
+  assert_eq!(
+    String::from_utf8_lossy(&captures[0].body),
+    payload,
+    "first attempt payload mismatch"
+  );
+  assert_eq!(
+    String::from_utf8_lossy(&captures[1].body),
+    payload,
+    "second attempt payload mismatch"
+  );
+  handle.join().expect("sequence server thread");
+}
+
+#[test]
+fn otlp_push_payload_gzip_sets_header_and_compresses_body() {
+  let payload = "{\"resourceMetrics\":[]}";
+  let (endpoint, captured_rx, handle) = spawn_http_capture_server(200, "ok");
+  let options = OtlpHttpPushOptions {
+    timeout_ms: 2_000,
+    compression_gzip: true,
+    ..OtlpHttpPushOptions::default()
+  };
+
+  let result =
+    push_replication_metrics_otel_json_payload_with_options(payload, &endpoint, &options)
+      .expect("gzip push should succeed");
+  assert_eq!(result.status_code, 200);
+
+  let captured = captured_rx
+    .recv_timeout(Duration::from_secs(2))
+    .expect("captured gzip request");
+  assert_eq!(
+    captured.headers.get("content-encoding").map(String::as_str),
+    Some("gzip")
+  );
+  assert!(
+    captured.body.starts_with(&[0x1f, 0x8b]),
+    "expected gzip magic bytes"
+  );
+  handle.join().expect("server thread");
+}
+
+#[test]
 fn otlp_push_payload_returns_error_on_non_success_status() {
   let payload = "{\"resourceMetrics\":[]}";
   let (endpoint, _captured_rx, handle) = spawn_http_capture_server(401, "denied");
@@ -505,6 +675,7 @@ fn otlp_push_payload_rejects_https_only_http_endpoint() {
       https_only: true,
       ..OtlpHttpTlsOptions::default()
     },
+    ..OtlpHttpPushOptions::default()
   };
   let error = push_replication_metrics_otel_json_payload_with_options(
     "{}",
@@ -525,6 +696,7 @@ fn otlp_push_payload_rejects_partial_mtls_paths() {
       client_key_pem_path: None,
       ..OtlpHttpTlsOptions::default()
     },
+    ..OtlpHttpPushOptions::default()
   };
   let error = push_replication_metrics_otel_json_payload_with_options(
     "{}",
@@ -537,12 +709,28 @@ fn otlp_push_payload_rejects_partial_mtls_paths() {
 }
 
 #[test]
+fn otlp_push_payload_rejects_zero_retry_attempts() {
+  let options = OtlpHttpPushOptions {
+    timeout_ms: 2_000,
+    retry_max_attempts: 0,
+    ..OtlpHttpPushOptions::default()
+  };
+  let error = push_replication_metrics_otel_json_payload_with_options(
+    "{}",
+    "http://127.0.0.1:4318/v1/metrics",
+    &options,
+  )
+  .expect_err("zero retry attempts must be rejected");
+  assert!(error.to_string().contains("retry_max_attempts"));
+}
+
+#[test]
 fn otlp_push_grpc_payload_posts_request_and_auth_header() {
   let payload = OtelExportMetricsServiceRequest {
     resource_metrics: Vec::new(),
   }
   .encode_to_vec();
-  let (endpoint, captured_rx, shutdown_tx, handle) = spawn_grpc_capture_server();
+  let (endpoint, captured_rx, shutdown_tx, handle) = spawn_grpc_capture_server(0);
   thread::sleep(Duration::from_millis(50));
 
   let result =
@@ -555,6 +743,37 @@ fn otlp_push_grpc_payload_posts_request_and_auth_header() {
     .expect("captured grpc request");
   assert_eq!(captured.authorization.as_deref(), Some("Bearer token"));
   assert_eq!(captured.resource_metrics_count, 0);
+  assert_eq!(captured.attempt, 1);
+
+  let _ = shutdown_tx.send(());
+  handle.join().expect("grpc server thread");
+}
+
+#[test]
+fn otlp_push_grpc_payload_retries_unavailable_once() {
+  let payload = OtelExportMetricsServiceRequest {
+    resource_metrics: Vec::new(),
+  }
+  .encode_to_vec();
+  let (endpoint, captured_rx, shutdown_tx, handle) = spawn_grpc_capture_server(1);
+  thread::sleep(Duration::from_millis(50));
+  let options = OtlpHttpPushOptions {
+    timeout_ms: 2_000,
+    retry_max_attempts: 2,
+    retry_backoff_ms: 1,
+    retry_backoff_max_ms: 1,
+    ..OtlpHttpPushOptions::default()
+  };
+
+  let result =
+    push_replication_metrics_otel_grpc_payload_with_options(&payload, &endpoint, &options)
+      .expect("second grpc attempt should succeed");
+  assert_eq!(result.status_code, 200);
+
+  let captured = captured_rx
+    .recv_timeout(Duration::from_secs(2))
+    .expect("captured grpc retry request");
+  assert_eq!(captured.attempt, 2);
 
   let _ = shutdown_tx.send(());
   handle.join().expect("grpc server thread");

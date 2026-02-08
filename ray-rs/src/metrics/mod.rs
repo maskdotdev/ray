@@ -3,10 +3,13 @@
 //! Core implementation used by bindings.
 
 use std::fs::{self, File};
-use std::io::BufReader;
+use std::io::{BufReader, Write};
 use std::sync::Arc;
+use std::thread;
 use std::time::{Duration, SystemTime};
 
+use flate2::write::GzEncoder;
+use flate2::Compression;
 use opentelemetry_proto::tonic::collector::metrics::v1::metrics_service_client::MetricsServiceClient as OtelMetricsServiceClient;
 use opentelemetry_proto::tonic::collector::metrics::v1::ExportMetricsServiceRequest as OtelExportMetricsServiceRequest;
 use opentelemetry_proto::tonic::common::v1::{
@@ -22,11 +25,13 @@ use opentelemetry_proto::tonic::metrics::v1::{
 use opentelemetry_proto::tonic::resource::v1::Resource as OtelResource;
 use prost::Message;
 use serde_json::{json, Value};
+use tonic::codec::CompressionEncoding as TonicCompressionEncoding;
 use tonic::metadata::MetadataValue;
 use tonic::transport::{
   Certificate as TonicCertificate, ClientTlsConfig, Endpoint as TonicEndpoint,
   Identity as TonicIdentity,
 };
+use tonic::Code as TonicCode;
 
 use crate::cache::manager::CacheManagerStats;
 use crate::core::single_file::SingleFileDB;
@@ -177,6 +182,10 @@ pub struct OtlpHttpTlsOptions {
 pub struct OtlpHttpPushOptions {
   pub timeout_ms: u64,
   pub bearer_token: Option<String>,
+  pub retry_max_attempts: u32,
+  pub retry_backoff_ms: u64,
+  pub retry_backoff_max_ms: u64,
+  pub compression_gzip: bool,
   pub tls: OtlpHttpTlsOptions,
 }
 
@@ -185,6 +194,10 @@ impl Default for OtlpHttpPushOptions {
     Self {
       timeout_ms: 5_000,
       bearer_token: None,
+      retry_max_attempts: 1,
+      retry_backoff_ms: 100,
+      retry_backoff_max_ms: 2_000,
+      compression_gzip: false,
       tls: OtlpHttpTlsOptions::default(),
     }
   }
@@ -438,9 +451,7 @@ pub fn push_replication_metrics_otel_grpc_payload_with_options(
       "OTLP endpoint must not be empty".into(),
     ));
   }
-  if options.timeout_ms == 0 {
-    return Err(KiteError::InvalidQuery("timeout_ms must be > 0".into()));
-  }
+  validate_otel_push_options(options)?;
   if options.tls.https_only && !endpoint_uses_https(endpoint) {
     return Err(KiteError::InvalidQuery(
       "OTLP endpoint must use https when https_only is enabled".into(),
@@ -528,38 +539,68 @@ fn push_replication_metrics_otel_grpc_request_with_options(
     })?;
 
   runtime.block_on(async move {
-    let channel = endpoint_builder.connect().await.map_err(|error| {
-      KiteError::Io(std::io::Error::other(format!(
-        "OTLP collector gRPC transport error: {error}"
-      )))
-    })?;
-    let mut client = OtelMetricsServiceClient::new(channel);
-    let mut request = tonic::Request::new(request_payload);
-    if let Some(token) = bearer_token {
-      let header_value = MetadataValue::try_from(format!("Bearer {token}")).map_err(|error| {
-        KiteError::InvalidQuery(
-          format!("Invalid OTLP bearer token for gRPC metadata: {error}").into(),
-        )
-      })?;
-      request.metadata_mut().insert("authorization", header_value);
+    for attempt in 1..=options.retry_max_attempts {
+      let channel = match endpoint_builder.clone().connect().await {
+        Ok(channel) => channel,
+        Err(error) => {
+          let transport_error = KiteError::Io(std::io::Error::other(format!(
+            "OTLP collector gRPC transport error: {error}"
+          )));
+          if attempt < options.retry_max_attempts {
+            tokio::time::sleep(retry_backoff_duration(options, attempt)).await;
+            continue;
+          }
+          return Err(transport_error);
+        }
+      };
+
+      let mut client = OtelMetricsServiceClient::new(channel);
+      if options.compression_gzip {
+        client = client
+          .send_compressed(TonicCompressionEncoding::Gzip)
+          .accept_compressed(TonicCompressionEncoding::Gzip);
+      }
+
+      let mut request = tonic::Request::new(request_payload.clone());
+      if let Some(token) = bearer_token.as_deref() {
+        let header_value = MetadataValue::try_from(format!("Bearer {token}")).map_err(|error| {
+          KiteError::InvalidQuery(
+            format!("Invalid OTLP bearer token for gRPC metadata: {error}").into(),
+          )
+        })?;
+        request.metadata_mut().insert("authorization", header_value);
+      }
+
+      match client.export(request).await {
+        Ok(response) => {
+          let body = response.into_inner();
+          let response_body = match body.partial_success {
+            Some(partial) => format!(
+              "partial_success rejected_data_points={} error_message={}",
+              partial.rejected_data_points, partial.error_message
+            ),
+            None => String::new(),
+          };
+          return Ok(OtlpHttpExportResult {
+            status_code: 200,
+            response_body,
+          });
+        }
+        Err(status) => {
+          if attempt < options.retry_max_attempts && should_retry_grpc_status(status.code()) {
+            tokio::time::sleep(retry_backoff_duration(options, attempt)).await;
+            continue;
+          }
+          return Err(KiteError::Internal(format!(
+            "OTLP collector rejected replication metrics over gRPC: {status}"
+          )));
+        }
+      }
     }
-    let response = client.export(request).await.map_err(|error| {
-      KiteError::Internal(format!(
-        "OTLP collector rejected replication metrics over gRPC: {error}"
-      ))
-    })?;
-    let body = response.into_inner();
-    let response_body = match body.partial_success {
-      Some(partial) => format!(
-        "partial_success rejected_data_points={} error_message={}",
-        partial.rejected_data_points, partial.error_message
-      ),
-      None => String::new(),
-    };
-    Ok(OtlpHttpExportResult {
-      status_code: 200,
-      response_body,
-    })
+
+    Err(KiteError::Internal(
+      "OTLP gRPC exporter exhausted retry attempts".to_string(),
+    ))
   })
 }
 
@@ -575,47 +616,119 @@ fn push_replication_metrics_otel_http_payload_with_options(
       "OTLP endpoint must not be empty".into(),
     ));
   }
-  if options.timeout_ms == 0 {
-    return Err(KiteError::InvalidQuery("timeout_ms must be > 0".into()));
-  }
+  validate_otel_push_options(options)?;
   if options.tls.https_only && !endpoint_uses_https(endpoint) {
     return Err(KiteError::InvalidQuery(
       "OTLP endpoint must use https when https_only is enabled".into(),
     ));
   }
 
-  let timeout = Duration::from_millis(options.timeout_ms);
-  let agent = build_otel_http_agent(endpoint, options, timeout)?;
-  let mut request = agent
-    .post(endpoint)
-    .set("content-type", content_type)
-    .timeout(timeout);
+  let request_payload = encode_http_request_payload(payload, options.compression_gzip)?;
+  for attempt in 1..=options.retry_max_attempts {
+    let timeout = Duration::from_millis(options.timeout_ms);
+    let agent = build_otel_http_agent(endpoint, options, timeout)?;
+    let mut request = agent
+      .post(endpoint)
+      .set("content-type", content_type)
+      .timeout(timeout);
+    if options.compression_gzip {
+      request = request.set("content-encoding", "gzip");
+    }
+    if let Some(token) = options.bearer_token.as_deref() {
+      if !token.trim().is_empty() {
+        request = request.set("authorization", &format!("Bearer {token}"));
+      }
+    }
 
-  if let Some(token) = options.bearer_token.as_deref() {
-    if !token.trim().is_empty() {
-      request = request.set("authorization", &format!("Bearer {token}"));
+    match request.send_bytes(&request_payload) {
+      Ok(response) => {
+        let status_code = response.status() as i64;
+        let response_body = response.into_string().unwrap_or_default();
+        return Ok(OtlpHttpExportResult {
+          status_code,
+          response_body,
+        });
+      }
+      Err(ureq::Error::Status(status_code, response)) => {
+        let body = response.into_string().unwrap_or_default();
+        if attempt < options.retry_max_attempts && should_retry_http_status(status_code) {
+          thread::sleep(retry_backoff_duration(options, attempt));
+          continue;
+        }
+        return Err(KiteError::Internal(format!(
+          "OTLP collector rejected replication metrics: status {status_code}, body: {body}"
+        )));
+      }
+      Err(ureq::Error::Transport(error)) => {
+        if attempt < options.retry_max_attempts {
+          thread::sleep(retry_backoff_duration(options, attempt));
+          continue;
+        }
+        return Err(KiteError::Io(std::io::Error::other(format!(
+          "OTLP collector transport error: {error}"
+        ))));
+      }
     }
   }
 
-  match request.send_bytes(payload) {
-    Ok(response) => {
-      let status_code = response.status() as i64;
-      let response_body = response.into_string().unwrap_or_default();
-      Ok(OtlpHttpExportResult {
-        status_code,
-        response_body,
-      })
-    }
-    Err(ureq::Error::Status(status_code, response)) => {
-      let body = response.into_string().unwrap_or_default();
-      Err(KiteError::Internal(format!(
-        "OTLP collector rejected replication metrics: status {status_code}, body: {body}"
-      )))
-    }
-    Err(ureq::Error::Transport(error)) => Err(KiteError::Io(std::io::Error::other(format!(
-      "OTLP collector transport error: {error}"
-    )))),
+  Err(KiteError::Internal(
+    "OTLP exporter exhausted retry attempts".to_string(),
+  ))
+}
+
+fn validate_otel_push_options(options: &OtlpHttpPushOptions) -> Result<()> {
+  if options.timeout_ms == 0 {
+    return Err(KiteError::InvalidQuery("timeout_ms must be > 0".into()));
   }
+  if options.retry_max_attempts == 0 {
+    return Err(KiteError::InvalidQuery(
+      "retry_max_attempts must be > 0".into(),
+    ));
+  }
+  Ok(())
+}
+
+fn should_retry_http_status(status_code: u16) -> bool {
+  status_code == 429 || status_code >= 500
+}
+
+fn should_retry_grpc_status(code: TonicCode) -> bool {
+  matches!(
+    code,
+    TonicCode::Unavailable | TonicCode::DeadlineExceeded | TonicCode::ResourceExhausted
+  )
+}
+
+fn retry_backoff_duration(options: &OtlpHttpPushOptions, attempt: u32) -> Duration {
+  if attempt <= 1 || options.retry_backoff_ms == 0 {
+    return Duration::from_millis(options.retry_backoff_ms);
+  }
+  let shift = (attempt - 1).min(31);
+  let multiplier = 1u64.checked_shl(shift).unwrap_or(u64::MAX);
+  let raw = options.retry_backoff_ms.saturating_mul(multiplier);
+  let backoff = if options.retry_backoff_max_ms == 0 {
+    raw
+  } else {
+    raw.min(options.retry_backoff_max_ms)
+  };
+  Duration::from_millis(backoff)
+}
+
+fn encode_http_request_payload(payload: &[u8], compression_gzip: bool) -> Result<Vec<u8>> {
+  if !compression_gzip {
+    return Ok(payload.to_vec());
+  }
+  let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+  encoder.write_all(payload).map_err(|error| {
+    KiteError::Internal(format!(
+      "Failed compressing OTLP payload with gzip: {error}"
+    ))
+  })?;
+  encoder.finish().map_err(|error| {
+    KiteError::Internal(format!(
+      "Failed finalizing compressed OTLP payload: {error}"
+    ))
+  })
 }
 
 fn endpoint_uses_https(endpoint: &str) -> bool {
