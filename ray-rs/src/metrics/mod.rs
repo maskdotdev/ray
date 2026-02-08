@@ -2,11 +2,12 @@
 //!
 //! Core implementation used by bindings.
 
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::BufReader;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
+use opentelemetry_proto::tonic::collector::metrics::v1::metrics_service_client::MetricsServiceClient as OtelMetricsServiceClient;
 use opentelemetry_proto::tonic::collector::metrics::v1::ExportMetricsServiceRequest as OtelExportMetricsServiceRequest;
 use opentelemetry_proto::tonic::common::v1::{
   any_value as otel_any_value, AnyValue as OtelAnyValue,
@@ -21,6 +22,11 @@ use opentelemetry_proto::tonic::metrics::v1::{
 use opentelemetry_proto::tonic::resource::v1::Resource as OtelResource;
 use prost::Message;
 use serde_json::{json, Value};
+use tonic::metadata::MetadataValue;
+use tonic::transport::{
+  Certificate as TonicCertificate, ClientTlsConfig, Endpoint as TonicEndpoint,
+  Identity as TonicIdentity,
+};
 
 use crate::cache::manager::CacheManagerStats;
 use crate::core::single_file::SingleFileDB;
@@ -380,6 +386,183 @@ pub fn push_replication_metrics_otel_protobuf_payload_with_options(
   )
 }
 
+/// Push replication OTLP-protobuf payload to an OTLP collector gRPC endpoint.
+pub fn push_replication_metrics_otel_grpc_single_file(
+  db: &SingleFileDB,
+  endpoint: &str,
+  timeout_ms: u64,
+  bearer_token: Option<&str>,
+) -> Result<OtlpHttpExportResult> {
+  let options = OtlpHttpPushOptions {
+    timeout_ms,
+    bearer_token: bearer_token.map(ToOwned::to_owned),
+    ..OtlpHttpPushOptions::default()
+  };
+  push_replication_metrics_otel_grpc_single_file_with_options(db, endpoint, &options)
+}
+
+/// Push replication OTLP-protobuf payload over gRPC using explicit push options.
+pub fn push_replication_metrics_otel_grpc_single_file_with_options(
+  db: &SingleFileDB,
+  endpoint: &str,
+  options: &OtlpHttpPushOptions,
+) -> Result<OtlpHttpExportResult> {
+  let payload = collect_replication_metrics_otel_protobuf_single_file(db);
+  push_replication_metrics_otel_grpc_payload_with_options(&payload, endpoint, options)
+}
+
+/// Push pre-rendered replication OTLP-protobuf payload to an OTLP collector gRPC endpoint.
+pub fn push_replication_metrics_otel_grpc_payload(
+  payload: &[u8],
+  endpoint: &str,
+  timeout_ms: u64,
+  bearer_token: Option<&str>,
+) -> Result<OtlpHttpExportResult> {
+  let options = OtlpHttpPushOptions {
+    timeout_ms,
+    bearer_token: bearer_token.map(ToOwned::to_owned),
+    ..OtlpHttpPushOptions::default()
+  };
+  push_replication_metrics_otel_grpc_payload_with_options(payload, endpoint, &options)
+}
+
+/// Push pre-rendered replication OTLP-protobuf payload over gRPC using explicit push options.
+pub fn push_replication_metrics_otel_grpc_payload_with_options(
+  payload: &[u8],
+  endpoint: &str,
+  options: &OtlpHttpPushOptions,
+) -> Result<OtlpHttpExportResult> {
+  let endpoint = endpoint.trim();
+  if endpoint.is_empty() {
+    return Err(KiteError::InvalidQuery(
+      "OTLP endpoint must not be empty".into(),
+    ));
+  }
+  if options.timeout_ms == 0 {
+    return Err(KiteError::InvalidQuery("timeout_ms must be > 0".into()));
+  }
+  if options.tls.https_only && !endpoint_uses_https(endpoint) {
+    return Err(KiteError::InvalidQuery(
+      "OTLP endpoint must use https when https_only is enabled".into(),
+    ));
+  }
+
+  let request = OtelExportMetricsServiceRequest::decode(payload).map_err(|error| {
+    KiteError::InvalidQuery(format!("Invalid OTLP protobuf payload: {error}").into())
+  })?;
+  push_replication_metrics_otel_grpc_request_with_options(request, endpoint, options)
+}
+
+fn push_replication_metrics_otel_grpc_request_with_options(
+  request_payload: OtelExportMetricsServiceRequest,
+  endpoint: &str,
+  options: &OtlpHttpPushOptions,
+) -> Result<OtlpHttpExportResult> {
+  let timeout = Duration::from_millis(options.timeout_ms);
+  let ca_cert_pem_path = options
+    .tls
+    .ca_cert_pem_path
+    .as_deref()
+    .map(str::trim)
+    .filter(|path| !path.is_empty());
+  let client_cert_pem_path = options
+    .tls
+    .client_cert_pem_path
+    .as_deref()
+    .map(str::trim)
+    .filter(|path| !path.is_empty());
+  let client_key_pem_path = options
+    .tls
+    .client_key_pem_path
+    .as_deref()
+    .map(str::trim)
+    .filter(|path| !path.is_empty());
+  if client_cert_pem_path.is_some() ^ client_key_pem_path.is_some() {
+    return Err(KiteError::InvalidQuery(
+      "OTLP mTLS requires both client_cert_pem_path and client_key_pem_path".into(),
+    ));
+  }
+  let custom_tls_configured =
+    ca_cert_pem_path.is_some() || (client_cert_pem_path.is_some() && client_key_pem_path.is_some());
+  if custom_tls_configured && !endpoint_uses_https(endpoint) {
+    return Err(KiteError::InvalidQuery(
+      "OTLP custom TLS/mTLS configuration requires an https endpoint".into(),
+    ));
+  }
+
+  let mut endpoint_builder = TonicEndpoint::from_shared(endpoint.to_string())
+    .map_err(|error| {
+      KiteError::InvalidQuery(format!("Invalid OTLP gRPC endpoint: {error}").into())
+    })?
+    .connect_timeout(timeout)
+    .timeout(timeout);
+
+  if endpoint_uses_https(endpoint) || custom_tls_configured {
+    let mut tls = ClientTlsConfig::new();
+    if let Some(path) = ca_cert_pem_path {
+      let pem = load_pem_bytes(path, "ca_cert_pem_path")?;
+      tls = tls.ca_certificate(TonicCertificate::from_pem(pem));
+    }
+    if let (Some(cert_path), Some(key_path)) = (client_cert_pem_path, client_key_pem_path) {
+      let cert_pem = load_pem_bytes(cert_path, "client_cert_pem_path")?;
+      let key_pem = load_pem_bytes(key_path, "client_key_pem_path")?;
+      tls = tls.identity(TonicIdentity::from_pem(cert_pem, key_pem));
+    }
+    endpoint_builder = endpoint_builder.tls_config(tls).map_err(|error| {
+      KiteError::InvalidQuery(format!("Invalid OTLP gRPC TLS configuration: {error}").into())
+    })?;
+  }
+
+  let bearer_token = options
+    .bearer_token
+    .as_deref()
+    .map(str::trim)
+    .filter(|value| !value.is_empty())
+    .map(ToOwned::to_owned);
+
+  let runtime = tokio::runtime::Builder::new_current_thread()
+    .enable_all()
+    .build()
+    .map_err(|error| {
+      KiteError::Internal(format!("Failed to initialize OTLP gRPC runtime: {error}"))
+    })?;
+
+  runtime.block_on(async move {
+    let channel = endpoint_builder.connect().await.map_err(|error| {
+      KiteError::Io(std::io::Error::other(format!(
+        "OTLP collector gRPC transport error: {error}"
+      )))
+    })?;
+    let mut client = OtelMetricsServiceClient::new(channel);
+    let mut request = tonic::Request::new(request_payload);
+    if let Some(token) = bearer_token {
+      let header_value = MetadataValue::try_from(format!("Bearer {token}")).map_err(|error| {
+        KiteError::InvalidQuery(
+          format!("Invalid OTLP bearer token for gRPC metadata: {error}").into(),
+        )
+      })?;
+      request.metadata_mut().insert("authorization", header_value);
+    }
+    let response = client.export(request).await.map_err(|error| {
+      KiteError::Internal(format!(
+        "OTLP collector rejected replication metrics over gRPC: {error}"
+      ))
+    })?;
+    let body = response.into_inner();
+    let response_body = match body.partial_success {
+      Some(partial) => format!(
+        "partial_success rejected_data_points={} error_message={}",
+        partial.rejected_data_points, partial.error_message
+      ),
+      None => String::new(),
+    };
+    Ok(OtlpHttpExportResult {
+      status_code: 200,
+      response_body,
+    })
+  })
+}
+
 fn push_replication_metrics_otel_http_payload_with_options(
   payload: &[u8],
   endpoint: &str,
@@ -560,6 +743,18 @@ fn load_private_key_from_pem(
     .ok_or_else(|| {
       KiteError::InvalidQuery(format!("No private key found in {field_name} '{path}'").into())
     })
+}
+
+fn load_pem_bytes(path: &str, field_name: &str) -> Result<Vec<u8>> {
+  let bytes = fs::read(path).map_err(|error| {
+    KiteError::InvalidQuery(format!("Failed reading {field_name} '{path}': {error}").into())
+  })?;
+  if bytes.is_empty() {
+    return Err(KiteError::InvalidQuery(
+      format!("{field_name} '{path}' is empty").into(),
+    ));
+  }
+  Ok(bytes)
 }
 
 /// Render replication metrics from a metrics snapshot using Prometheus exposition format.

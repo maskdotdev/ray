@@ -1980,6 +1980,58 @@ pub fn push_replication_metrics_otel_protobuf(
 }
 
 #[pyfunction]
+#[pyo3(signature = (
+  db,
+  endpoint,
+  timeout_ms=5000,
+  bearer_token=None,
+  https_only=false,
+  ca_cert_pem_path=None,
+  client_cert_pem_path=None,
+  client_key_pem_path=None
+))]
+pub fn push_replication_metrics_otel_grpc(
+  db: &PyDatabase,
+  endpoint: String,
+  timeout_ms: i64,
+  bearer_token: Option<String>,
+  https_only: bool,
+  ca_cert_pem_path: Option<String>,
+  client_cert_pem_path: Option<String>,
+  client_key_pem_path: Option<String>,
+) -> PyResult<(i64, String)> {
+  if timeout_ms <= 0 {
+    return Err(PyRuntimeError::new_err("timeout_ms must be positive"));
+  }
+
+  let options = core_metrics::OtlpHttpPushOptions {
+    timeout_ms: timeout_ms as u64,
+    bearer_token,
+    tls: core_metrics::OtlpHttpTlsOptions {
+      https_only,
+      ca_cert_pem_path,
+      client_cert_pem_path,
+      client_key_pem_path,
+    },
+  };
+
+  let guard = db
+    .inner
+    .read()
+    .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+  match guard.as_ref() {
+    Some(DatabaseInner::SingleFile(d)) => {
+      let result = core_metrics::push_replication_metrics_otel_grpc_single_file_with_options(
+        d, &endpoint, &options,
+      )
+      .map_err(|e| PyRuntimeError::new_err(format!("Failed to push replication metrics: {e}")))?;
+      Ok((result.status_code, result.response_body))
+    }
+    None => Err(PyRuntimeError::new_err("Database is closed")),
+  }
+}
+
+#[pyfunction]
 pub fn health_check(db: &PyDatabase) -> PyResult<HealthCheckResult> {
   let guard = db
     .inner

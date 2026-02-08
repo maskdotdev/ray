@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::sync::mpsc;
+use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
 
@@ -9,13 +10,18 @@ use kitedb::core::single_file::{close_single_file, open_single_file, SingleFileO
 use kitedb::metrics::{
   collect_metrics_single_file, collect_replication_metrics_otel_json_single_file,
   collect_replication_metrics_otel_protobuf_single_file,
-  collect_replication_metrics_prometheus_single_file, push_replication_metrics_otel_json_payload,
+  collect_replication_metrics_prometheus_single_file, push_replication_metrics_otel_grpc_payload,
+  push_replication_metrics_otel_json_payload,
   push_replication_metrics_otel_json_payload_with_options,
   push_replication_metrics_otel_protobuf_payload, render_replication_metrics_prometheus,
   OtlpHttpPushOptions, OtlpHttpTlsOptions,
 };
 use kitedb::replication::types::ReplicationRole;
+use opentelemetry_proto::tonic::collector::metrics::v1::metrics_service_server::{
+  MetricsService as OtelMetricsService, MetricsServiceServer as OtelMetricsServiceServer,
+};
 use opentelemetry_proto::tonic::collector::metrics::v1::ExportMetricsServiceRequest as OtelExportMetricsServiceRequest;
+use opentelemetry_proto::tonic::collector::metrics::v1::ExportMetricsServiceResponse as OtelExportMetricsServiceResponse;
 use prost::Message;
 
 fn open_primary(
@@ -55,6 +61,42 @@ struct CapturedHttpRequest {
   request_line: String,
   headers: HashMap<String, String>,
   body: Vec<u8>,
+}
+
+#[derive(Debug)]
+struct CapturedGrpcRequest {
+  authorization: Option<String>,
+  resource_metrics_count: usize,
+}
+
+#[derive(Debug)]
+struct TestGrpcMetricsService {
+  tx: Mutex<Option<mpsc::Sender<CapturedGrpcRequest>>>,
+}
+
+#[tonic::async_trait]
+impl OtelMetricsService for TestGrpcMetricsService {
+  async fn export(
+    &self,
+    request: tonic::Request<OtelExportMetricsServiceRequest>,
+  ) -> std::result::Result<tonic::Response<OtelExportMetricsServiceResponse>, tonic::Status> {
+    let authorization = request
+      .metadata()
+      .get("authorization")
+      .and_then(|value| value.to_str().ok())
+      .map(ToOwned::to_owned);
+    if let Some(sender) = self.tx.lock().expect("lock capture sender").take() {
+      sender
+        .send(CapturedGrpcRequest {
+          authorization,
+          resource_metrics_count: request.get_ref().resource_metrics.len(),
+        })
+        .expect("send grpc capture");
+    }
+    Ok(tonic::Response::new(OtelExportMetricsServiceResponse {
+      partial_success: None,
+    }))
+  }
 }
 
 fn find_subsequence(haystack: &[u8], needle: &[u8]) -> Option<usize> {
@@ -153,6 +195,41 @@ fn spawn_http_capture_server(
   });
 
   (endpoint, rx, handle)
+}
+
+fn spawn_grpc_capture_server() -> (
+  String,
+  mpsc::Receiver<CapturedGrpcRequest>,
+  tokio::sync::oneshot::Sender<()>,
+  thread::JoinHandle<()>,
+) {
+  let listener = TcpListener::bind("127.0.0.1:0").expect("bind grpc test server");
+  let address = listener.local_addr().expect("grpc local addr");
+  drop(listener);
+  let endpoint = format!("http://{address}");
+  let (tx, rx) = mpsc::channel::<CapturedGrpcRequest>();
+  let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+
+  let handle = thread::spawn(move || {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+      .enable_all()
+      .build()
+      .expect("create grpc runtime");
+    runtime.block_on(async move {
+      let service = TestGrpcMetricsService {
+        tx: Mutex::new(Some(tx)),
+      };
+      tonic::transport::Server::builder()
+        .add_service(OtelMetricsServiceServer::new(service))
+        .serve_with_shutdown(address, async move {
+          let _ = shutdown_rx.await;
+        })
+        .await
+        .expect("serve grpc test endpoint");
+    });
+  });
+
+  (endpoint, rx, shutdown_tx, handle)
 }
 
 #[test]
@@ -457,4 +534,40 @@ fn otlp_push_payload_rejects_partial_mtls_paths() {
   .expect_err("partial mTLS path configuration should fail");
   assert!(error.to_string().contains("client_cert_pem_path"));
   assert!(error.to_string().contains("client_key_pem_path"));
+}
+
+#[test]
+fn otlp_push_grpc_payload_posts_request_and_auth_header() {
+  let payload = OtelExportMetricsServiceRequest {
+    resource_metrics: Vec::new(),
+  }
+  .encode_to_vec();
+  let (endpoint, captured_rx, shutdown_tx, handle) = spawn_grpc_capture_server();
+  thread::sleep(Duration::from_millis(50));
+
+  let result =
+    push_replication_metrics_otel_grpc_payload(&payload, &endpoint, 2_000, Some("token"))
+      .expect("otlp grpc push must succeed");
+  assert_eq!(result.status_code, 200);
+
+  let captured = captured_rx
+    .recv_timeout(Duration::from_secs(2))
+    .expect("captured grpc request");
+  assert_eq!(captured.authorization.as_deref(), Some("Bearer token"));
+  assert_eq!(captured.resource_metrics_count, 0);
+
+  let _ = shutdown_tx.send(());
+  handle.join().expect("grpc server thread");
+}
+
+#[test]
+fn otlp_push_grpc_payload_rejects_invalid_protobuf() {
+  let error = push_replication_metrics_otel_grpc_payload(
+    &[0xff, 0x00, 0x12],
+    "http://127.0.0.1:4317",
+    2_000,
+    None,
+  )
+  .expect_err("invalid protobuf payload must fail");
+  assert!(error.to_string().contains("Invalid OTLP protobuf payload"));
 }

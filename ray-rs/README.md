@@ -194,6 +194,8 @@ import {
   collectReplicationMetricsPrometheus,
   collectReplicationSnapshotTransportJson,
   createReplicationTransportAdapter,
+  pushReplicationMetricsOtelGrpc,
+  pushReplicationMetricsOtelGrpcWithOptions,
   pushReplicationMetricsOtelJson,
   pushReplicationMetricsOtelJsonWithOptions,
   pushReplicationMetricsOtelProtobuf,
@@ -251,6 +253,13 @@ const protoExport = pushReplicationMetricsOtelProtobuf(
 )
 console.log(protoExport.statusCode, protoExport.responseBody)
 
+const grpcExport = pushReplicationMetricsOtelGrpc(
+  primary,
+  'http://127.0.0.1:4317',
+  5_000,
+)
+console.log(grpcExport.statusCode, grpcExport.responseBody)
+
 const secureExport = pushReplicationMetricsOtelJsonWithOptions(
   primary,
   'https://collector.internal:4318/v1/metrics',
@@ -276,6 +285,19 @@ const secureProtoExport = pushReplicationMetricsOtelProtobufWithOptions(
   },
 )
 console.log(secureProtoExport.statusCode, secureProtoExport.responseBody)
+
+const secureGrpcExport = pushReplicationMetricsOtelGrpcWithOptions(
+  primary,
+  'https://collector.internal:4317',
+  {
+    timeoutMs: 5_000,
+    httpsOnly: true,
+    caCertPemPath: './tls/collector-ca.pem',
+    clientCertPemPath: './tls/client.pem',
+    clientKeyPemPath: './tls/client-key.pem',
+  },
+)
+console.log(secureGrpcExport.statusCode, secureGrpcExport.responseBody)
 
 const snapshotJson = collectReplicationSnapshotTransportJson(primary, false)
 console.log(snapshotJson)

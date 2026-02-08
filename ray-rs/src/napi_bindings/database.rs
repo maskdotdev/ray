@@ -3537,6 +3537,69 @@ pub fn push_replication_metrics_otel_protobuf_with_options(
 }
 
 #[napi]
+pub fn push_replication_metrics_otel_grpc(
+  db: &Database,
+  endpoint: String,
+  timeout_ms: i64,
+  bearer_token: Option<String>,
+) -> Result<OtlpHttpExportResult> {
+  if timeout_ms <= 0 {
+    return Err(Error::from_reason("timeoutMs must be positive"));
+  }
+
+  match db.inner.as_ref() {
+    Some(DatabaseInner::SingleFile(db)) => {
+      core_metrics::push_replication_metrics_otel_grpc_single_file(
+        db,
+        &endpoint,
+        timeout_ms as u64,
+        bearer_token.as_deref(),
+      )
+      .map(Into::into)
+      .map_err(|e| Error::from_reason(format!("Failed to push replication metrics: {e}")))
+    }
+    None => Err(Error::from_reason("Database is closed")),
+  }
+}
+
+#[napi]
+pub fn push_replication_metrics_otel_grpc_with_options(
+  db: &Database,
+  endpoint: String,
+  options: Option<PushReplicationMetricsOtelOptions>,
+) -> Result<OtlpHttpExportResult> {
+  let options = options.unwrap_or_default();
+  let timeout_ms = options.timeout_ms.unwrap_or(5_000);
+  if timeout_ms <= 0 {
+    return Err(Error::from_reason("timeoutMs must be positive"));
+  }
+
+  let core_options = core_metrics::OtlpHttpPushOptions {
+    timeout_ms: timeout_ms as u64,
+    bearer_token: options.bearer_token,
+    tls: core_metrics::OtlpHttpTlsOptions {
+      https_only: options.https_only.unwrap_or(false),
+      ca_cert_pem_path: options.ca_cert_pem_path,
+      client_cert_pem_path: options.client_cert_pem_path,
+      client_key_pem_path: options.client_key_pem_path,
+    },
+  };
+
+  match db.inner.as_ref() {
+    Some(DatabaseInner::SingleFile(db)) => {
+      core_metrics::push_replication_metrics_otel_grpc_single_file_with_options(
+        db,
+        &endpoint,
+        &core_options,
+      )
+      .map(Into::into)
+      .map_err(|e| Error::from_reason(format!("Failed to push replication metrics: {e}")))
+    }
+    None => Err(Error::from_reason("Database is closed")),
+  }
+}
+
+#[napi]
 pub fn health_check(db: &Database) -> Result<HealthCheckResult> {
   match db.inner.as_ref() {
     Some(DatabaseInner::SingleFile(db)) => Ok(core_metrics::health_check_single_file(db).into()),

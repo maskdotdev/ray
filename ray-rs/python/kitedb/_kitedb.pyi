@@ -558,6 +558,16 @@ def push_replication_metrics_otel_json(
     client_cert_pem_path: Optional[str] = None,
     client_key_pem_path: Optional[str] = None,
 ) -> Tuple[int, str]: ...
+def push_replication_metrics_otel_grpc(
+    db: Database,
+    endpoint: str,
+    timeout_ms: int = 5000,
+    bearer_token: Optional[str] = None,
+    https_only: bool = False,
+    ca_cert_pem_path: Optional[str] = None,
+    client_cert_pem_path: Optional[str] = None,
+    client_key_pem_path: Optional[str] = None,
+) -> Tuple[int, str]: ...
 def push_replication_metrics_otel_protobuf(
     db: Database,
     endpoint: str,

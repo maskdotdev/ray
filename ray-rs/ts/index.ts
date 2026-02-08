@@ -1039,6 +1039,8 @@ export {
   collectReplicationSnapshotTransportJson,
   pushReplicationMetricsOtelJson,
   pushReplicationMetricsOtelJsonWithOptions,
+  pushReplicationMetricsOtelGrpc,
+  pushReplicationMetricsOtelGrpcWithOptions,
   pushReplicationMetricsOtelProtobuf,
   pushReplicationMetricsOtelProtobufWithOptions,
   healthCheck,

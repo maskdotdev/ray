@@ -896,6 +896,10 @@ export declare function pushReplicationMetricsOtelProtobuf(db: Database, endpoin
 
 export declare function pushReplicationMetricsOtelProtobufWithOptions(db: Database, endpoint: string, options?: PushReplicationMetricsOtelOptions | undefined | null): OtlpHttpExportResult
 
+export declare function pushReplicationMetricsOtelGrpc(db: Database, endpoint: string, timeoutMs: number, bearerToken?: string | undefined | null): OtlpHttpExportResult
+
+export declare function pushReplicationMetricsOtelGrpcWithOptions(db: Database, endpoint: string, options?: PushReplicationMetricsOtelOptions | undefined | null): OtlpHttpExportResult
+
 /** Compression options */
 export interface CompressionOptions {
   /** Enable compression (default false) */

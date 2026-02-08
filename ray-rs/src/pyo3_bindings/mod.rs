@@ -145,6 +145,10 @@ pub fn kitedb(m: &Bound<'_, PyModule>) -> PyResult<()> {
     database::push_replication_metrics_otel_protobuf,
     m
   )?)?;
+  m.add_function(wrap_pyfunction!(
+    database::push_replication_metrics_otel_grpc,
+    m
+  )?)?;
   m.add_function(wrap_pyfunction!(database::health_check, m)?)?;
   m.add_function(wrap_pyfunction!(database::create_backup, m)?)?;
   m.add_function(wrap_pyfunction!(database::restore_backup, m)?)?;

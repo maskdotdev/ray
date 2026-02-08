@@ -41,14 +41,22 @@ Metrics surface:
   - Rust core (protobuf): `push_replication_metrics_otel_protobuf_single_file(db, endpoint, timeout_ms, bearer_token)`
     - advanced TLS/mTLS: `push_replication_metrics_otel_protobuf_*_with_options(...)` with
       `https_only`, `ca_cert_pem_path`, `client_cert_pem_path`, `client_key_pem_path`.
+  - Rust core (gRPC): `push_replication_metrics_otel_grpc_single_file(db, endpoint, timeout_ms, bearer_token)`
+    - advanced TLS/mTLS: `push_replication_metrics_otel_grpc_*_with_options(...)` with
+      `https_only`, `ca_cert_pem_path`, `client_cert_pem_path`, `client_key_pem_path`.
   - Node NAPI: `pushReplicationMetricsOtelJson(db, endpoint, timeoutMs, bearerToken?)`
     - advanced TLS/mTLS: `pushReplicationMetricsOtelJsonWithOptions(db, endpoint, options)`.
   - Node NAPI (protobuf): `pushReplicationMetricsOtelProtobuf(db, endpoint, timeoutMs, bearerToken?)`
     - advanced TLS/mTLS: `pushReplicationMetricsOtelProtobufWithOptions(db, endpoint, options)`.
+  - Node NAPI (gRPC): `pushReplicationMetricsOtelGrpc(db, endpoint, timeoutMs, bearerToken?)`
+    - advanced TLS/mTLS: `pushReplicationMetricsOtelGrpcWithOptions(db, endpoint, options)`.
   - Python PyO3: `push_replication_metrics_otel_json(db, endpoint, timeout_ms=5000, bearer_token=None)`
     - advanced TLS/mTLS kwargs:
       `https_only`, `ca_cert_pem_path`, `client_cert_pem_path`, `client_key_pem_path`.
   - Python PyO3 (protobuf): `push_replication_metrics_otel_protobuf(db, endpoint, timeout_ms=5000, bearer_token=None)`
+    - advanced TLS/mTLS kwargs:
+      `https_only`, `ca_cert_pem_path`, `client_cert_pem_path`, `client_key_pem_path`.
+  - Python PyO3 (gRPC): `push_replication_metrics_otel_grpc(db, endpoint, timeout_ms=5000, bearer_token=None)`
     - advanced TLS/mTLS kwargs:
       `https_only`, `ca_cert_pem_path`, `client_cert_pem_path`, `client_key_pem_path`.
 - Host-runtime replication transport JSON export helpers are available via:
@@ -199,5 +207,5 @@ Playground curl examples:
 
 - Retention policy supports entry-window + time-window floors, but not richer SLA-aware policies.
 - Bundled HTTP admin endpoints still ship in playground runtime; host runtime now exposes transport JSON helpers for embedding custom HTTP surfaces.
-- Host-runtime OTLP gRPC transport path is not yet exposed; current runtime exporter path is HTTP OTLP-JSON or HTTP OTLP-protobuf.
+- OTLP exporters do not yet provide built-in retry/backoff/compression policy controls; retries should be handled by operator runtime/scheduler.
 - `SyncMode::Normal` and `SyncMode::Off` optimize commit latency by batching sidecar frame writes in-memory and refreshing manifest fencing periodically (not every commit). For strict per-commit sidecar visibility/fencing, use `SyncMode::Full`.
