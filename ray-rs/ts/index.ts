@@ -1054,8 +1054,10 @@ export {
 export {
   authorizeReplicationAdminRequest,
   createReplicationAdminAuthorizer,
+  createNodeTlsMtlsMatcher,
   createReplicationTransportAdapter,
   isReplicationAdminAuthorized,
+  isNodeTlsClientAuthorized,
   readReplicationLogTransport,
   readReplicationSnapshotTransport,
 } from './replication_transport'
@@ -1064,6 +1066,9 @@ export type {
   ReplicationAdminAuthConfig,
   ReplicationAdminAuthMode,
   ReplicationAdminAuthRequest,
+  ReplicationNodeMtlsMatcherOptions,
+  ReplicationNodeTlsLikeRequest,
+  ReplicationNodeTlsLikeSocket,
   ReplicationLogTransportFrame,
   ReplicationLogTransportOptions,
   ReplicationLogTransportPage,

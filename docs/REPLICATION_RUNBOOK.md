@@ -89,6 +89,9 @@ Metrics surface:
   - TypeScript adapter helper: `createReplicationTransportAdapter(db)` in `ray-rs/ts/replication_transport.ts`
   - TypeScript admin auth helper: `createReplicationAdminAuthorizer({ mode, token, mtlsHeader, mtlsSubjectRegex, mtlsMatcher? })`
     for `none|token|mtls|token_or_mtls|token_and_mtls` with optional native TLS verifier hook (`mtlsMatcher`).
+  - TypeScript native TLS matcher helper: `createNodeTlsMtlsMatcher({ requirePeerCertificate? })`
+    and probe helper `isNodeTlsClientAuthorized(request, options?)` for common Node request socket shapes
+    (`request.socket`, `request.client`, `request.raw.socket`, `request.req.socket`).
   - Python PyO3: `collect_replication_snapshot_transport_json(db, include_data=False)`,
     `collect_replication_log_transport_json(db, cursor=None, max_frames=128, max_bytes=1048576, include_payload=True)`
   - These are intended for embedding host-side HTTP endpoints beyond playground runtime.

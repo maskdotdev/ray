@@ -2,8 +2,10 @@ import test from 'ava'
 
 import {
   authorizeReplicationAdminRequest,
+  createNodeTlsMtlsMatcher,
   createReplicationAdminAuthorizer,
   isReplicationAdminAuthorized,
+  isNodeTlsClientAuthorized,
   type ReplicationAdminAuthRequest,
 } from '../ts/replication_transport'
 
@@ -74,6 +76,60 @@ test('replication admin auth supports custom mtls matcher hook', (t) => {
   }
   t.true(isReplicationAdminAuthorized({ headers: {}, tlsAuthorized: true }, cfg))
   t.false(isReplicationAdminAuthorized({ headers: {}, tlsAuthorized: false }, cfg))
+})
+
+test('node tls matcher detects authorized socket on common request shapes', (t) => {
+  t.true(isNodeTlsClientAuthorized({ headers: {}, socket: { authorized: true } }))
+  t.true(isNodeTlsClientAuthorized({ headers: {}, client: { authorized: true } }))
+  t.true(isNodeTlsClientAuthorized({ headers: {}, raw: { socket: { authorized: true } } }))
+  t.true(isNodeTlsClientAuthorized({ headers: {}, req: { socket: { authorized: true } } }))
+  t.false(isNodeTlsClientAuthorized({ headers: {}, socket: { authorized: false } }))
+  t.false(isNodeTlsClientAuthorized({ headers: {} }))
+})
+
+test('node tls matcher supports peer certificate requirement', (t) => {
+  const withPeer = {
+    headers: {},
+    socket: {
+      authorized: true,
+      getPeerCertificate: () => ({ subject: { CN: 'replication-admin' } }),
+    },
+  }
+  const withoutPeer = {
+    headers: {},
+    socket: {
+      authorized: true,
+      getPeerCertificate: () => ({}),
+    },
+  }
+  t.true(isNodeTlsClientAuthorized(withPeer, { requirePeerCertificate: true }))
+  t.false(isNodeTlsClientAuthorized(withoutPeer, { requirePeerCertificate: true }))
+})
+
+test('node tls matcher factory composes into auth config', (t) => {
+  const requireAdmin = createReplicationAdminAuthorizer<RequestLike>({
+    mode: 'mtls',
+    mtlsMatcher: createNodeTlsMtlsMatcher({ requirePeerCertificate: true }),
+  })
+  t.notThrows(() =>
+    requireAdmin({
+      headers: {},
+      socket: {
+        authorized: true,
+        getPeerCertificate: () => ({ subject: { CN: 'replication-admin' } }),
+      },
+    }),
+  )
+  const error = t.throws(() =>
+    requireAdmin({
+      headers: {},
+      socket: {
+        authorized: true,
+        getPeerCertificate: () => ({}),
+      },
+    }),
+  )
+  t.truthy(error)
 })
 
 test('replication admin auth helper throws unauthorized and invalid config', (t) => {

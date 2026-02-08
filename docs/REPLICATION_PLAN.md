@@ -368,7 +368,7 @@ Phase exit criteria:
 ## 19) Open Questions
 
 - Commit overhead budget is fixed for V1 gate: `P95_MAX_RATIO=1.03` (replication-on p95 / baseline p95).
-- Host-runtime default extraction strategy for native TLS client-cert signals by runtime/framework (custom verifier hook now available in TS adapter helper).
+- Host-runtime parity helpers for non-Node runtimes/frameworks (Node helper now available via `createNodeTlsMtlsMatcher`).
 - Whether any vector side data must be promoted to authoritative replicated state in a later phase.
 
 ## 20) Phase D Summary (February 8, 2026)
@@ -395,6 +395,7 @@ Implemented:
   - log page export with cursor/limits (`collectReplicationLogTransportJson` / `collect_replication_log_transport_json`).
   - TypeScript adapter helper (`createReplicationTransportAdapter`) for wiring custom HTTP handlers.
   - TypeScript admin auth helper (`createReplicationAdminAuthorizer`) with token/mTLS modes and optional native TLS matcher hook.
+  - TypeScript Node native TLS matcher helper (`createNodeTlsMtlsMatcher` / `isNodeTlsClientAuthorized`) for common request socket layouts.
 - Polyglot host-runtime HTTP adapter templates:
   - Python FastAPI template (`docs/examples/replication_adapter_python_fastapi.py`)
   - generic middleware template (`docs/examples/replication_adapter_generic_middleware.ts`).

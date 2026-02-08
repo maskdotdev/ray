@@ -70,6 +70,22 @@ export interface ReplicationAdminAuthConfig<
   mtlsMatcher?: (request: TRequest) => boolean
 }
 
+export interface ReplicationNodeTlsLikeSocket {
+  authorized?: boolean | null
+  getPeerCertificate?: () => unknown
+}
+
+export interface ReplicationNodeTlsLikeRequest extends ReplicationAdminAuthRequest {
+  socket?: ReplicationNodeTlsLikeSocket | null
+  client?: ReplicationNodeTlsLikeSocket | null
+  raw?: { socket?: ReplicationNodeTlsLikeSocket | null } | null
+  req?: { socket?: ReplicationNodeTlsLikeSocket | null } | null
+}
+
+export interface ReplicationNodeMtlsMatcherOptions {
+  requirePeerCertificate?: boolean
+}
+
 const REPLICATION_ADMIN_AUTH_MODES = new Set<ReplicationAdminAuthMode>([
   'none',
   'token',
@@ -77,6 +93,47 @@ const REPLICATION_ADMIN_AUTH_MODES = new Set<ReplicationAdminAuthMode>([
   'token_or_mtls',
   'token_and_mtls',
 ])
+
+function hasPeerCertificate(socket: ReplicationNodeTlsLikeSocket): boolean {
+  if (!socket.getPeerCertificate) return false
+  try {
+    const certificate = socket.getPeerCertificate()
+    if (!certificate || typeof certificate !== 'object') return false
+    return Object.keys(certificate as Record<string, unknown>).length > 0
+  } catch {
+    return false
+  }
+}
+
+function isSocketAuthorized(
+  socket: ReplicationNodeTlsLikeSocket | null | undefined,
+  options: Required<ReplicationNodeMtlsMatcherOptions>,
+): boolean {
+  if (!socket || socket.authorized !== true) return false
+  if (!options.requirePeerCertificate) return true
+  return hasPeerCertificate(socket)
+}
+
+export function isNodeTlsClientAuthorized(
+  request: ReplicationNodeTlsLikeRequest,
+  options: ReplicationNodeMtlsMatcherOptions = {},
+): boolean {
+  const resolved: Required<ReplicationNodeMtlsMatcherOptions> = {
+    requirePeerCertificate: options.requirePeerCertificate ?? false,
+  }
+  return (
+    isSocketAuthorized(request.socket, resolved) ||
+    isSocketAuthorized(request.client, resolved) ||
+    isSocketAuthorized(request.raw?.socket, resolved) ||
+    isSocketAuthorized(request.req?.socket, resolved)
+  )
+}
+
+export function createNodeTlsMtlsMatcher(
+  options: ReplicationNodeMtlsMatcherOptions = {},
+): (request: ReplicationNodeTlsLikeRequest) => boolean {
+  return (request: ReplicationNodeTlsLikeRequest): boolean => isNodeTlsClientAuthorized(request, options)
+}
 
 type NormalizedReplicationAdminAuthConfig<TRequest extends ReplicationAdminAuthRequest = ReplicationAdminAuthRequest> =
   {
