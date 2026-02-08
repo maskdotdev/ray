@@ -407,6 +407,7 @@ Implemented:
 - Operator runbook for promotion/reseed/retention tuning (`docs/REPLICATION_RUNBOOK.md`).
 - Replication benchmark gate script (`ray-rs/scripts/replication-bench-gate.sh`) + benchmark doc wiring.
 - Replica catch-up throughput gate (`ray-rs/scripts/replication-catchup-gate.sh`) and combined perf gate (`ray-rs/scripts/replication-perf-gate.sh`).
+- Replication soak stability harness + gate (`ray-rs/examples/replication_soak_bench.rs`, `ray-rs/scripts/replication-soak-gate.sh`) covering lag churn, promotion fencing, reseed recovery, and zero-divergence checks.
 - Main-branch CI perf-gate enforcement in `ray-rs` workflow (`.github/workflows/ray-rs.yml`) with run-scoped replication benchmark log artifact upload (`ci-<run_id>-<run_attempt>` stamp).
 - Main-branch CI ANN quality-gate enforcement in `ray-rs` workflow (`.github/workflows/ray-rs.yml`) with ANN gate log artifact upload.
 - Vector replication authority decision: canonical vector property mutations replicate (`SetNodeVector`/`DelNodeVector`); derived vector maintenance WAL records are non-authoritative and skipped during replica apply.
@@ -449,8 +450,8 @@ Carry-over to next phase:
    - Execute `ray-rs/scripts/replication-perf-gate.sh` and `ray-rs/scripts/vector-ann-gate.sh` on release-like hardware.
    - Capture artifacts under `docs/benchmarks/results/` with a new date stamp.
 2. Long-run stability soak:
-   - Add a 1-primary/5-replica soak scenario with lag churn + periodic promotion/reseed cycles.
-   - Gate on zero divergence, deterministic fencing, bounded replica lag recovery.
+   - Keep running `ray-rs/scripts/replication-soak-gate.sh` in tracking mode (manual/scheduled CI) and tune thresholds from trend data.
+   - Expand scenario depth (longer cycles + higher commit load) on release-like hardware before V1 cut.
 3. Host runtime adoption pass:
    - Add one production-style embedding example (non-playground) that wires transport/admin JSON exports end-to-end.
    - Validate Node + Python bindings against that same flow.

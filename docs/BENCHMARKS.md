@@ -298,6 +298,46 @@ Notes:
   - `cargo test --no-default-features --test replication_phase_a --test replication_phase_b --test replication_phase_c --test replication_phase_d --test replication_faults_phase_d`
   - `cargo test --no-default-features replication::`
 
+#### Gate C: replication soak stability (lag churn + promote/reseed)
+
+Exercises a `1 primary + 5 replicas` soak-style scenario with rotating lag churn,
+periodic promotion fence checks, and reseed recovery under retention pressure.
+
+```bash
+cd ray-rs
+./scripts/replication-soak-gate.sh
+```
+
+Defaults:
+- `REPLICAS=5`
+- `CYCLES=18`
+- `COMMITS_PER_CYCLE=120`
+- `ACTIVE_REPLICAS=3`
+- `CHURN_INTERVAL=3`
+- `PROMOTION_INTERVAL=6`
+- `RESEED_CHECK_INTERVAL=3`
+- `MAX_FRAMES=128`
+- `RECOVERY_MAX_LOOPS=80`
+- `SEGMENT_MAX_BYTES=1`
+- `RETENTION_MIN=64`
+- `ATTEMPTS=1`
+- Pass threshold: `MAX_ALLOWED_LAG=3000`
+- Pass threshold: `MIN_PROMOTIONS=2`
+- Pass threshold: `MIN_RESEEDS=1`
+- Invariant checks: divergence must be `0`, stale-fence rejections must equal promotions.
+
+Example override:
+
+```bash
+cd ray-rs
+CYCLES=24 COMMITS_PER_CYCLE=160 ATTEMPTS=2 ./scripts/replication-soak-gate.sh
+```
+
+Output:
+- `docs/benchmarks/results/YYYY-MM-DD-replication-soak-gate.txt` (single-attempt mode)
+- `docs/benchmarks/results/YYYY-MM-DD-replication-soak-gate.attemptN.txt` (multi-attempt mode)
+- `STAMP` can be overridden for run-scoped output naming (used by CI tracking jobs).
+
 ## Latest Results (2026-02-04)
 
 Sync-mode sweep logs (nodes-only + edges-heavy datasets):
