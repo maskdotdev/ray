@@ -142,6 +142,8 @@ Available endpoints in `playground/src/api/routes.ts`:
 - `GET /api/replication/metrics` (Prometheus text format)
 - `GET /api/replication/snapshot/latest`
 - `GET /api/replication/log`
+- `GET /api/replication/transport/snapshot` (host-runtime transport export passthrough)
+- `GET /api/replication/transport/log` (host-runtime transport export passthrough)
 - `POST /api/replication/pull` (runs `replica_catch_up_once`)
 - `POST /api/replication/reseed` (runs `replica_reseed_from_snapshot`)
 - `POST /api/replication/promote` (runs `primary_promote_to_next_epoch`)

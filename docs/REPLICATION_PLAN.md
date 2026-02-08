@@ -377,6 +377,8 @@ Implemented:
   - `GET /api/replication/metrics` (Prometheus text export)
   - `GET /api/replication/snapshot/latest`
   - `GET /api/replication/log`
+  - `GET /api/replication/transport/snapshot` (host-runtime transport export passthrough)
+  - `GET /api/replication/transport/log` (host-runtime transport export passthrough)
   - `POST /api/replication/pull`
   - `POST /api/replication/reseed`
   - `POST /api/replication/promote`

@@ -428,6 +428,47 @@ impl PyDatabase {
     )
   }
 
+  /// Export latest primary snapshot metadata and optional bytes as transport JSON.
+  #[pyo3(signature = (include_data=false))]
+  fn export_replication_snapshot_transport_json(&self, include_data: bool) -> PyResult<String> {
+    dispatch!(
+      self,
+      |db| db.primary_export_snapshot_transport_json(include_data).map_err(|e| {
+        PyRuntimeError::new_err(format!("Failed to export replication snapshot: {e}"))
+      }),
+      |_db| { unreachable!("multi-file database support removed") }
+    )
+  }
+
+  /// Export primary replication log page (cursor + limits) as transport JSON.
+  #[pyo3(signature = (cursor=None, max_frames=128, max_bytes=1048576, include_payload=true))]
+  fn export_replication_log_transport_json(
+    &self,
+    cursor: Option<String>,
+    max_frames: i64,
+    max_bytes: i64,
+    include_payload: bool,
+  ) -> PyResult<String> {
+    if max_frames <= 0 {
+      return Err(PyRuntimeError::new_err("max_frames must be positive"));
+    }
+    if max_bytes <= 0 {
+      return Err(PyRuntimeError::new_err("max_bytes must be positive"));
+    }
+    dispatch!(
+      self,
+      |db| db
+        .primary_export_log_transport_json(
+          cursor.as_deref(),
+          max_frames as usize,
+          max_bytes as usize,
+          include_payload,
+        )
+        .map_err(|e| PyRuntimeError::new_err(format!("Failed to export replication log: {e}"))),
+      |_db| { unreachable!("multi-file database support removed") }
+    )
+  }
+
   /// Bootstrap replica state from source snapshot.
   fn replica_bootstrap_from_snapshot(&self) -> PyResult<()> {
     dispatch!(
