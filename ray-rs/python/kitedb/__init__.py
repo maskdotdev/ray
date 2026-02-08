@@ -103,6 +103,9 @@ from kitedb._kitedb import (
     # Functions
     open_database,
     collect_metrics,
+    collect_replication_metrics_otel_json,
+    collect_replication_metrics_prometheus,
+    push_replication_metrics_otel_json,
     health_check,
     create_backup,
     restore_backup,
@@ -270,6 +273,9 @@ __all__ = [
     # Functions
     "open_database",
     "collect_metrics",
+    "collect_replication_metrics_otel_json",
+    "collect_replication_metrics_prometheus",
+    "push_replication_metrics_otel_json",
     "health_check",
     "create_backup",
     "restore_backup",

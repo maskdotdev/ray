@@ -181,6 +181,77 @@ const [aliceFriends, bobFriends] = await Promise.all([
 
 This is implemented using a read-write lock (RwLock) internally, providing good read scalability while maintaining data consistency.
 
+## Replication Admin (low-level API)
+
+Phase D replication controls are available on the low-level `Database` API.
+
+```ts
+import { Database } from 'kitedb'
+import {
+  collectReplicationMetricsOtelJson,
+  collectReplicationMetricsPrometheus,
+  pushReplicationMetricsOtelJson,
+  pushReplicationMetricsOtelJsonWithOptions,
+} from 'kitedb/native'
+
+const primary = Database.open('cluster-primary.kitedb', {
+  replicationRole: 'Primary',
+  replicationSidecarPath: './cluster-primary.sidecar',
+  replicationSegmentMaxBytes: 64 * 1024 * 1024,
+  replicationRetentionMinEntries: 1024,
+})
+
+primary.begin()
+primary.createNode('n:1')
+const token = primary.commitWithToken()
+
+primary.primaryReportReplicaProgress('replica-a', 1, 42)
+const retention = primary.primaryRunRetention()
+const primaryStatus = primary.primaryReplicationStatus()
+
+const replica = Database.open('cluster-replica.kitedb', {
+  replicationRole: 'Replica',
+  replicationSidecarPath: './cluster-replica.sidecar',
+  replicationSourceDbPath: 'cluster-primary.kitedb',
+  replicationSourceSidecarPath: './cluster-primary.sidecar',
+})
+
+replica.replicaBootstrapFromSnapshot()
+replica.replicaCatchUpOnce(256)
+if (token) replica.waitForToken(token, 2_000)
+const replicaStatus = replica.replicaReplicationStatus()
+if (replicaStatus?.needsReseed) replica.replicaReseedFromSnapshot()
+
+const prometheus = collectReplicationMetricsPrometheus(primary)
+console.log(prometheus)
+
+const otelJson = collectReplicationMetricsOtelJson(primary)
+console.log(otelJson)
+
+const exportResult = pushReplicationMetricsOtelJson(
+  primary,
+  'http://127.0.0.1:4318/v1/metrics',
+  5_000,
+)
+console.log(exportResult.statusCode, exportResult.responseBody)
+
+const secureExport = pushReplicationMetricsOtelJsonWithOptions(
+  primary,
+  'https://collector.internal:4318/v1/metrics',
+  {
+    timeoutMs: 5_000,
+    httpsOnly: true,
+    caCertPemPath: './tls/collector-ca.pem',
+    clientCertPemPath: './tls/client.pem',
+    clientKeyPemPath: './tls/client-key.pem',
+  },
+)
+console.log(secureExport.statusCode, secureExport.responseBody)
+
+replica.close()
+primary.close()
+```
+
 ## API surface
 
 The Node bindings expose both low-level graph primitives (`Database`) and higher-level APIs (Kite) for schema-driven workflows, plus metrics, backups, traversal, and vector search. For full API details and guides, see the docs:

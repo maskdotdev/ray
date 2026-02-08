@@ -28,6 +28,9 @@ thiserror = "2.0"
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+ureq = "2.10"
+rustls-pemfile = "2.2"
+webpki-roots = "1.0"
 
 # Binary encoding
 byteorder = "1.5"

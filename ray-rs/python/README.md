@@ -188,6 +188,83 @@ for result in results:
     print(result.node_id, result.distance)
 ```
 
+## Replication admin (low-level API)
+
+Phase D replication controls are available on `Database`:
+
+```python
+from kitedb import (
+    Database,
+    OpenOptions,
+    collect_replication_metrics_otel_json,
+    collect_replication_metrics_prometheus,
+    push_replication_metrics_otel_json,
+)
+
+primary = Database(
+    "cluster-primary.kitedb",
+    OpenOptions(
+        replication_role="primary",
+        replication_sidecar_path="./cluster-primary.sidecar",
+        replication_segment_max_bytes=64 * 1024 * 1024,
+        replication_retention_min_entries=1024,
+    ),
+)
+
+primary.begin()
+primary.create_node("n:1")
+token = primary.commit_with_token()
+
+primary.primary_report_replica_progress("replica-a", 1, 42)
+pruned_segments, retained_floor = primary.primary_run_retention()
+primary_status = primary.primary_replication_status()
+
+replica = Database(
+    "cluster-replica.kitedb",
+    OpenOptions(
+        replication_role="replica",
+        replication_sidecar_path="./cluster-replica.sidecar",
+        replication_source_db_path="cluster-primary.kitedb",
+        replication_source_sidecar_path="./cluster-primary.sidecar",
+    ),
+)
+
+replica.replica_bootstrap_from_snapshot()
+replica.replica_catch_up_once(256)
+if token:
+    replica.wait_for_token(token, 2000)
+replica_status = replica.replica_replication_status()
+if replica_status and replica_status["needs_reseed"]:
+    replica.replica_reseed_from_snapshot()
+
+prometheus = collect_replication_metrics_prometheus(primary)
+print(prometheus)
+
+otel_json = collect_replication_metrics_otel_json(primary)
+print(otel_json)
+
+status_code, response_body = push_replication_metrics_otel_json(
+    primary,
+    "http://127.0.0.1:4318/v1/metrics",
+    timeout_ms=5000,
+)
+print(status_code, response_body)
+
+secure_status, secure_body = push_replication_metrics_otel_json(
+    primary,
+    "https://collector.internal:4318/v1/metrics",
+    timeout_ms=5000,
+    https_only=True,
+    ca_cert_pem_path="./tls/collector-ca.pem",
+    client_cert_pem_path="./tls/client.pem",
+    client_key_pem_path="./tls/client-key.pem",
+)
+print(secure_status, secure_body)
+
+replica.close()
+primary.close()
+```
+
 ## Documentation
 
 ```text

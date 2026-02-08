@@ -5,7 +5,9 @@
 
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
+use pyo3::types::{PyDict, PyList};
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::RwLock;
 
 use crate::backup as core_backup;
@@ -14,6 +16,7 @@ use crate::core::single_file::{
   VacuumOptions as RustVacuumOptions,
 };
 use crate::metrics as core_metrics;
+use crate::replication::types::CommitToken;
 use crate::types::{ETypeId, EdgeWithProps as CoreEdgeWithProps, NodeId, PropKeyId};
 
 // Import from modular structure
@@ -266,6 +269,200 @@ impl PyDatabase {
 
   fn has_transaction(&self) -> PyResult<bool> {
     dispatch_ok!(self, |db| db.has_transaction(), |_db| false)
+  }
+
+  /// Commit and return replication commit token (e.g. "2:41") when available.
+  fn commit_with_token(&self) -> PyResult<Option<String>> {
+    dispatch!(
+      self,
+      |db| db
+        .commit_with_token()
+        .map(|token| token.map(|value| value.to_string()))
+        .map_err(|e| PyRuntimeError::new_err(format!("Failed to commit: {e}"))),
+      |_db| { unreachable!("multi-file database support removed") }
+    )
+  }
+
+  /// Wait until this DB has observed at least the provided commit token.
+  fn wait_for_token(&self, token: String, timeout_ms: i64) -> PyResult<bool> {
+    if timeout_ms < 0 {
+      return Err(PyRuntimeError::new_err("timeout_ms must be non-negative"));
+    }
+    let token = CommitToken::from_str(&token)
+      .map_err(|e| PyRuntimeError::new_err(format!("Invalid token: {e}")))?;
+    dispatch!(
+      self,
+      |db| db
+        .wait_for_token(token, timeout_ms as u64)
+        .map_err(|e| PyRuntimeError::new_err(format!("Failed waiting for token: {e}"))),
+      |_db| { unreachable!("multi-file database support removed") }
+    )
+  }
+
+  /// Primary replication status dictionary when role=primary, else None.
+  fn primary_replication_status(&self, py: Python<'_>) -> PyResult<Option<PyObject>> {
+    let guard = self
+      .inner
+      .read()
+      .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+    match guard.as_ref() {
+      Some(DatabaseInner::SingleFile(db)) => {
+        let Some(status) = db.primary_replication_status() else {
+          return Ok(None);
+        };
+
+        let out = PyDict::new_bound(py);
+        out.set_item("role", status.role.to_string())?;
+        out.set_item("epoch", status.epoch)?;
+        out.set_item("head_log_index", status.head_log_index)?;
+        out.set_item("retained_floor", status.retained_floor)?;
+        out.set_item(
+          "sidecar_path",
+          status.sidecar_path.to_string_lossy().to_string(),
+        )?;
+        out.set_item(
+          "last_token",
+          status.last_token.map(|token| token.to_string()),
+        )?;
+        out.set_item("append_attempts", status.append_attempts)?;
+        out.set_item("append_failures", status.append_failures)?;
+        out.set_item("append_successes", status.append_successes)?;
+
+        let lags = PyList::empty_bound(py);
+        for lag in status.replica_lags {
+          let lag_item = PyDict::new_bound(py);
+          lag_item.set_item("replica_id", lag.replica_id)?;
+          lag_item.set_item("epoch", lag.epoch)?;
+          lag_item.set_item("applied_log_index", lag.applied_log_index)?;
+          lags.append(lag_item)?;
+        }
+        out.set_item("replica_lags", lags)?;
+
+        Ok(Some(out.into_py(py)))
+      }
+      None => Err(PyRuntimeError::new_err("Database is closed")),
+    }
+  }
+
+  /// Replica replication status dictionary when role=replica, else None.
+  fn replica_replication_status(&self, py: Python<'_>) -> PyResult<Option<PyObject>> {
+    let guard = self
+      .inner
+      .read()
+      .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+    match guard.as_ref() {
+      Some(DatabaseInner::SingleFile(db)) => {
+        let Some(status) = db.replica_replication_status() else {
+          return Ok(None);
+        };
+
+        let out = PyDict::new_bound(py);
+        out.set_item("role", status.role.to_string())?;
+        out.set_item(
+          "source_db_path",
+          status
+            .source_db_path
+            .map(|path| path.to_string_lossy().to_string()),
+        )?;
+        out.set_item(
+          "source_sidecar_path",
+          status
+            .source_sidecar_path
+            .map(|path| path.to_string_lossy().to_string()),
+        )?;
+        out.set_item("applied_epoch", status.applied_epoch)?;
+        out.set_item("applied_log_index", status.applied_log_index)?;
+        out.set_item("last_error", status.last_error)?;
+        out.set_item("needs_reseed", status.needs_reseed)?;
+        Ok(Some(out.into_py(py)))
+      }
+      None => Err(PyRuntimeError::new_err("Database is closed")),
+    }
+  }
+
+  /// Promote this primary to the next replication epoch.
+  fn primary_promote_to_next_epoch(&self) -> PyResult<i64> {
+    dispatch!(
+      self,
+      |db| db
+        .primary_promote_to_next_epoch()
+        .map(|value| value as i64)
+        .map_err(|e| PyRuntimeError::new_err(format!("Failed to promote primary: {e}"))),
+      |_db| { unreachable!("multi-file database support removed") }
+    )
+  }
+
+  /// Report replica progress cursor to primary.
+  fn primary_report_replica_progress(
+    &self,
+    replica_id: String,
+    epoch: i64,
+    applied_log_index: i64,
+  ) -> PyResult<()> {
+    if epoch < 0 || applied_log_index < 0 {
+      return Err(PyRuntimeError::new_err(
+        "epoch and applied_log_index must be non-negative",
+      ));
+    }
+    dispatch!(
+      self,
+      |db| db
+        .primary_report_replica_progress(&replica_id, epoch as u64, applied_log_index as u64)
+        .map_err(|e| PyRuntimeError::new_err(format!("Failed to report replica progress: {e}"))),
+      |_db| { unreachable!("multi-file database support removed") }
+    )
+  }
+
+  /// Run primary retention and return (pruned_segments, retained_floor).
+  fn primary_run_retention(&self) -> PyResult<(i64, i64)> {
+    dispatch!(
+      self,
+      |db| db
+        .primary_run_retention()
+        .map(|outcome| (
+          outcome.pruned_segments as i64,
+          outcome.retained_floor as i64
+        ))
+        .map_err(|e| PyRuntimeError::new_err(format!("Failed to run retention: {e}"))),
+      |_db| { unreachable!("multi-file database support removed") }
+    )
+  }
+
+  /// Bootstrap replica state from source snapshot.
+  fn replica_bootstrap_from_snapshot(&self) -> PyResult<()> {
+    dispatch!(
+      self,
+      |db| db
+        .replica_bootstrap_from_snapshot()
+        .map_err(|e| PyRuntimeError::new_err(format!("Failed to bootstrap replica: {e}"))),
+      |_db| { unreachable!("multi-file database support removed") }
+    )
+  }
+
+  /// Pull and apply at most max_frames frames on replica.
+  fn replica_catch_up_once(&self, max_frames: i64) -> PyResult<i64> {
+    if max_frames < 0 {
+      return Err(PyRuntimeError::new_err("max_frames must be non-negative"));
+    }
+    dispatch!(
+      self,
+      |db| db
+        .replica_catch_up_once(max_frames as usize)
+        .map(|count| count as i64)
+        .map_err(|e| PyRuntimeError::new_err(format!("Failed replica catch-up: {e}"))),
+      |_db| { unreachable!("multi-file database support removed") }
+    )
+  }
+
+  /// Force a replica reseed from source snapshot.
+  fn replica_reseed_from_snapshot(&self) -> PyResult<()> {
+    dispatch!(
+      self,
+      |db| db
+        .replica_reseed_from_snapshot()
+        .map_err(|e| PyRuntimeError::new_err(format!("Failed to reseed replica: {e}"))),
+      |_db| { unreachable!("multi-file database support removed") }
+    )
   }
 
   // ==========================================================================
@@ -1538,6 +1735,86 @@ pub fn collect_metrics(db: &PyDatabase) -> PyResult<DatabaseMetrics> {
     Some(DatabaseInner::SingleFile(d)) => Ok(DatabaseMetrics::from(
       core_metrics::collect_metrics_single_file(d),
     )),
+    None => Err(PyRuntimeError::new_err("Database is closed")),
+  }
+}
+
+#[pyfunction]
+pub fn collect_replication_metrics_prometheus(db: &PyDatabase) -> PyResult<String> {
+  let guard = db
+    .inner
+    .read()
+    .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+  match guard.as_ref() {
+    Some(DatabaseInner::SingleFile(d)) => {
+      Ok(core_metrics::collect_replication_metrics_prometheus_single_file(d))
+    }
+    None => Err(PyRuntimeError::new_err("Database is closed")),
+  }
+}
+
+#[pyfunction]
+pub fn collect_replication_metrics_otel_json(db: &PyDatabase) -> PyResult<String> {
+  let guard = db
+    .inner
+    .read()
+    .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+  match guard.as_ref() {
+    Some(DatabaseInner::SingleFile(d)) => {
+      Ok(core_metrics::collect_replication_metrics_otel_json_single_file(d))
+    }
+    None => Err(PyRuntimeError::new_err("Database is closed")),
+  }
+}
+
+#[pyfunction]
+#[pyo3(signature = (
+  db,
+  endpoint,
+  timeout_ms=5000,
+  bearer_token=None,
+  https_only=false,
+  ca_cert_pem_path=None,
+  client_cert_pem_path=None,
+  client_key_pem_path=None
+))]
+pub fn push_replication_metrics_otel_json(
+  db: &PyDatabase,
+  endpoint: String,
+  timeout_ms: i64,
+  bearer_token: Option<String>,
+  https_only: bool,
+  ca_cert_pem_path: Option<String>,
+  client_cert_pem_path: Option<String>,
+  client_key_pem_path: Option<String>,
+) -> PyResult<(i64, String)> {
+  if timeout_ms <= 0 {
+    return Err(PyRuntimeError::new_err("timeout_ms must be positive"));
+  }
+
+  let options = core_metrics::OtlpHttpPushOptions {
+    timeout_ms: timeout_ms as u64,
+    bearer_token,
+    tls: core_metrics::OtlpHttpTlsOptions {
+      https_only,
+      ca_cert_pem_path,
+      client_cert_pem_path,
+      client_key_pem_path,
+    },
+  };
+
+  let guard = db
+    .inner
+    .read()
+    .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+  match guard.as_ref() {
+    Some(DatabaseInner::SingleFile(d)) => {
+      let result = core_metrics::push_replication_metrics_otel_json_single_file_with_options(
+        d, &endpoint, &options,
+      )
+      .map_err(|e| PyRuntimeError::new_err(format!("Failed to push replication metrics: {e}")))?;
+      Ok((result.status_code, result.response_body))
+    }
     None => Err(PyRuntimeError::new_err("Database is closed")),
   }
 }

@@ -864,6 +864,28 @@ export interface CheckResult {
 
 export declare function collectMetrics(db: Database): DatabaseMetrics
 
+export declare function collectReplicationMetricsOtelJson(db: Database): string
+
+export declare function collectReplicationMetricsPrometheus(db: Database): string
+
+export interface OtlpHttpExportResult {
+  statusCode: number
+  responseBody: string
+}
+
+export declare function pushReplicationMetricsOtelJson(db: Database, endpoint: string, timeoutMs: number, bearerToken?: string | undefined | null): OtlpHttpExportResult
+
+export interface PushReplicationMetricsOtelOptions {
+  timeoutMs?: number
+  bearerToken?: string
+  httpsOnly?: boolean
+  caCertPemPath?: string
+  clientCertPemPath?: string
+  clientKeyPemPath?: string
+}
+
+export declare function pushReplicationMetricsOtelJsonWithOptions(db: Database, endpoint: string, options?: PushReplicationMetricsOtelOptions | undefined | null): OtlpHttpExportResult
+
 /** Compression options */
 export interface CompressionOptions {
   /** Enable compression (default false) */

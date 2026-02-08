@@ -5,6 +5,7 @@
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 use std::path::PathBuf;
+use std::str::FromStr;
 
 use super::traversal::{
   JsPathConfig, JsPathResult, JsTraversalDirection, JsTraversalResult, JsTraversalStep,
@@ -25,6 +26,11 @@ use crate::core::single_file::{
 };
 use crate::export as ray_export;
 use crate::metrics as core_metrics;
+use crate::replication::primary::{
+  PrimaryReplicationStatus, PrimaryRetentionOutcome, ReplicaLagStatus,
+};
+use crate::replication::replica::ReplicaReplicationStatus;
+use crate::replication::types::{CommitToken, ReplicationRole as RustReplicationRole};
 use crate::streaming;
 use crate::types::{
   CheckResult as RustCheckResult, ETypeId, Edge, EdgeWithProps as CoreEdgeWithProps, NodeId,
@@ -83,6 +89,25 @@ impl From<JsSnapshotParseMode> for RustSnapshotParseMode {
   }
 }
 
+/// Replication role for single-file open options
+#[napi(string_enum)]
+#[derive(Debug)]
+pub enum JsReplicationRole {
+  Disabled,
+  Primary,
+  Replica,
+}
+
+impl From<JsReplicationRole> for RustReplicationRole {
+  fn from(role: JsReplicationRole) -> Self {
+    match role {
+      JsReplicationRole::Disabled => RustReplicationRole::Disabled,
+      JsReplicationRole::Primary => RustReplicationRole::Primary,
+      JsReplicationRole::Replica => RustReplicationRole::Replica,
+    }
+  }
+}
+
 // ============================================================================
 // Open Options
 // ============================================================================
@@ -135,6 +160,20 @@ pub struct OpenOptions {
   pub group_commit_window_ms: Option<i64>,
   /// Snapshot parse mode: "Strict" or "Salvage" (single-file only)
   pub snapshot_parse_mode: Option<JsSnapshotParseMode>,
+  /// Replication role: "Disabled", "Primary", or "Replica"
+  pub replication_role: Option<JsReplicationRole>,
+  /// Replication sidecar path override
+  pub replication_sidecar_path: Option<String>,
+  /// Source primary db path (replica role only)
+  pub replication_source_db_path: Option<String>,
+  /// Source primary sidecar path (replica role only)
+  pub replication_source_sidecar_path: Option<String>,
+  /// Segment rotation threshold in bytes (primary role only)
+  pub replication_segment_max_bytes: Option<i64>,
+  /// Minimum retained entries window (primary role only)
+  pub replication_retention_min_entries: Option<i64>,
+  /// Minimum retained segment age in milliseconds (primary role only)
+  pub replication_retention_min_ms: Option<i64>,
 }
 
 impl From<OpenOptions> for RustOpenOptions {
@@ -220,6 +259,33 @@ impl From<OpenOptions> for RustOpenOptions {
     // Snapshot parse mode
     if let Some(mode) = opts.snapshot_parse_mode {
       rust_opts = rust_opts.snapshot_parse_mode(mode.into());
+    }
+    if let Some(role) = opts.replication_role {
+      rust_opts = rust_opts.replication_role(role.into());
+    }
+    if let Some(path) = opts.replication_sidecar_path {
+      rust_opts = rust_opts.replication_sidecar_path(path);
+    }
+    if let Some(path) = opts.replication_source_db_path {
+      rust_opts = rust_opts.replication_source_db_path(path);
+    }
+    if let Some(path) = opts.replication_source_sidecar_path {
+      rust_opts = rust_opts.replication_source_sidecar_path(path);
+    }
+    if let Some(value) = opts.replication_segment_max_bytes {
+      if value >= 0 {
+        rust_opts = rust_opts.replication_segment_max_bytes(value as u64);
+      }
+    }
+    if let Some(value) = opts.replication_retention_min_entries {
+      if value >= 0 {
+        rust_opts = rust_opts.replication_retention_min_entries(value as u64);
+      }
+    }
+    if let Some(value) = opts.replication_retention_min_ms {
+      if value >= 0 {
+        rust_opts = rust_opts.replication_retention_min_ms(value as u64);
+      }
     }
 
     rust_opts
@@ -372,6 +438,102 @@ pub struct MvccStats {
   pub last_gc_time: i64,
   pub committed_writes_size: i64,
   pub committed_writes_pruned: i64,
+}
+
+/// Per-replica lag entry on primary status
+#[napi(object)]
+pub struct JsReplicaLagStatus {
+  pub replica_id: String,
+  pub epoch: i64,
+  pub applied_log_index: i64,
+}
+
+/// Primary replication runtime status
+#[napi(object)]
+pub struct JsPrimaryReplicationStatus {
+  pub role: String,
+  pub epoch: i64,
+  pub head_log_index: i64,
+  pub retained_floor: i64,
+  pub replica_lags: Vec<JsReplicaLagStatus>,
+  pub sidecar_path: String,
+  pub last_token: Option<String>,
+  pub append_attempts: i64,
+  pub append_failures: i64,
+  pub append_successes: i64,
+}
+
+/// Replica replication runtime status
+#[napi(object)]
+pub struct JsReplicaReplicationStatus {
+  pub role: String,
+  pub source_db_path: Option<String>,
+  pub source_sidecar_path: Option<String>,
+  pub applied_epoch: i64,
+  pub applied_log_index: i64,
+  pub last_error: Option<String>,
+  pub needs_reseed: bool,
+}
+
+/// Retention run outcome
+#[napi(object)]
+pub struct JsPrimaryRetentionOutcome {
+  pub pruned_segments: i64,
+  pub retained_floor: i64,
+}
+
+impl From<ReplicaLagStatus> for JsReplicaLagStatus {
+  fn from(value: ReplicaLagStatus) -> Self {
+    Self {
+      replica_id: value.replica_id,
+      epoch: value.epoch as i64,
+      applied_log_index: value.applied_log_index as i64,
+    }
+  }
+}
+
+impl From<PrimaryReplicationStatus> for JsPrimaryReplicationStatus {
+  fn from(value: PrimaryReplicationStatus) -> Self {
+    Self {
+      role: value.role.to_string(),
+      epoch: value.epoch as i64,
+      head_log_index: value.head_log_index as i64,
+      retained_floor: value.retained_floor as i64,
+      replica_lags: value.replica_lags.into_iter().map(Into::into).collect(),
+      sidecar_path: value.sidecar_path.to_string_lossy().to_string(),
+      last_token: value.last_token.map(|token| token.to_string()),
+      append_attempts: value.append_attempts as i64,
+      append_failures: value.append_failures as i64,
+      append_successes: value.append_successes as i64,
+    }
+  }
+}
+
+impl From<ReplicaReplicationStatus> for JsReplicaReplicationStatus {
+  fn from(value: ReplicaReplicationStatus) -> Self {
+    Self {
+      role: value.role.to_string(),
+      source_db_path: value
+        .source_db_path
+        .map(|path| path.to_string_lossy().to_string()),
+      source_sidecar_path: value
+        .source_sidecar_path
+        .map(|path| path.to_string_lossy().to_string()),
+      applied_epoch: value.applied_epoch as i64,
+      applied_log_index: value.applied_log_index as i64,
+      last_error: value.last_error,
+      needs_reseed: value.needs_reseed,
+    }
+  }
+}
+
+impl From<PrimaryRetentionOutcome> for JsPrimaryRetentionOutcome {
+  fn from(value: PrimaryRetentionOutcome) -> Self {
+    Self {
+      pruned_segments: value.pruned_segments as i64,
+      retained_floor: value.retained_floor as i64,
+    }
+  }
 }
 
 /// Options for export
@@ -601,6 +763,41 @@ pub struct MvccMetrics {
   pub committed_writes_pruned: i64,
 }
 
+/// Primary replication metrics
+#[napi(object)]
+pub struct PrimaryReplicationMetrics {
+  pub epoch: i64,
+  pub head_log_index: i64,
+  pub retained_floor: i64,
+  pub replica_count: i64,
+  pub stale_epoch_replica_count: i64,
+  pub max_replica_lag: i64,
+  pub min_replica_applied_log_index: Option<i64>,
+  pub sidecar_path: String,
+  pub last_token: Option<String>,
+  pub append_attempts: i64,
+  pub append_failures: i64,
+  pub append_successes: i64,
+}
+
+/// Replica replication metrics
+#[napi(object)]
+pub struct ReplicaReplicationMetrics {
+  pub applied_epoch: i64,
+  pub applied_log_index: i64,
+  pub needs_reseed: bool,
+  pub last_error: Option<String>,
+}
+
+/// Replication metrics
+#[napi(object)]
+pub struct ReplicationMetrics {
+  pub enabled: bool,
+  pub role: String,
+  pub primary: Option<PrimaryReplicationMetrics>,
+  pub replica: Option<ReplicaReplicationMetrics>,
+}
+
 /// Memory metrics
 #[napi(object)]
 pub struct MemoryMetrics {
@@ -619,6 +816,7 @@ pub struct DatabaseMetrics {
   pub data: DataMetrics,
   pub cache: CacheMetrics,
   pub mvcc: Option<MvccMetrics>,
+  pub replication: ReplicationMetrics,
   pub memory: MemoryMetrics,
   /// Timestamp in milliseconds since epoch
   pub collected_at: i64,
@@ -637,6 +835,25 @@ pub struct HealthCheckEntry {
 pub struct HealthCheckResult {
   pub healthy: bool,
   pub checks: Vec<HealthCheckEntry>,
+}
+
+/// OTLP HTTP metrics push result.
+#[napi(object)]
+pub struct OtlpHttpExportResult {
+  pub status_code: i64,
+  pub response_body: String,
+}
+
+/// OTLP collector push options (host runtime).
+#[napi(object)]
+#[derive(Default, Clone)]
+pub struct PushReplicationMetricsOtelOptions {
+  pub timeout_ms: Option<i64>,
+  pub bearer_token: Option<String>,
+  pub https_only: Option<bool>,
+  pub ca_cert_pem_path: Option<String>,
+  pub client_cert_pem_path: Option<String>,
+  pub client_key_pem_path: Option<String>,
 }
 
 impl From<core_metrics::CacheLayerMetrics> for CacheLayerMetrics {
@@ -695,6 +912,47 @@ impl From<core_metrics::MvccMetrics> for MvccMetrics {
   }
 }
 
+impl From<core_metrics::PrimaryReplicationMetrics> for PrimaryReplicationMetrics {
+  fn from(metrics: core_metrics::PrimaryReplicationMetrics) -> Self {
+    PrimaryReplicationMetrics {
+      epoch: metrics.epoch,
+      head_log_index: metrics.head_log_index,
+      retained_floor: metrics.retained_floor,
+      replica_count: metrics.replica_count,
+      stale_epoch_replica_count: metrics.stale_epoch_replica_count,
+      max_replica_lag: metrics.max_replica_lag,
+      min_replica_applied_log_index: metrics.min_replica_applied_log_index,
+      sidecar_path: metrics.sidecar_path,
+      last_token: metrics.last_token,
+      append_attempts: metrics.append_attempts,
+      append_failures: metrics.append_failures,
+      append_successes: metrics.append_successes,
+    }
+  }
+}
+
+impl From<core_metrics::ReplicaReplicationMetrics> for ReplicaReplicationMetrics {
+  fn from(metrics: core_metrics::ReplicaReplicationMetrics) -> Self {
+    ReplicaReplicationMetrics {
+      applied_epoch: metrics.applied_epoch,
+      applied_log_index: metrics.applied_log_index,
+      needs_reseed: metrics.needs_reseed,
+      last_error: metrics.last_error,
+    }
+  }
+}
+
+impl From<core_metrics::ReplicationMetrics> for ReplicationMetrics {
+  fn from(metrics: core_metrics::ReplicationMetrics) -> Self {
+    ReplicationMetrics {
+      enabled: metrics.enabled,
+      role: metrics.role,
+      primary: metrics.primary.map(Into::into),
+      replica: metrics.replica.map(Into::into),
+    }
+  }
+}
+
 impl From<core_metrics::MemoryMetrics> for MemoryMetrics {
   fn from(metrics: core_metrics::MemoryMetrics) -> Self {
     MemoryMetrics {
@@ -715,6 +973,7 @@ impl From<core_metrics::DatabaseMetrics> for DatabaseMetrics {
       data: metrics.data.into(),
       cache: metrics.cache.into(),
       mvcc: metrics.mvcc.map(Into::into),
+      replication: metrics.replication.into(),
       memory: metrics.memory.into(),
       collected_at: metrics.collected_at_ms,
     }
@@ -736,6 +995,15 @@ impl From<core_metrics::HealthCheckResult> for HealthCheckResult {
     HealthCheckResult {
       healthy: result.healthy,
       checks: result.checks.into_iter().map(Into::into).collect(),
+    }
+  }
+}
+
+impl From<core_metrics::OtlpHttpExportResult> for OtlpHttpExportResult {
+  fn from(result: core_metrics::OtlpHttpExportResult) -> Self {
+    OtlpHttpExportResult {
+      status_code: result.status_code,
+      response_body: result.response_body,
     }
   }
 }
@@ -1013,6 +1281,18 @@ impl Database {
     }
   }
 
+  /// Commit the current transaction and return replication token when primary replication is enabled.
+  #[napi]
+  pub fn commit_with_token(&self) -> Result<Option<String>> {
+    match self.inner.as_ref() {
+      Some(DatabaseInner::SingleFile(db)) => db
+        .commit_with_token()
+        .map(|token| token.map(|value| value.to_string()))
+        .map_err(|e| Error::from_reason(format!("Failed to commit with token: {e}"))),
+      None => Err(Error::from_reason("Database is closed")),
+    }
+  }
+
   /// Rollback the current transaction
   #[napi]
   pub fn rollback(&self) -> Result<()> {
@@ -1029,6 +1309,127 @@ impl Database {
   pub fn has_transaction(&self) -> Result<bool> {
     match self.inner.as_ref() {
       Some(DatabaseInner::SingleFile(db)) => Ok(db.has_transaction()),
+      None => Err(Error::from_reason("Database is closed")),
+    }
+  }
+
+  /// Wait until the DB has observed at least the provided commit token.
+  #[napi]
+  pub fn wait_for_token(&self, token: String, timeout_ms: i64) -> Result<bool> {
+    if timeout_ms < 0 {
+      return Err(Error::from_reason("timeoutMs must be non-negative"));
+    }
+    let token = CommitToken::from_str(&token)
+      .map_err(|e| Error::from_reason(format!("Invalid commit token: {e}")))?;
+
+    match self.inner.as_ref() {
+      Some(DatabaseInner::SingleFile(db)) => db
+        .wait_for_token(token, timeout_ms as u64)
+        .map_err(|e| Error::from_reason(format!("Failed waiting for token: {e}"))),
+      None => Err(Error::from_reason("Database is closed")),
+    }
+  }
+
+  // ========================================================================
+  // Replication Methods
+  // ========================================================================
+
+  /// Primary replication status when role=primary, else null.
+  #[napi]
+  pub fn primary_replication_status(&self) -> Result<Option<JsPrimaryReplicationStatus>> {
+    match self.inner.as_ref() {
+      Some(DatabaseInner::SingleFile(db)) => Ok(db.primary_replication_status().map(Into::into)),
+      None => Err(Error::from_reason("Database is closed")),
+    }
+  }
+
+  /// Replica replication status when role=replica, else null.
+  #[napi]
+  pub fn replica_replication_status(&self) -> Result<Option<JsReplicaReplicationStatus>> {
+    match self.inner.as_ref() {
+      Some(DatabaseInner::SingleFile(db)) => Ok(db.replica_replication_status().map(Into::into)),
+      None => Err(Error::from_reason("Database is closed")),
+    }
+  }
+
+  /// Promote this primary to the next replication epoch.
+  #[napi]
+  pub fn primary_promote_to_next_epoch(&self) -> Result<i64> {
+    match self.inner.as_ref() {
+      Some(DatabaseInner::SingleFile(db)) => db
+        .primary_promote_to_next_epoch()
+        .map(|epoch| epoch as i64)
+        .map_err(|e| Error::from_reason(format!("Failed to promote primary: {e}"))),
+      None => Err(Error::from_reason("Database is closed")),
+    }
+  }
+
+  /// Report replica applied cursor to primary for retention decisions.
+  #[napi]
+  pub fn primary_report_replica_progress(
+    &self,
+    replica_id: String,
+    epoch: i64,
+    applied_log_index: i64,
+  ) -> Result<()> {
+    if epoch < 0 || applied_log_index < 0 {
+      return Err(Error::from_reason(
+        "epoch and appliedLogIndex must be non-negative",
+      ));
+    }
+    match self.inner.as_ref() {
+      Some(DatabaseInner::SingleFile(db)) => db
+        .primary_report_replica_progress(&replica_id, epoch as u64, applied_log_index as u64)
+        .map_err(|e| Error::from_reason(format!("Failed to report replica progress: {e}"))),
+      None => Err(Error::from_reason("Database is closed")),
+    }
+  }
+
+  /// Execute replication retention on primary.
+  #[napi]
+  pub fn primary_run_retention(&self) -> Result<JsPrimaryRetentionOutcome> {
+    match self.inner.as_ref() {
+      Some(DatabaseInner::SingleFile(db)) => db
+        .primary_run_retention()
+        .map(Into::into)
+        .map_err(|e| Error::from_reason(format!("Failed to run retention: {e}"))),
+      None => Err(Error::from_reason("Database is closed")),
+    }
+  }
+
+  /// Bootstrap a replica from the primary snapshot.
+  #[napi]
+  pub fn replica_bootstrap_from_snapshot(&self) -> Result<()> {
+    match self.inner.as_ref() {
+      Some(DatabaseInner::SingleFile(db)) => db
+        .replica_bootstrap_from_snapshot()
+        .map_err(|e| Error::from_reason(format!("Failed to bootstrap replica: {e}"))),
+      None => Err(Error::from_reason("Database is closed")),
+    }
+  }
+
+  /// Pull and apply up to maxFrames replication frames on replica.
+  #[napi]
+  pub fn replica_catch_up_once(&self, max_frames: i64) -> Result<i64> {
+    if max_frames < 0 {
+      return Err(Error::from_reason("maxFrames must be non-negative"));
+    }
+    match self.inner.as_ref() {
+      Some(DatabaseInner::SingleFile(db)) => db
+        .replica_catch_up_once(max_frames as usize)
+        .map(|count| count as i64)
+        .map_err(|e| Error::from_reason(format!("Failed replica catch-up: {e}"))),
+      None => Err(Error::from_reason("Database is closed")),
+    }
+  }
+
+  /// Force a replica reseed from current primary snapshot.
+  #[napi]
+  pub fn replica_reseed_from_snapshot(&self) -> Result<()> {
+    match self.inner.as_ref() {
+      Some(DatabaseInner::SingleFile(db)) => db
+        .replica_reseed_from_snapshot()
+        .map_err(|e| Error::from_reason(format!("Failed to reseed replica: {e}"))),
       None => Err(Error::from_reason("Database is closed")),
     }
   }
@@ -2887,6 +3288,89 @@ pub fn open_database(path: String, options: Option<OpenOptions>) -> Result<Datab
 pub fn collect_metrics(db: &Database) -> Result<DatabaseMetrics> {
   match db.inner.as_ref() {
     Some(DatabaseInner::SingleFile(db)) => Ok(core_metrics::collect_metrics_single_file(db).into()),
+    None => Err(Error::from_reason("Database is closed")),
+  }
+}
+
+#[napi]
+pub fn collect_replication_metrics_prometheus(db: &Database) -> Result<String> {
+  match db.inner.as_ref() {
+    Some(DatabaseInner::SingleFile(db)) => {
+      Ok(core_metrics::collect_replication_metrics_prometheus_single_file(db))
+    }
+    None => Err(Error::from_reason("Database is closed")),
+  }
+}
+
+#[napi]
+pub fn collect_replication_metrics_otel_json(db: &Database) -> Result<String> {
+  match db.inner.as_ref() {
+    Some(DatabaseInner::SingleFile(db)) => {
+      Ok(core_metrics::collect_replication_metrics_otel_json_single_file(db))
+    }
+    None => Err(Error::from_reason("Database is closed")),
+  }
+}
+
+#[napi]
+pub fn push_replication_metrics_otel_json(
+  db: &Database,
+  endpoint: String,
+  timeout_ms: i64,
+  bearer_token: Option<String>,
+) -> Result<OtlpHttpExportResult> {
+  if timeout_ms <= 0 {
+    return Err(Error::from_reason("timeoutMs must be positive"));
+  }
+
+  match db.inner.as_ref() {
+    Some(DatabaseInner::SingleFile(db)) => {
+      core_metrics::push_replication_metrics_otel_json_single_file(
+        db,
+        &endpoint,
+        timeout_ms as u64,
+        bearer_token.as_deref(),
+      )
+      .map(Into::into)
+      .map_err(|e| Error::from_reason(format!("Failed to push replication metrics: {e}")))
+    }
+    None => Err(Error::from_reason("Database is closed")),
+  }
+}
+
+#[napi]
+pub fn push_replication_metrics_otel_json_with_options(
+  db: &Database,
+  endpoint: String,
+  options: Option<PushReplicationMetricsOtelOptions>,
+) -> Result<OtlpHttpExportResult> {
+  let options = options.unwrap_or_default();
+  let timeout_ms = options.timeout_ms.unwrap_or(5_000);
+  if timeout_ms <= 0 {
+    return Err(Error::from_reason("timeoutMs must be positive"));
+  }
+
+  let core_options = core_metrics::OtlpHttpPushOptions {
+    timeout_ms: timeout_ms as u64,
+    bearer_token: options.bearer_token,
+    tls: core_metrics::OtlpHttpTlsOptions {
+      https_only: options.https_only.unwrap_or(false),
+      ca_cert_pem_path: options.ca_cert_pem_path,
+      client_cert_pem_path: options.client_cert_pem_path,
+      client_key_pem_path: options.client_key_pem_path,
+    },
+  };
+
+  match db.inner.as_ref() {
+    Some(DatabaseInner::SingleFile(db)) => {
+      core_metrics::push_replication_metrics_otel_json_single_file_with_options(
+        db,
+        &endpoint,
+        &core_options,
+      )
+      .map(Into::into)
+      .map_err(|e| Error::from_reason(format!("Failed to push replication metrics: {e}")))
+    }
     None => Err(Error::from_reason("Database is closed")),
   }
 }
