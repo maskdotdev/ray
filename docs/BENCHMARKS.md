@@ -88,6 +88,26 @@ cargo run --release --example vector_compaction_bench --no-default-features -- \
 
 Use this to compare compaction threshold tradeoffs before changing default vector/ANN maintenance policy.
 
+Automated matrix sweep:
+
+```bash
+cd ray-rs
+./scripts/vector-compaction-matrix.sh
+```
+
+Latest matrix snapshot (2026-02-08, 50k vectors, 384 dims, fragment target 5k):
+- Result artifacts:
+  - `docs/benchmarks/results/2026-02-08-vector-compaction-matrix.txt`
+  - `docs/benchmarks/results/2026-02-08-vector-compaction-matrix.csv`
+  - `docs/benchmarks/results/2026-02-08-vector-compaction-min-vectors-sweep.txt`
+  - `docs/benchmarks/results/2026-02-08-vector-compaction-min-vectors-sweep.csv`
+- `min_deletion_ratio=0.30`, `max_fragments=4` gives balanced reclaim/latency:
+  - `delete_ratio=0.35`: `14.32%` reclaim (single-run latency in low-double-digit ms on this host)
+  - `delete_ratio=0.55`: `22.24%` reclaim (single-run latency in single-digit ms on this host)
+- `max_fragments=8` reclaims more (`28.18%` / `44.18%`) but roughly doubles compaction latency.
+- `min_deletion_ratio=0.40` can skip moderate-churn compaction (`delete_ratio=0.35`), so stale deleted bytes remain.
+- Recommendation: keep defaults `min_deletion_ratio=0.30`, `max_fragments_per_compaction=4`, `min_vectors_to_compact=10000`.
+
 ### Index pipeline hypothesis (network-dominant)
 
 ```bash

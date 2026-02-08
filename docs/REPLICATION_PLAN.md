@@ -368,7 +368,7 @@ Phase exit criteria:
 ## 19) Open Questions
 
 - Commit overhead budget is fixed for V1 gate: `P95_MAX_RATIO=1.03` (replication-on p95 / baseline p95).
-- Future choice of ANN/vector index algorithm and compaction strategy remains open; authoritative replication scope remains logical vector property mutations (`SetNodeVector` / `DelNodeVector`). Baseline strategy comparisons can be run via `ray-rs/examples/vector_compaction_bench.rs`.
+- Future choice of ANN/vector index algorithm remains open; authoritative replication scope remains logical vector property mutations (`SetNodeVector` / `DelNodeVector`). Current compaction defaults (`min_deletion_ratio=0.30`, `max_fragments_per_compaction=4`, `min_vectors_to_compact=10000`) are retained after the 2026-02-08 matrix run (`ray-rs/scripts/vector-compaction-matrix.sh`).
 
 ## 20) Phase D Summary (February 8, 2026)
 
@@ -407,6 +407,7 @@ Implemented:
 - Main-branch CI perf-gate enforcement in `ray-rs` workflow (`.github/workflows/ray-rs.yml`) with benchmark log artifact upload.
 - Vector replication authority decision: canonical vector property mutations replicate (`SetNodeVector`/`DelNodeVector`); derived vector maintenance WAL records are non-authoritative and skipped during replica apply.
 - Vector compaction strategy benchmark harness (`ray-rs/examples/vector_compaction_bench.rs`) for ANN/compaction tuning experiments.
+- Vector compaction matrix script + baseline snapshot (`ray-rs/scripts/vector-compaction-matrix.sh`, `docs/benchmarks/results/2026-02-08-vector-compaction-*.{txt,csv}`) with recommendation to keep current compaction defaults.
 - HTTP transport/admin rollout in playground runtime:
   - `GET /api/replication/status`
   - `GET /api/replication/metrics` (Prometheus text export)
