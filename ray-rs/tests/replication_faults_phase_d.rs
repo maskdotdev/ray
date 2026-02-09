@@ -228,3 +228,81 @@ fn obsolete_corrupt_segment_does_not_break_incremental_catch_up() {
   close_single_file(replica).expect("close replica");
   close_single_file(primary).expect("close primary");
 }
+
+#[cfg(unix)]
+#[test]
+fn cursor_persist_failure_does_not_advance_in_memory_position() {
+  use std::os::unix::fs::PermissionsExt;
+
+  let dir = tempfile::tempdir().expect("tempdir");
+  let primary_path = dir.path().join("fault-cursor-persist-primary.kitedb");
+  let primary_sidecar = dir.path().join("fault-cursor-persist-primary.sidecar");
+  let replica_path = dir.path().join("fault-cursor-persist-replica.kitedb");
+  let replica_sidecar = dir.path().join("fault-cursor-persist-replica.sidecar");
+
+  let primary = open_primary(&primary_path, &primary_sidecar).expect("open primary");
+  primary.begin(false).expect("begin base");
+  primary.create_node(Some("base")).expect("create base");
+  primary
+    .commit_with_token()
+    .expect("commit base")
+    .expect("token base");
+
+  let replica = open_replica(
+    &replica_path,
+    &primary_path,
+    &replica_sidecar,
+    &primary_sidecar,
+  )
+  .expect("open replica");
+  replica
+    .replica_bootstrap_from_snapshot()
+    .expect("bootstrap snapshot");
+
+  primary.begin(false).expect("begin c1");
+  primary.create_node(Some("c1")).expect("create c1");
+  primary
+    .commit_with_token()
+    .expect("commit c1")
+    .expect("token c1");
+
+  let before = replica
+    .replica_replication_status()
+    .expect("status before persist failure");
+
+  let original_mode = std::fs::metadata(&replica_sidecar)
+    .expect("replica sidecar metadata")
+    .permissions()
+    .mode();
+  std::fs::set_permissions(&replica_sidecar, std::fs::Permissions::from_mode(0o555))
+    .expect("set read-only sidecar permissions");
+
+  let err = replica
+    .replica_catch_up_once(32)
+    .expect_err("cursor persist failure must fail catch-up");
+  assert!(
+    err.to_string().contains("cursor persist failed"),
+    "unexpected cursor persist failure: {err}"
+  );
+
+  let after = replica
+    .replica_replication_status()
+    .expect("status after persist failure");
+  assert_eq!(
+    after.applied_log_index, before.applied_log_index,
+    "in-memory applied log index must not advance when cursor persistence fails"
+  );
+  assert_eq!(
+    after.applied_epoch, before.applied_epoch,
+    "in-memory applied epoch must not advance when cursor persistence fails"
+  );
+
+  std::fs::set_permissions(
+    &replica_sidecar,
+    std::fs::Permissions::from_mode(original_mode),
+  )
+  .expect("restore sidecar permissions");
+
+  close_single_file(replica).expect("close replica");
+  close_single_file(primary).expect("close primary");
+}

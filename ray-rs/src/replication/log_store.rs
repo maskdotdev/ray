@@ -192,12 +192,7 @@ impl SegmentLogStore {
       for segment in payload_segments {
         self.write_buffer.extend_from_slice(segment);
       }
-      if self
-        .write_buffer
-        .len()
-        .saturating_add(self.queued_bytes)
-        >= self.write_buffer_limit
-      {
+      if self.write_buffer.len().saturating_add(self.queued_bytes) >= self.write_buffer_limit {
         self.flush()?;
       }
     } else {
@@ -246,7 +241,10 @@ impl SegmentLogStore {
       FRAME_FLAG_CRC32_DISABLED
     };
     let crc32 = if with_crc {
-      let refs: Vec<&[u8]> = payload_segments.iter().map(|segment| segment.as_slice()).collect();
+      let refs: Vec<&[u8]> = payload_segments
+        .iter()
+        .map(|segment| segment.as_slice())
+        .collect();
       crc32c_multi(&refs)
     } else {
       0
@@ -268,12 +266,7 @@ impl SegmentLogStore {
         self.queued_bytes = self.queued_bytes.saturating_add(segment.len());
         self.write_chunks.push(segment);
       }
-      if self
-        .write_buffer
-        .len()
-        .saturating_add(self.queued_bytes)
-        >= self.write_buffer_limit
-      {
+      if self.write_buffer.len().saturating_add(self.queued_bytes) >= self.write_buffer_limit {
         self.flush()?;
       }
     } else {

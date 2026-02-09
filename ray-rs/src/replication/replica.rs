@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 
 const MANIFEST_FILE_NAME: &str = "manifest.json";
 const CURSOR_FILE_NAME: &str = "replica-cursor.json";
+const TRANSIENT_MISSING_RESEED_ATTEMPTS: u32 = 8;
 
 #[derive(Debug, Clone)]
 pub struct ReplicaReplicationStatus {
@@ -27,11 +28,15 @@ pub struct ReplicaReplicationStatus {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
 struct ReplicaCursorState {
   applied_epoch: u64,
   applied_log_index: u64,
   last_error: Option<String>,
   needs_reseed: bool,
+  transient_missing_attempts: u32,
+  transient_missing_epoch: u64,
+  transient_missing_log_index: u64,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -152,30 +157,41 @@ impl ReplicaReplication {
       )));
     }
 
-    state.applied_epoch = epoch;
-    state.applied_log_index = log_index;
-    state.last_error = None;
-    state.needs_reseed = false;
-    persist_cursor_state(&self.cursor_state_path, &state)?;
+    let mut next_state = state.clone();
+    next_state.applied_epoch = epoch;
+    next_state.applied_log_index = log_index;
+    next_state.last_error = None;
+    next_state.needs_reseed = false;
+    clear_transient_missing_state(&mut next_state);
+    persist_cursor_state(&self.cursor_state_path, &next_state)?;
+    *state = next_state;
     drop(state);
     self.report_source_progress(epoch, log_index)
   }
 
   pub fn mark_error(&self, message: impl Into<String>, needs_reseed: bool) -> Result<()> {
     let mut state = self.state.lock();
-    state.last_error = Some(message.into());
-    state.needs_reseed = needs_reseed;
-    persist_cursor_state(&self.cursor_state_path, &state)
+    let mut next_state = state.clone();
+    next_state.last_error = Some(message.into());
+    next_state.needs_reseed = needs_reseed;
+    clear_transient_missing_state(&mut next_state);
+    persist_cursor_state(&self.cursor_state_path, &next_state)?;
+    *state = next_state;
+    Ok(())
   }
 
   pub fn clear_error(&self) -> Result<()> {
     let mut state = self.state.lock();
-    if state.last_error.is_none() && !state.needs_reseed {
+    if state.last_error.is_none() && !state.needs_reseed && state.transient_missing_attempts == 0 {
       return Ok(());
     }
-    state.last_error = None;
-    state.needs_reseed = false;
-    persist_cursor_state(&self.cursor_state_path, &state)
+    let mut next_state = state.clone();
+    next_state.last_error = None;
+    next_state.needs_reseed = false;
+    clear_transient_missing_state(&mut next_state);
+    persist_cursor_state(&self.cursor_state_path, &next_state)?;
+    *state = next_state;
+    Ok(())
   }
 
   pub fn status(&self) -> ReplicaReplicationStatus {
@@ -202,9 +218,8 @@ impl ReplicaReplication {
 
     let (applied_epoch, applied_log_index) = self.applied_position();
     let manifest = ManifestStore::new(source_sidecar_path.join(MANIFEST_FILE_NAME)).read()?;
-    if manifest.epoch == applied_epoch
-      && applied_log_index.saturating_add(1) < manifest.retained_floor
-    {
+    let expected_next_log = applied_log_index.saturating_add(1);
+    if manifest.epoch == applied_epoch && expected_next_log < manifest.retained_floor {
       let message = format!(
         "replica needs reseed: applied log {} is below retained floor {}",
         applied_log_index, manifest.retained_floor
@@ -224,26 +239,23 @@ impl ReplicaReplication {
       &mut scan_hint,
     )?;
 
-    let expected_next_log = applied_log_index.saturating_add(1);
     if let Some(first) = filtered.first() {
       if first.epoch == applied_epoch && first.log_index > expected_next_log {
-        let message = format!(
-          "replica needs reseed: missing log range {}..{}",
+        let detail = format!(
+          "missing log range {}..{}",
           expected_next_log,
           first.log_index.saturating_sub(1)
         );
-        self.mark_error(message.clone(), true)?;
-        return Err(KiteError::InvalidReplication(message));
+        return self.transient_gap_error(applied_epoch, expected_next_log, detail);
       }
     }
 
     if filtered.is_empty() && manifest.head_log_index > applied_log_index {
-      let message = format!(
-        "replica needs reseed: applied log {} but primary head is {} and required frames are unavailable",
+      let detail = format!(
+        "applied log {} but primary head is {} and required frames are unavailable",
         applied_log_index, manifest.head_log_index
       );
-      self.mark_error(message.clone(), true)?;
-      return Err(KiteError::InvalidReplication(message));
+      return self.transient_gap_error(applied_epoch, expected_next_log, detail);
     }
 
     Ok(filtered)
@@ -258,6 +270,42 @@ impl ReplicaReplication {
       upsert_replica_progress(source_sidecar_path, &self.replica_id, epoch, log_index)?;
     }
     Ok(())
+  }
+
+  fn transient_gap_error(
+    &self,
+    applied_epoch: u64,
+    expected_next_log: u64,
+    detail: String,
+  ) -> Result<Vec<ReplicationFrame>> {
+    let mut state = self.state.lock();
+    let mut next_state = state.clone();
+    if next_state.transient_missing_epoch != applied_epoch
+      || next_state.transient_missing_log_index != expected_next_log
+    {
+      next_state.transient_missing_attempts = 0;
+      next_state.transient_missing_epoch = applied_epoch;
+      next_state.transient_missing_log_index = expected_next_log;
+    }
+    next_state.transient_missing_attempts = next_state.transient_missing_attempts.saturating_add(1);
+    let attempts = next_state.transient_missing_attempts;
+    let needs_reseed = attempts >= TRANSIENT_MISSING_RESEED_ATTEMPTS;
+    let error_message = if needs_reseed {
+      format!("replica needs reseed: {detail}")
+    } else {
+      format!(
+        "replica missing frames after {}:{} ({detail}); transient retry {attempts}/{}",
+        applied_epoch, expected_next_log, TRANSIENT_MISSING_RESEED_ATTEMPTS
+      )
+    };
+    next_state.last_error = Some(error_message.clone());
+    next_state.needs_reseed = needs_reseed;
+    if needs_reseed {
+      clear_transient_missing_state(&mut next_state);
+    }
+    persist_cursor_state(&self.cursor_state_path, &next_state)?;
+    *state = next_state;
+    Err(KiteError::InvalidReplication(error_message))
   }
 }
 
@@ -299,12 +347,32 @@ fn sync_parent_dir(parent: Option<&Path>) -> Result<()> {
     }
   }
 
-  #[cfg(not(unix))]
+  #[cfg(windows)]
+  {
+    if let Some(parent) = parent {
+      use std::os::windows::fs::OpenOptionsExt;
+
+      const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x02000000;
+      let directory = OpenOptions::new()
+        .read(true)
+        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+        .open(parent)?;
+      directory.sync_all()?;
+    }
+  }
+
+  #[cfg(not(any(unix, windows)))]
   {
     let _ = parent;
   }
 
   Ok(())
+}
+
+fn clear_transient_missing_state(state: &mut ReplicaCursorState) {
+  state.transient_missing_attempts = 0;
+  state.transient_missing_epoch = 0;
+  state.transient_missing_log_index = 0;
 }
 
 fn read_frames_after(

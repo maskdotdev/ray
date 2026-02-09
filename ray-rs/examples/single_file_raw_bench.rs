@@ -667,7 +667,10 @@ fn main() {
   println!("Vector count: {}", format_number(config.vector_count));
   println!("Replication primary: {}", config.replication_primary);
   if let Some(bytes) = config.replication_segment_max_bytes {
-    println!("Replication segment max bytes: {}", format_number(bytes as usize));
+    println!(
+      "Replication segment max bytes: {}",
+      format_number(bytes as usize)
+    );
   }
   println!("Skip checkpoint: {}", config.skip_checkpoint);
   println!("Reopen read-only: {}", config.reopen_readonly);

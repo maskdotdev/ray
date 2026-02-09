@@ -133,10 +133,10 @@ fn promotion_fences_stale_primary_writes_in_normal_sync_mode() {
   let db_path = dir.path().join("phase-d-promote-normal-sync.kitedb");
   let sidecar = dir.path().join("phase-d-promote-normal-sync.sidecar");
 
-  let primary_a = open_primary_with_sync(&db_path, &sidecar, 256, 4, SyncMode::Normal)
-    .expect("open primary a");
-  let primary_b = open_primary_with_sync(&db_path, &sidecar, 256, 4, SyncMode::Normal)
-    .expect("open primary b");
+  let primary_a =
+    open_primary_with_sync(&db_path, &sidecar, 256, 4, SyncMode::Normal).expect("open primary a");
+  let primary_b =
+    open_primary_with_sync(&db_path, &sidecar, 256, 4, SyncMode::Normal).expect("open primary b");
 
   primary_a.begin(false).expect("begin a");
   primary_a.create_node(Some("a0")).expect("create a0");
@@ -403,6 +403,91 @@ fn lagging_replica_reseed_recovers_after_retention_gap() {
       .needs_reseed
   );
   assert_eq!(replica.count_nodes(), primary.count_nodes());
+
+  close_single_file(replica).expect("close replica");
+  close_single_file(primary).expect("close primary");
+}
+
+#[test]
+fn transient_missing_segments_do_not_immediately_require_reseed() {
+  let dir = tempfile::tempdir().expect("tempdir");
+  let primary_path = dir.path().join("phase-d-transient-gap-primary.kitedb");
+  let primary_sidecar = dir.path().join("phase-d-transient-gap-primary.sidecar");
+  let replica_path = dir.path().join("phase-d-transient-gap-replica.kitedb");
+  let replica_sidecar = dir.path().join("phase-d-transient-gap-replica.sidecar");
+
+  let primary =
+    open_primary(&primary_path, &primary_sidecar, 1024 * 1024, 8).expect("open primary");
+  primary.begin(false).expect("begin base");
+  primary.create_node(Some("base")).expect("create base");
+  primary
+    .commit_with_token()
+    .expect("commit base")
+    .expect("token base");
+
+  let replica = open_replica(
+    &replica_path,
+    &primary_path,
+    &replica_sidecar,
+    &primary_sidecar,
+  )
+  .expect("open replica");
+  replica
+    .replica_bootstrap_from_snapshot()
+    .expect("bootstrap snapshot");
+
+  primary.begin(false).expect("begin c1");
+  primary.create_node(Some("c1")).expect("create c1");
+  primary
+    .commit_with_token()
+    .expect("commit c1")
+    .expect("token c1");
+
+  let mut hidden_segments = Vec::new();
+  for entry in std::fs::read_dir(&primary_sidecar).expect("read primary sidecar") {
+    let path = entry.expect("read sidecar entry").path();
+    let is_segment = path
+      .file_name()
+      .and_then(|name| name.to_str())
+      .is_some_and(|name| name.starts_with("segment-") && name.ends_with(".rlog"));
+    if !is_segment {
+      continue;
+    }
+    let hidden = path.with_extension("rlog.hidden");
+    std::fs::rename(&path, &hidden).expect("temporarily hide segment");
+    hidden_segments.push((path, hidden));
+  }
+  assert!(
+    !hidden_segments.is_empty(),
+    "test setup failed: no segment files discovered"
+  );
+
+  let err = replica
+    .replica_catch_up_once(64)
+    .expect_err("transient segment unavailability must fail catch-up attempt");
+  assert!(
+    !replica
+      .replica_replication_status()
+      .expect("replica status after transient segment miss")
+      .needs_reseed,
+    "transient segment unavailability must not force immediate reseed: {err}"
+  );
+
+  for (segment, hidden) in hidden_segments {
+    std::fs::rename(&hidden, &segment).expect("restore hidden segment");
+  }
+
+  let applied = replica
+    .replica_catch_up_once(64)
+    .expect("replica should recover after transient segment availability");
+  assert!(applied > 0, "replica should apply pending frames");
+  assert!(
+    !replica
+      .replica_replication_status()
+      .expect("replica status after recovery")
+      .needs_reseed,
+    "successful recovery should keep reseed flag cleared"
+  );
 
   close_single_file(replica).expect("close replica");
   close_single_file(primary).expect("close primary");

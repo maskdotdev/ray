@@ -334,7 +334,9 @@ impl PrimaryReplication {
     state.last_token = Some(token);
     state.appends_since_manifest_refresh = state.appends_since_manifest_refresh.saturating_add(1);
     self.append_successes.fetch_add(1, Ordering::Relaxed);
-    self.epoch_fence.store(state.manifest.epoch, Ordering::Release);
+    self
+      .epoch_fence
+      .store(state.manifest.epoch, Ordering::Release);
 
     Ok(token)
   }
@@ -462,7 +464,9 @@ impl PrimaryReplication {
     state.last_token = Some(token);
     state.appends_since_manifest_refresh = state.appends_since_manifest_refresh.saturating_add(1);
     self.append_successes.fetch_add(1, Ordering::Relaxed);
-    self.epoch_fence.store(state.manifest.epoch, Ordering::Release);
+    self
+      .epoch_fence
+      .store(state.manifest.epoch, Ordering::Release);
 
     Ok(token)
   }
@@ -501,7 +505,9 @@ impl PrimaryReplication {
     clear_replica_progress(&self.sidecar_path)?;
     state.write_fenced = false;
     state.appends_since_manifest_refresh = 0;
-    self.epoch_fence.store(state.manifest.epoch, Ordering::Release);
+    self
+      .epoch_fence
+      .store(state.manifest.epoch, Ordering::Release);
     Ok(state.manifest.epoch)
   }
 
