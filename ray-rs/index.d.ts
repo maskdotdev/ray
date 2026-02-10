@@ -6,6 +6,8 @@ export declare class Database {
   static open(path: string, options?: OpenOptions | undefined | null): Database
   /** Close the database */
   close(): void
+  /** Close the database and run a blocking checkpoint if WAL usage is above threshold. */
+  closeWithCheckpointIfWalOver(threshold: number): void
   /** Check if database is open */
   get isOpen(): boolean
   /** Get database path */
@@ -1451,6 +1453,23 @@ export interface OfflineBackupOptions {
 
 /** Open a database file (standalone function) */
 export declare function openDatabase(path: string, options?: OpenOptions | undefined | null): Database
+
+/** Recommended conservative profile (durability-first). */
+export declare function recommendedSafeProfile(): RuntimeProfile
+
+/** Recommended balanced profile (good throughput + durability tradeoff). */
+export declare function recommendedBalancedProfile(): RuntimeProfile
+
+/** Recommended profile for reopen-heavy workloads. */
+export declare function recommendedReopenHeavyProfile(): RuntimeProfile
+
+/** Runtime profile preset for open/close behavior. */
+export interface RuntimeProfile {
+  /** Open-time options for `Database.open(path, options)`. */
+  openOptions: OpenOptions
+  /** Optional close-time checkpoint trigger threshold. */
+  closeCheckpointIfWalUsageAtLeast?: number
+}
 
 /** Options for opening a database */
 export interface OpenOptions {

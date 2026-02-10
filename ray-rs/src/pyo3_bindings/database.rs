@@ -10,6 +10,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::RwLock;
 
+use crate::api::kite::KiteRuntimeProfile as RustKiteRuntimeProfile;
 use crate::backup as core_backup;
 use crate::core::single_file::{
   close_single_file, close_single_file_with_options, is_single_file_path, open_single_file,
@@ -27,8 +28,8 @@ use super::ops::{
 };
 use super::options::{
   BackupOptions, BackupResult, ExportOptions, ExportResult, ImportOptions, ImportResult,
-  OfflineBackupOptions, OpenOptions, PaginationOptions, RestoreOptions, SingleFileOptimizeOptions,
-  StreamOptions,
+  OfflineBackupOptions, OpenOptions, PaginationOptions, RestoreOptions, RuntimeProfile,
+  SingleFileOptimizeOptions, StreamOptions,
 };
 use super::stats::{CacheStats, CheckResult, DatabaseMetrics, DbStats, HealthCheckResult};
 use super::traversal::{PyPathEdge, PyPathResult, PyTraversalResult};
@@ -1791,6 +1792,21 @@ impl PyDatabase {
 #[pyo3(signature = (path, options=None))]
 pub fn open_database(path: String, options: Option<OpenOptions>) -> PyResult<PyDatabase> {
   PyDatabase::new(path, options)
+}
+
+#[pyfunction]
+pub fn recommended_safe_profile() -> RuntimeProfile {
+  RuntimeProfile::from_kite_runtime_profile(RustKiteRuntimeProfile::safe())
+}
+
+#[pyfunction]
+pub fn recommended_balanced_profile() -> RuntimeProfile {
+  RuntimeProfile::from_kite_runtime_profile(RustKiteRuntimeProfile::balanced())
+}
+
+#[pyfunction]
+pub fn recommended_reopen_heavy_profile() -> RuntimeProfile {
+  RuntimeProfile::from_kite_runtime_profile(RustKiteRuntimeProfile::reopen_heavy())
 }
 
 #[pyfunction]

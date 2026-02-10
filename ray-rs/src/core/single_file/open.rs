@@ -322,6 +322,25 @@ impl SingleFileOpenOptions {
   }
 }
 
+/// Options for closing a single-file database.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SingleFileCloseOptions {
+  /// If set, run a blocking checkpoint before close when WAL usage >= threshold.
+  /// Threshold is clamped to [0.0, 1.0].
+  pub checkpoint_if_wal_usage_at_least: Option<f64>,
+}
+
+impl SingleFileCloseOptions {
+  pub fn new() -> Self {
+    Self::default()
+  }
+
+  pub fn checkpoint_if_wal_usage_at_least(mut self, threshold: f64) -> Self {
+    self.checkpoint_if_wal_usage_at_least = Some(threshold);
+    self
+  }
+}
+
 struct SnapshotLoadState<'a> {
   header: &'a DbHeaderV1,
   pager: &'a mut FilePager,
@@ -909,8 +928,24 @@ pub fn open_single_file<P: AsRef<Path>>(
   })
 }
 
-/// Close a single-file database
-pub fn close_single_file(db: SingleFileDB) -> Result<()> {
+/// Close a single-file database using custom close options.
+pub fn close_single_file_with_options(
+  db: SingleFileDB,
+  options: SingleFileCloseOptions,
+) -> Result<()> {
+  if let Some(threshold_raw) = options.checkpoint_if_wal_usage_at_least {
+    if !threshold_raw.is_finite() {
+      return Err(KiteError::Internal(format!(
+        "invalid close checkpoint threshold: {threshold_raw}"
+      )));
+    }
+
+    let threshold = threshold_raw.clamp(0.0, 1.0);
+    if !db.read_only && db.should_checkpoint(threshold) {
+      db.checkpoint()?;
+    }
+  }
+
   if let Some(ref mvcc) = db.mvcc {
     mvcc.stop();
   }
@@ -940,11 +975,18 @@ pub fn close_single_file(db: SingleFileDB) -> Result<()> {
   Ok(())
 }
 
+/// Close a single-file database with default close behavior.
+pub fn close_single_file(db: SingleFileDB) -> Result<()> {
+  close_single_file_with_options(db, SingleFileCloseOptions::default())
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::core::single_file::close_single_file;
   use crate::core::single_file::recovery::read_wal_area;
+  use crate::core::single_file::{
+    close_single_file, close_single_file_with_options, SingleFileCloseOptions,
+  };
   use crate::core::wal::record::parse_wal_record;
   use crate::util::binary::{align_up, read_u32};
   use tempfile::tempdir;
@@ -1294,5 +1336,69 @@ mod tests {
     assert!(db.node_by_key("n1").is_some());
     assert!(db.node_by_key("n2").is_some());
     close_single_file(db).expect("expected value");
+  }
+
+  #[test]
+  fn test_close_with_checkpoint_if_wal_over_clears_wal() {
+    let temp_dir = tempdir().expect("expected value");
+    let db_path = temp_dir.path().join("close-with-checkpoint.kitedb");
+
+    let db = open_single_file(
+      &db_path,
+      SingleFileOpenOptions::new().auto_checkpoint(false),
+    )
+    .expect("expected value");
+
+    db.begin(false).expect("expected value");
+    let _ = db.create_node(Some("n1")).expect("expected value");
+    db.commit().expect("expected value");
+    assert!(db.should_checkpoint(0.0));
+
+    close_single_file_with_options(
+      db,
+      SingleFileCloseOptions::new().checkpoint_if_wal_usage_at_least(0.0),
+    )
+    .expect("expected value");
+
+    let reopened = open_single_file(
+      &db_path,
+      SingleFileOpenOptions::new().auto_checkpoint(false),
+    )
+    .expect("expected value");
+    let header = reopened.header.read().clone();
+    assert_eq!(header.wal_head, 0);
+    assert_eq!(header.wal_tail, 0);
+    close_single_file(reopened).expect("expected value");
+  }
+
+  #[test]
+  fn test_close_with_high_threshold_keeps_wal() {
+    let temp_dir = tempdir().expect("expected value");
+    let db_path = temp_dir.path().join("close-without-checkpoint.kitedb");
+
+    let db = open_single_file(
+      &db_path,
+      SingleFileOpenOptions::new().auto_checkpoint(false),
+    )
+    .expect("expected value");
+
+    db.begin(false).expect("expected value");
+    let _ = db.create_node(Some("n1")).expect("expected value");
+    db.commit().expect("expected value");
+
+    close_single_file_with_options(
+      db,
+      SingleFileCloseOptions::new().checkpoint_if_wal_usage_at_least(1.0),
+    )
+    .expect("expected value");
+
+    let reopened = open_single_file(
+      &db_path,
+      SingleFileOpenOptions::new().auto_checkpoint(false),
+    )
+    .expect("expected value");
+    let header = reopened.header.read().clone();
+    assert!(header.wal_head > 0);
+    close_single_file(reopened).expect("expected value");
   }
 }

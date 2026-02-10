@@ -55,6 +55,7 @@ pub fn kitedb(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
   // Options classes
   m.add_class::<options::OpenOptions>()?;
+  m.add_class::<options::RuntimeProfile>()?;
   m.add_class::<options::SyncMode>()?;
   m.add_class::<options::SnapshotParseMode>()?;
   m.add_class::<options::CompressionOptions>()?;
@@ -116,6 +117,12 @@ pub fn kitedb(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
   // Standalone functions
   m.add_function(wrap_pyfunction!(database::open_database, m)?)?;
+  m.add_function(wrap_pyfunction!(database::recommended_safe_profile, m)?)?;
+  m.add_function(wrap_pyfunction!(database::recommended_balanced_profile, m)?)?;
+  m.add_function(wrap_pyfunction!(
+    database::recommended_reopen_heavy_profile,
+    m
+  )?)?;
   m.add_function(wrap_pyfunction!(database::collect_metrics, m)?)?;
   m.add_function(wrap_pyfunction!(
     database::collect_replication_metrics_prometheus,

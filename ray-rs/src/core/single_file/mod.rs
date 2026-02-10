@@ -44,7 +44,8 @@ mod stress;
 pub use compactor::{ResizeWalOptions, SingleFileOptimizeOptions, VacuumOptions};
 pub use iter::*;
 pub use open::{
-  close_single_file, open_single_file, SingleFileOpenOptions, SnapshotParseMode, SyncMode,
+  close_single_file, close_single_file_with_options, open_single_file, SingleFileCloseOptions,
+  SingleFileOpenOptions, SnapshotParseMode, SyncMode,
 };
 pub use transaction::SingleFileTxGuard;
 

@@ -11,14 +11,16 @@ use super::traversal::{
   JsPathConfig, JsPathResult, JsTraversalDirection, JsTraversalResult, JsTraversalStep,
   JsTraverseOptions,
 };
+use crate::api::kite::KiteRuntimeProfile as RustKiteRuntimeProfile;
 use crate::api::pathfinding::{bfs, dijkstra, yen_k_shortest, PathConfig};
 use crate::api::traversal::{
   TraversalBuilder as RustTraversalBuilder, TraversalDirection, TraverseOptions,
 };
 use crate::backup as core_backup;
 use crate::core::single_file::{
-  close_single_file, is_single_file_path, open_single_file, single_file_extension,
-  ResizeWalOptions as RustResizeWalOptions, SingleFileDB as RustSingleFileDB,
+  close_single_file, close_single_file_with_options, is_single_file_path, open_single_file,
+  single_file_extension, ResizeWalOptions as RustResizeWalOptions,
+  SingleFileCloseOptions as RustSingleFileCloseOptions, SingleFileDB as RustSingleFileDB,
   SingleFileOpenOptions as RustOpenOptions,
   SingleFileOptimizeOptions as RustSingleFileOptimizeOptions,
   SnapshotParseMode as RustSnapshotParseMode, SyncMode as RustSyncMode,
@@ -289,6 +291,87 @@ impl From<OpenOptions> for RustOpenOptions {
     }
 
     rust_opts
+  }
+}
+
+fn js_sync_mode_from_rust(mode: RustSyncMode) -> JsSyncMode {
+  match mode {
+    RustSyncMode::Full => JsSyncMode::Full,
+    RustSyncMode::Normal => JsSyncMode::Normal,
+    RustSyncMode::Off => JsSyncMode::Off,
+  }
+}
+
+fn js_replication_role_from_rust(role: RustReplicationRole) -> JsReplicationRole {
+  match role {
+    RustReplicationRole::Disabled => JsReplicationRole::Disabled,
+    RustReplicationRole::Primary => JsReplicationRole::Primary,
+    RustReplicationRole::Replica => JsReplicationRole::Replica,
+  }
+}
+
+fn open_options_from_kite_profile_options(opts: crate::api::kite::KiteOptions) -> OpenOptions {
+  OpenOptions {
+    read_only: Some(opts.read_only),
+    create_if_missing: Some(opts.create_if_missing),
+    mvcc: Some(opts.mvcc),
+    mvcc_gc_interval_ms: opts.mvcc_gc_interval_ms.and_then(|v| i64::try_from(v).ok()),
+    mvcc_retention_ms: opts.mvcc_retention_ms.and_then(|v| i64::try_from(v).ok()),
+    mvcc_max_chain_depth: opts
+      .mvcc_max_chain_depth
+      .and_then(|v| i64::try_from(v).ok()),
+    page_size: None,
+    wal_size: opts.wal_size.and_then(|v| u32::try_from(v).ok()),
+    auto_checkpoint: None,
+    checkpoint_threshold: opts.checkpoint_threshold,
+    background_checkpoint: None,
+    checkpoint_compression: None,
+    cache_enabled: None,
+    cache_max_node_props: None,
+    cache_max_edge_props: None,
+    cache_max_traversal_entries: None,
+    cache_max_query_entries: None,
+    cache_query_ttl_ms: None,
+    sync_mode: Some(js_sync_mode_from_rust(opts.sync_mode)),
+    group_commit_enabled: Some(opts.group_commit_enabled),
+    group_commit_window_ms: i64::try_from(opts.group_commit_window_ms).ok(),
+    snapshot_parse_mode: None,
+    replication_role: Some(js_replication_role_from_rust(opts.replication_role)),
+    replication_sidecar_path: opts
+      .replication_sidecar_path
+      .map(|p| p.to_string_lossy().to_string()),
+    replication_source_db_path: opts
+      .replication_source_db_path
+      .map(|p| p.to_string_lossy().to_string()),
+    replication_source_sidecar_path: opts
+      .replication_source_sidecar_path
+      .map(|p| p.to_string_lossy().to_string()),
+    replication_segment_max_bytes: opts
+      .replication_segment_max_bytes
+      .and_then(|v| i64::try_from(v).ok()),
+    replication_retention_min_entries: opts
+      .replication_retention_min_entries
+      .and_then(|v| i64::try_from(v).ok()),
+    replication_retention_min_ms: opts
+      .replication_retention_min_ms
+      .and_then(|v| i64::try_from(v).ok()),
+  }
+}
+
+/// Runtime profile preset for open/close behavior.
+#[napi(object)]
+#[derive(Debug, Default)]
+pub struct RuntimeProfile {
+  /// Open-time options for `Database.open(path, options)`.
+  pub open_options: OpenOptions,
+  /// Optional close-time checkpoint trigger threshold.
+  pub close_checkpoint_if_wal_usage_at_least: Option<f64>,
+}
+
+fn runtime_profile_from_rust(profile: RustKiteRuntimeProfile) -> RuntimeProfile {
+  RuntimeProfile {
+    open_options: open_options_from_kite_profile_options(profile.options),
+    close_checkpoint_if_wal_usage_at_least: profile.close_checkpoint_if_wal_usage_at_least,
   }
 }
 
@@ -1230,6 +1313,21 @@ impl Database {
           close_single_file(db)
             .map_err(|e| Error::from_reason(format!("Failed to close database: {e}")))?;
         }
+      }
+    }
+    Ok(())
+  }
+
+  /// Close the database and run a blocking checkpoint if WAL usage is above threshold.
+  #[napi]
+  pub fn close_with_checkpoint_if_wal_over(&mut self, threshold: f64) -> Result<()> {
+    if let Some(db) = self.inner.take() {
+      match db {
+        DatabaseInner::SingleFile(db) => close_single_file_with_options(
+          db,
+          RustSingleFileCloseOptions::new().checkpoint_if_wal_usage_at_least(threshold),
+        )
+        .map_err(|e| Error::from_reason(format!("Failed to close database: {e}")))?,
       }
     }
     Ok(())
@@ -3345,6 +3443,24 @@ fn edge_weight_from_single_file(
 #[napi]
 pub fn open_database(path: String, options: Option<OpenOptions>) -> Result<Database> {
   Database::open(path, options)
+}
+
+/// Recommended conservative profile (durability-first).
+#[napi]
+pub fn recommended_safe_profile() -> RuntimeProfile {
+  runtime_profile_from_rust(RustKiteRuntimeProfile::safe())
+}
+
+/// Recommended balanced profile (good throughput + durability tradeoff).
+#[napi]
+pub fn recommended_balanced_profile() -> RuntimeProfile {
+  runtime_profile_from_rust(RustKiteRuntimeProfile::balanced())
+}
+
+/// Recommended profile for reopen-heavy workloads.
+#[napi]
+pub fn recommended_reopen_heavy_profile() -> RuntimeProfile {
+  runtime_profile_from_rust(RustKiteRuntimeProfile::reopen_heavy())
 }
 
 // ============================================================================

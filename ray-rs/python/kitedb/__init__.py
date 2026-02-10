@@ -53,6 +53,7 @@ from kitedb._kitedb import (
     # Core classes
     Database,
     OpenOptions,
+    RuntimeProfile,
     SyncMode,
     SnapshotParseMode,
     DbStats,
@@ -102,6 +103,9 @@ from kitedb._kitedb import (
     
     # Functions
     open_database,
+    recommended_safe_profile,
+    recommended_balanced_profile,
+    recommended_reopen_heavy_profile,
     collect_metrics,
     collect_replication_log_transport_json,
     collect_replication_metrics_otel_json,
@@ -239,6 +243,7 @@ __all__ = [
     # Core
     "Database",
     "OpenOptions",
+    "RuntimeProfile",
     "SyncMode",
     "SnapshotParseMode",
     "DbStats",
@@ -288,6 +293,9 @@ __all__ = [
     
     # Functions
     "open_database",
+    "recommended_safe_profile",
+    "recommended_balanced_profile",
+    "recommended_reopen_heavy_profile",
     "collect_metrics",
     "collect_replication_log_transport_json",
     "collect_replication_metrics_otel_json",

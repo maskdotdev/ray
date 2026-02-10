@@ -66,6 +66,7 @@ export type {
   InferNode,
   InferEdgeProps,
 } from './schema'
+export type { RuntimeProfile } from '../index'
 
 // =============================================================================
 // Native Bindings
@@ -1027,6 +1028,9 @@ export {
 // Re-export utility functions
 export {
   openDatabase,
+  recommendedSafeProfile,
+  recommendedBalancedProfile,
+  recommendedReopenHeavyProfile,
   createBackup,
   restoreBackup,
   backupInfo,

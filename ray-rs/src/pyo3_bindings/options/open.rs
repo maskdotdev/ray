@@ -1,6 +1,9 @@
 //! Database open options for Python bindings
 
 use super::maintenance::CompressionOptions;
+use crate::api::kite::{
+  KiteOptions as RustKiteOptions, KiteRuntimeProfile as RustKiteRuntimeProfile,
+};
 use crate::core::single_file::{
   SingleFileOpenOptions as RustOpenOptions, SnapshotParseMode as RustSnapshotParseMode,
   SyncMode as RustSyncMode,
@@ -430,6 +433,96 @@ impl OpenOptions {
     }
 
     Ok(rust_opts)
+  }
+
+  /// Build binding open options from high-level Kite profile options.
+  pub fn from_kite_options(opts: RustKiteOptions) -> Self {
+    let replication_role = match opts.replication_role {
+      ReplicationRole::Disabled => "disabled",
+      ReplicationRole::Primary => "primary",
+      ReplicationRole::Replica => "replica",
+    }
+    .to_string();
+
+    Self {
+      read_only: Some(opts.read_only),
+      create_if_missing: Some(opts.create_if_missing),
+      mvcc: Some(opts.mvcc),
+      mvcc_gc_interval_ms: opts.mvcc_gc_interval_ms.and_then(|v| i64::try_from(v).ok()),
+      mvcc_retention_ms: opts.mvcc_retention_ms.and_then(|v| i64::try_from(v).ok()),
+      mvcc_max_chain_depth: opts
+        .mvcc_max_chain_depth
+        .and_then(|v| i64::try_from(v).ok()),
+      page_size: None,
+      wal_size: opts.wal_size.and_then(|v| u32::try_from(v).ok()),
+      auto_checkpoint: None,
+      checkpoint_threshold: opts.checkpoint_threshold,
+      background_checkpoint: None,
+      checkpoint_compression: None,
+      cache_snapshot: None,
+      cache_enabled: None,
+      cache_max_node_props: None,
+      cache_max_edge_props: None,
+      cache_max_traversal_entries: None,
+      cache_max_query_entries: None,
+      cache_query_ttl_ms: None,
+      sync_mode: Some(SyncMode {
+        mode: opts.sync_mode,
+      }),
+      group_commit_enabled: Some(opts.group_commit_enabled),
+      group_commit_window_ms: i64::try_from(opts.group_commit_window_ms).ok(),
+      snapshot_parse_mode: None,
+      replication_role: Some(replication_role),
+      replication_sidecar_path: opts
+        .replication_sidecar_path
+        .map(|p| p.to_string_lossy().to_string()),
+      replication_source_db_path: opts
+        .replication_source_db_path
+        .map(|p| p.to_string_lossy().to_string()),
+      replication_source_sidecar_path: opts
+        .replication_source_sidecar_path
+        .map(|p| p.to_string_lossy().to_string()),
+      replication_segment_max_bytes: opts
+        .replication_segment_max_bytes
+        .and_then(|v| i64::try_from(v).ok()),
+      replication_retention_min_entries: opts
+        .replication_retention_min_entries
+        .and_then(|v| i64::try_from(v).ok()),
+      replication_retention_min_ms: opts
+        .replication_retention_min_ms
+        .and_then(|v| i64::try_from(v).ok()),
+    }
+  }
+}
+
+/// Runtime profile preset for open/close behavior.
+#[pyclass(name = "RuntimeProfile")]
+#[derive(Debug, Clone)]
+pub struct RuntimeProfile {
+  /// Open-time options for Database(path, options)
+  #[pyo3(get, set)]
+  pub open_options: OpenOptions,
+  /// Optional close-time checkpoint threshold
+  #[pyo3(get, set)]
+  pub close_checkpoint_if_wal_usage_at_least: Option<f64>,
+}
+
+#[pymethods]
+impl RuntimeProfile {
+  fn __repr__(&self) -> String {
+    format!(
+      "RuntimeProfile(close_checkpoint_if_wal_usage_at_least={:?})",
+      self.close_checkpoint_if_wal_usage_at_least
+    )
+  }
+}
+
+impl RuntimeProfile {
+  pub fn from_kite_runtime_profile(profile: RustKiteRuntimeProfile) -> Self {
+    Self {
+      open_options: OpenOptions::from_kite_options(profile.options),
+      close_checkpoint_if_wal_usage_at_least: profile.close_checkpoint_if_wal_usage_at_least,
+    }
   }
 }
 
