@@ -13,10 +13,9 @@ use crate::core::snapshot::writer::{
 use crate::error::{KiteError, Result};
 use crate::types::*;
 use crate::util::mmap::map_file;
-use crate::vector::store::vector_store_node_vector;
 use crate::vector::types::VectorManifest;
 
-use super::vector::vector_stores_from_snapshot;
+use super::vector::vector_store_state_from_snapshot;
 use super::{CheckpointStatus, SingleFileDB};
 
 type GraphData = (
@@ -52,7 +51,7 @@ impl SingleFileDB {
     }
 
     // Collect all graph data
-    let (nodes, edges, labels, etypes, propkeys, vector_stores) = self.collect_graph_data();
+    let (nodes, edges, labels, etypes, propkeys, vector_stores) = self.collect_graph_data()?;
 
     // Get current header state
     let header = self.header.read().clone();
@@ -131,6 +130,7 @@ impl SingleFileDB {
       // No snapshot to load
       *self.snapshot.write() = None;
       self.vector_stores.write().clear();
+      self.vector_store_lazy_entries.write().clear();
       return Ok(());
     }
 
@@ -153,8 +153,9 @@ impl SingleFileDB {
 
     // Rebuild vector stores from the new snapshot
     if let Some(ref snapshot) = *self.snapshot.read() {
-      let stores = vector_stores_from_snapshot(snapshot)?;
+      let (stores, lazy_entries) = vector_store_state_from_snapshot(snapshot)?;
       *self.vector_stores.write() = stores;
+      *self.vector_store_lazy_entries.write() = lazy_entries;
     }
 
     Ok(())
@@ -255,7 +256,7 @@ impl SingleFileDB {
   /// Returns (new_gen, new_snapshot_start_page, new_snapshot_page_count)
   fn build_and_write_snapshot(&self) -> Result<(u64, u64, u64)> {
     // Collect all graph data (reads from snapshot + delta)
-    let (nodes, edges, labels, etypes, propkeys, vector_stores) = self.collect_graph_data();
+    let (nodes, edges, labels, etypes, propkeys, vector_stores) = self.collect_graph_data()?;
 
     // Get current header state
     let header = self.header.read().clone();
@@ -418,7 +419,7 @@ impl SingleFileDB {
   }
 
   /// Collect all graph data from snapshot + delta
-  pub(crate) fn collect_graph_data(&self) -> GraphData {
+  pub(crate) fn collect_graph_data(&self) -> Result<GraphData> {
     let mut nodes = Vec::new();
     let mut edges = Vec::new();
     let mut labels = HashMap::new();
@@ -619,56 +620,28 @@ impl SingleFileDB {
       }
     }
 
-    // Merge vector embeddings into node props for snapshot persistence.
-    // Also persist a cloned copy of vector stores as dedicated snapshot sections.
-    let vector_stores_for_snapshot: HashMap<PropKeyId, VectorManifest>;
-    {
-      let stores = self.vector_stores.read();
-      vector_stores_for_snapshot = stores.clone();
-
-      if stores.is_empty() {
-        return (
-          nodes,
-          edges,
-          labels,
-          etypes,
-          propkeys,
-          vector_stores_for_snapshot,
-        );
-      }
-
-      let mut node_index: HashMap<NodeId, usize> = HashMap::new();
-      for (idx, node) in nodes.iter().enumerate() {
-        node_index.insert(node.node_id, idx);
-      }
-
-      for (&prop_key_id, store) in stores.iter() {
-        for &node_id in store.node_to_vector.keys() {
-          if delta.is_node_deleted(node_id) {
-            continue;
-          }
-
-          let Some(&idx) = node_index.get(&node_id) else {
-            continue;
-          };
-
-          if let Some(vec) = vector_store_node_vector(store, node_id) {
-            nodes[idx]
-              .props
-              .insert(prop_key_id, PropValue::VectorF32(vec.to_vec()));
-          }
-        }
+    // Snapshot persistence now stores ANN vectors only in dedicated
+    // vector-store sections. Remove duplicate vector payloads from node props.
+    self.materialize_all_vector_stores()?;
+    let vector_stores_for_snapshot: HashMap<PropKeyId, VectorManifest> =
+      self.vector_stores.read().clone();
+    if !vector_stores_for_snapshot.is_empty() {
+      for node in &mut nodes {
+        node.props.retain(|prop_key_id, value| {
+          !(vector_stores_for_snapshot.contains_key(prop_key_id)
+            && matches!(value, PropValue::VectorF32(_)))
+        });
       }
     }
 
-    (
+    Ok((
       nodes,
       edges,
       labels,
       etypes,
       propkeys,
       vector_stores_for_snapshot,
-    )
+    ))
   }
 
   /// Check if checkpoint is recommended based on WAL usage

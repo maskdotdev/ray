@@ -835,8 +835,8 @@ where
     }
   }
 
-  let mut vector_prop_keys: HashSet<_> = source.vector_stores.read().keys().copied().collect();
-  vector_prop_keys.extend(replica.vector_stores.read().keys().copied());
+  let mut vector_prop_keys = source.vector_prop_keys();
+  vector_prop_keys.extend(replica.vector_prop_keys());
   for &node_id in &source_nodes {
     for &prop_key_id in &vector_prop_keys {
       let source_vector = source.node_vector(node_id, prop_key_id);

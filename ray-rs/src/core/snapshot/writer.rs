@@ -906,10 +906,16 @@ pub fn build_snapshot_to_memory(input: SnapshotBuildInput) -> Result<Vec<u8>> {
   let num_strings = state.string_table.len();
 
   let mut add_section = |id: SectionId, data: Vec<u8>| {
-    let (compressed, compression_type) = maybe_compress(&data, &compression_opts);
+    let uncompressed_size = data.len() as u32;
+    let (compressed, compression_type) =
+      if matches!(id, SectionId::VectorStoreIndex | SectionId::VectorStoreData) {
+        (data, CompressionType::None)
+      } else {
+        maybe_compress(&data, &compression_opts)
+      };
     section_data.push(SectionData {
       id,
-      uncompressed_size: data.len() as u32,
+      uncompressed_size,
       data: compressed,
       compression: compression_type,
     });
@@ -1078,7 +1084,11 @@ pub fn build_snapshot_to_memory(input: SnapshotBuildInput) -> Result<Vec<u8>> {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::core::snapshot::reader::SnapshotData;
+  use crate::util::compression::{CompressionOptions, CompressionType};
   use crate::util::crc::crc32c;
+  use crate::vector::store::{create_vector_store, vector_store_insert};
+  use crate::vector::types::VectorStoreConfig;
   use std::io::Write;
   use tempfile::NamedTempFile;
 
@@ -1226,6 +1236,54 @@ mod tests {
       }
       other => panic!("expected VectorF32, got {other:?}"),
     }
+  }
+
+  #[test]
+  fn test_vector_store_sections_forced_uncompressed() {
+    let mut manifest = create_vector_store(VectorStoreConfig::new(64));
+    for node_id in 1..=1024u64 {
+      let mut vector = vec![0.0f32; 64];
+      vector[(node_id as usize) % 64] = 1.0;
+      vector_store_insert(&mut manifest, node_id, &vector).expect("expected value");
+    }
+
+    let mut stores = HashMap::new();
+    stores.insert(7, manifest);
+
+    let mut propkeys = HashMap::new();
+    propkeys.insert(7, "embedding".to_string());
+
+    let buffer = build_snapshot_to_memory(SnapshotBuildInput {
+      generation: 1,
+      nodes: vec![NodeData {
+        node_id: 1,
+        key: None,
+        labels: vec![],
+        props: HashMap::new(),
+      }],
+      edges: Vec::new(),
+      labels: HashMap::new(),
+      etypes: HashMap::new(),
+      propkeys,
+      vector_stores: Some(stores),
+      compression: Some(CompressionOptions {
+        enabled: true,
+        compression_type: CompressionType::Zstd,
+        min_size: 1,
+        level: 3,
+      }),
+    })
+    .expect("expected value");
+
+    let mut tmp = NamedTempFile::new().expect("expected value");
+    tmp.write_all(&buffer).expect("expected value");
+    tmp.flush().expect("expected value");
+
+    let snapshot = SnapshotData::load(tmp.path()).expect("expected value");
+    assert!(snapshot
+      .section_slice(SectionId::VectorStoreIndex)
+      .is_some());
+    assert!(snapshot.section_slice(SectionId::VectorStoreData).is_some());
   }
 
   #[test]

@@ -25,7 +25,7 @@ use crate::vector::store::{create_vector_store, vector_store_delete, vector_stor
 use crate::vector::types::VectorStoreConfig;
 
 use super::recovery::{committed_transactions, replay_wal_record, scan_wal_records};
-use super::vector::vector_stores_from_snapshot;
+use super::vector::{materialize_vector_store_from_lazy_entries, vector_store_state_from_snapshot};
 use super::{CheckpointStatus, SingleFileDB};
 
 // ============================================================================
@@ -816,15 +816,25 @@ pub fn open_single_file<P: AsRef<Path>>(
     _wal_records_storage = None;
   }
 
-  // Load vector stores from snapshot (if present)
-  let mut vector_stores = if let Some(ref snapshot) = snapshot {
-    vector_stores_from_snapshot(snapshot)?
+  // Load vector-store state from snapshot (if present).
+  // Newer snapshots keep stores lazy until first access.
+  let (mut vector_stores, mut vector_store_lazy_entries) = if let Some(ref snapshot) = snapshot {
+    vector_store_state_from_snapshot(snapshot)?
   } else {
-    HashMap::new()
+    (HashMap::new(), HashMap::new())
   };
 
   // Apply pending vector operations from WAL replay
   for ((node_id, prop_key_id), operation) in delta.pending_vectors.drain() {
+    if let Some(ref snapshot) = snapshot {
+      materialize_vector_store_from_lazy_entries(
+        snapshot,
+        &mut vector_stores,
+        &mut vector_store_lazy_entries,
+        prop_key_id,
+      )?;
+    }
+
     match operation {
       Some(vector) => {
         // Get or create vector store
@@ -914,6 +924,7 @@ pub fn open_single_file<P: AsRef<Path>>(
     background_checkpoint: options.background_checkpoint,
     checkpoint_status: Mutex::new(CheckpointStatus::Idle),
     vector_stores: RwLock::new(vector_stores),
+    vector_store_lazy_entries: RwLock::new(vector_store_lazy_entries),
     cache: RwLock::new(cache),
     checkpoint_compression: options.checkpoint_compression.clone(),
     sync_mode: options.sync_mode,

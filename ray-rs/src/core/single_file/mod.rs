@@ -12,6 +12,7 @@ use std::thread::ThreadId;
 
 use parking_lot::{Condvar, Mutex, RwLock};
 
+use self::vector::VectorStoreLazyEntry;
 use crate::cache::manager::CacheManager;
 use crate::constants::*;
 use crate::core::pager::FilePager;
@@ -151,6 +152,8 @@ pub struct SingleFileDB {
   /// Vector stores keyed by property key ID
   /// Each property key can have its own vector store with different dimensions
   pub(crate) vector_stores: RwLock<HashMap<PropKeyId, VectorManifest>>,
+  /// Lazy vector-store section index keyed by property key ID
+  pub(crate) vector_store_lazy_entries: RwLock<HashMap<PropKeyId, VectorStoreLazyEntry>>,
 
   /// Cache manager for property, traversal, query, and key caches
   pub(crate) cache: RwLock<Option<CacheManager>>,
