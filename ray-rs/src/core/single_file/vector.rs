@@ -10,7 +10,7 @@ use crate::error::{KiteError, Result};
 use crate::types::*;
 use crate::util::binary::{read_u32, read_u64};
 use crate::vector::ivf::serialize::deserialize_manifest;
-use crate::util::binary::{read_u32_at, read_u64, read_u64_at};
+use crate::util::binary::{read_u32_at, read_u64_at};
 use crate::vector::store::{
   create_vector_store, validate_vector, vector_store_delete, vector_store_has, vector_store_insert,
   vector_store_node_vector,
@@ -354,19 +354,19 @@ pub(crate) fn vector_store_state_from_snapshot(
   }
 
   let Some(node_prop_offsets) = snapshot.section_data_shared(SectionId::NodePropOffsets) else {
-    return Ok(stores);
+    return Ok((stores, HashMap::new()));
   };
   let Some(node_prop_keys) = snapshot.section_data_shared(SectionId::NodePropKeys) else {
-    return Ok(stores);
+    return Ok((stores, HashMap::new()));
   };
   let Some(node_prop_vals) = snapshot.section_data_shared(SectionId::NodePropVals) else {
-    return Ok(stores);
+    return Ok((stores, HashMap::new()));
   };
   let Some(vector_offsets) = snapshot.section_data_shared(SectionId::VectorOffsets) else {
-    return Ok(stores);
+    return Ok((stores, HashMap::new()));
   };
   let Some(vector_data) = snapshot.section_data_shared(SectionId::VectorData) else {
-    return Ok(stores);
+    return Ok((stores, HashMap::new()));
   };
 
   let node_prop_offsets = node_prop_offsets.as_ref();
@@ -584,6 +584,8 @@ fn deserialize_vector_store_entry(
       "Failed to deserialize vector store for prop key {prop_key_id}: {err}"
     ))
   })
+}
+
 fn decode_vector_payload(
   vector_offsets: &[u8],
   vector_data: &[u8],
@@ -621,7 +623,7 @@ fn decode_vector_payload(
 
 #[cfg(test)]
 mod tests {
-  use super::{vector_store_state_from_snapshot, vector_stores_from_snapshot};
+  use super::{decode_vector_payload, vector_store_state_from_snapshot, vector_stores_from_snapshot};
   use crate::core::single_file::{close_single_file, open_single_file, SingleFileOpenOptions};
   use crate::core::snapshot::reader::SnapshotData;
   use crate::core::snapshot::writer::{build_snapshot_to_memory, NodeData, SnapshotBuildInput};
@@ -636,6 +638,24 @@ mod tests {
   use std::collections::HashMap;
   use std::io::Write;
   use tempfile::{tempdir, NamedTempFile};
+
+  #[test]
+  fn test_decode_vector_payload_round_trip() {
+    let mut offsets = Vec::new();
+    for off in [0u64, 8, 20] {
+      offsets.extend_from_slice(&off.to_le_bytes());
+    }
+    let mut data = Vec::new();
+    for value in [0.1f32, 0.2, 0.3, 1.0, 2.0] {
+      data.extend_from_slice(&value.to_le_bytes());
+    }
+
+    let first = decode_vector_payload(&offsets, &data, 0).expect("expected value");
+    assert_eq!(first, vec![0.1, 0.2]);
+
+    let second = decode_vector_payload(&offsets, &data, 1).expect("expected value");
+    assert_eq!(second, vec![0.3, 1.0, 2.0]);
+  }
 
   #[test]
   fn test_set_node_vector_rejects_invalid_vectors() {

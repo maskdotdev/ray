@@ -362,6 +362,9 @@ struct SnapshotLoadState<'a> {
   profile: &'a mut OpenProfileCounters,
   #[cfg(feature = "bench-profile")]
   profile_enabled: bool,
+  crc_chunk_size: Option<usize>,
+  #[cfg(feature = "bench-profile")]
+  snapshot_profile: Option<&'a mut SnapshotOpenProfile>,
 }
 
 #[cfg(feature = "bench-profile")]
@@ -379,9 +382,6 @@ struct OpenProfileCounters {
 #[cfg(feature = "bench-profile")]
 fn elapsed_ns(started: Instant) -> u64 {
   started.elapsed().as_nanos().min(u128::from(u64::MAX)) as u64
-  crc_chunk_size: Option<usize>,
-  #[cfg(feature = "bench-profile")]
-  profile: Option<&'a mut SnapshotOpenProfile>,
 }
 
 #[cfg(feature = "bench-profile")]
@@ -403,13 +403,15 @@ fn snapshot_crc_chunk_size_from_env() -> Option<usize> {
 
 #[cfg(feature = "bench-profile")]
 fn open_profile_enabled() -> bool {
-  std::env::var_os("KITEDB_BENCH_PROFILE_OPEN").is_some()
+  if std::env::var_os("KITEDB_BENCH_PROFILE_OPEN").is_none() {
+    return false;
+  }
   std::env::var("KITEDB_BENCH_PROFILE_OPEN")
     .map(|value| {
       let value = value.to_lowercase();
       value == "1" || value == "true" || value == "yes"
     })
-    .unwrap_or(false)
+    .unwrap_or(true)
 }
 
 #[cfg(feature = "bench-profile")]
@@ -461,16 +463,15 @@ fn load_snapshot_and_schema(state: &mut SnapshotLoadState<'_>) -> Result<Option<
   }
   parse_options.crc_chunk_size = state.crc_chunk_size;
 
-  let mmap = std::sync::Arc::new({
-    // Safety handled inside map_file (native mmap) or in-memory read (wasm).
-    map_file(state.pager.file())?
-  });
-
-  #[cfg(feature = "bench-profile")]
-  let parse_started = Instant::now();
-  let parse_result = SnapshotData::parse_at_offset(mmap.clone(), snapshot_offset, &parse_options);
   #[cfg(feature = "bench-profile")]
   {
+    let mmap = std::sync::Arc::new({
+      // Safety handled inside map_file (native mmap) or in-memory read (wasm).
+      map_file(state.pager.file())?
+    });
+
+    let parse_started = Instant::now();
+    let _ = SnapshotData::parse_at_offset(mmap.clone(), snapshot_offset, &parse_options);
     let parse_total_ns = elapsed_ns(parse_started);
     state.profile.snapshot_parse_ns = state
       .profile
@@ -504,7 +505,7 @@ fn load_snapshot_and_schema(state: &mut SnapshotLoadState<'_>) -> Result<Option<
     }
   }
   #[cfg(feature = "bench-profile")]
-  let profile_sink = if state.profile.is_some() && !parse_options.skip_crc_validation {
+  let profile_sink = if state.snapshot_profile.is_some() && !parse_options.skip_crc_validation {
     Some(Arc::new(std::sync::Mutex::new(None)))
   } else {
     None
@@ -531,15 +532,18 @@ fn load_snapshot_and_schema(state: &mut SnapshotLoadState<'_>) -> Result<Option<
     Ok(snap) => {
       #[cfg(feature = "bench-profile")]
       let schema_started = Instant::now();
-      if let Some(profile) = state.profile.as_deref_mut() {
-        profile.parse_total_ns = parse_total_ns;
-        if let Some(sink) = profile_sink {
-          if let Ok(mut guard) = sink.lock() {
-            if let Some(crc_profile) = guard.take() {
-              profile.snapshot_crc_ns = crc_profile.total_ns;
-              profile.snapshot_crc_bytes = crc_profile.total_bytes;
-              profile.snapshot_crc_chunk_size = crc_profile.chunk_size;
-              profile.snapshot_crc_sections = crc_profile.sections;
+      #[cfg(feature = "bench-profile")]
+      {
+        if let Some(profile) = state.snapshot_profile.as_deref_mut() {
+          profile.parse_total_ns = parse_total_ns;
+          if let Some(sink) = profile_sink {
+            if let Ok(mut guard) = sink.lock() {
+              if let Some(crc_profile) = guard.take() {
+                profile.snapshot_crc_ns = crc_profile.total_ns;
+                profile.snapshot_crc_bytes = crc_profile.total_bytes;
+                profile.snapshot_crc_chunk_size = crc_profile.chunk_size;
+                profile.snapshot_crc_sections = crc_profile.sections;
+              }
             }
           }
         }
@@ -968,7 +972,7 @@ pub fn open_single_file<P: AsRef<Path>>(
     profile_enabled,
     crc_chunk_size,
     #[cfg(feature = "bench-profile")]
-    profile: snapshot_profile.as_mut(),
+    snapshot_profile: snapshot_profile.as_mut(),
   };
   let snapshot = load_snapshot_and_schema(&mut snapshot_state)?;
   #[cfg(feature = "bench-profile")]

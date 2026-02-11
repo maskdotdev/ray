@@ -1324,6 +1324,7 @@ mod tests {
       labels: HashMap::new(),
       etypes: HashMap::new(),
       propkeys: HashMap::from([(1, "embedding".to_string())]),
+      vector_stores: None,
       compression: None,
     })
     .expect("snapshot build");
