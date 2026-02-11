@@ -115,6 +115,18 @@ import type {
   InferEdgeProps,
 } from './schema'
 
+declare module '../index' {
+  interface Kite {
+    get_ref(nodeType: string, key: unknown): object | null
+    get_id(nodeType: string, key: unknown): number | null
+    get_by_id(nodeId: number, props?: Array<string> | undefined | null): object | null
+    get_by_ids(nodeIds: Array<number>, props?: Array<string> | undefined | null): Array<object>
+    get_prop(nodeId: number, propName: string): JsPropValue | null
+    get_edge_prop(src: number, edgeType: string, dst: number, propName: string): JsPropValue | null
+    get_edge_props(src: number, edgeType: string, dst: number): Record<string, JsPropValue>
+  }
+}
+
 // =============================================================================
 // Clean Type Aliases (no Js prefix)
 // =============================================================================
@@ -681,24 +693,24 @@ export class Kite extends NativeKite {
   }
 
   getRef(nodeType: NodeLike, key: unknown): object | null {
-    return super.getRef(nodeName(nodeType), key)
+    return super.get_ref(nodeName(nodeType), key)
   }
 
   getId(nodeType: NodeLike, key: unknown): number | null {
-    return super.getId(nodeName(nodeType), key)
+    return super.get_id(nodeName(nodeType), key)
   }
 
   getById(nodeId: number, props?: NodePropsSelection): object | null {
-    return super.getById(nodeId, props)
+    return super.get_by_id(nodeId, props)
   }
 
   getByIds(nodeIds: Array<NodeIdLike>, props?: NodePropsSelection): Array<object> {
     const ids = nodeIds.map((id) => nodeId(id))
-    return super.getByIds(ids, props)
+    return super.get_by_ids(ids, props)
   }
 
   getProp(node: NodeIdLike, propName: string): JsPropValue | null {
-    return super.getProp(nodeId(node), propName)
+    return super.get_prop(nodeId(node), propName)
   }
 
   setProp(node: NodeIdLike, propName: string, value: unknown): void {
@@ -765,11 +777,11 @@ export class Kite extends NativeKite {
   }
 
   getEdgeProp(src: NodeIdLike, edgeType: EdgeLike, dst: NodeIdLike, propName: string): JsPropValue | null {
-    return super.getEdgeProp(nodeId(src), edgeName(edgeType), nodeId(dst), propName)
+    return super.get_edge_prop(nodeId(src), edgeName(edgeType), nodeId(dst), propName)
   }
 
   getEdgeProps(src: NodeIdLike, edgeType: EdgeLike, dst: NodeIdLike): Record<string, JsPropValue> {
-    return super.getEdgeProps(nodeId(src), edgeName(edgeType), nodeId(dst))
+    return super.get_edge_props(nodeId(src), edgeName(edgeType), nodeId(dst))
   }
 
   setEdgeProp(
