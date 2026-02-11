@@ -359,12 +359,16 @@ struct SnapshotLoadState<'a> {
   next_propkey_id: &'a mut PropKeyId,
   #[cfg(feature = "bench-profile")]
   profile: &'a mut OpenProfileCounters,
+  #[cfg(feature = "bench-profile")]
+  profile_enabled: bool,
 }
 
 #[cfg(feature = "bench-profile")]
 #[derive(Debug, Default)]
 struct OpenProfileCounters {
   snapshot_parse_ns: u64,
+  snapshot_crc_ns: u64,
+  snapshot_decode_ns: u64,
   schema_hydrate_ns: u64,
   wal_scan_ns: u64,
   wal_replay_ns: u64,
@@ -374,6 +378,11 @@ struct OpenProfileCounters {
 #[cfg(feature = "bench-profile")]
 fn elapsed_ns(started: Instant) -> u64 {
   started.elapsed().as_nanos().min(u128::from(u64::MAX)) as u64
+}
+
+#[cfg(feature = "bench-profile")]
+fn open_profile_enabled() -> bool {
+  std::env::var_os("KITEDB_BENCH_PROFILE_OPEN").is_some()
 }
 
 fn load_snapshot_and_schema(state: &mut SnapshotLoadState<'_>) -> Result<Option<SnapshotData>> {
@@ -391,22 +400,47 @@ fn load_snapshot_and_schema(state: &mut SnapshotLoadState<'_>) -> Result<Option<
     parse_options.skip_crc_validation = true;
   }
 
+  let mmap = std::sync::Arc::new({
+    // Safety handled inside map_file (native mmap) or in-memory read (wasm).
+    map_file(state.pager.file())?
+  });
+
   #[cfg(feature = "bench-profile")]
   let parse_started = Instant::now();
-  let parse_result = SnapshotData::parse_at_offset(
-    std::sync::Arc::new({
-      // Safety handled inside map_file (native mmap) or in-memory read (wasm).
-      map_file(state.pager.file())?
-    }),
-    snapshot_offset,
-    &parse_options,
-  );
+  let parse_result = SnapshotData::parse_at_offset(mmap.clone(), snapshot_offset, &parse_options);
   #[cfg(feature = "bench-profile")]
   {
+    let parse_total_ns = elapsed_ns(parse_started);
     state.profile.snapshot_parse_ns = state
       .profile
       .snapshot_parse_ns
-      .saturating_add(elapsed_ns(parse_started));
+      .saturating_add(parse_total_ns);
+
+    // Deep split for profiling runs: decode-only + inferred CRC delta.
+    if state.profile_enabled && !parse_options.skip_crc_validation {
+      let mut decode_options = parse_options.clone();
+      decode_options.skip_crc_validation = true;
+      let decode_started = Instant::now();
+      if SnapshotData::parse_at_offset(mmap, snapshot_offset, &decode_options).is_ok() {
+        let decode_ns = elapsed_ns(decode_started);
+        state.profile.snapshot_decode_ns =
+          state.profile.snapshot_decode_ns.saturating_add(decode_ns);
+        state.profile.snapshot_crc_ns = state
+          .profile
+          .snapshot_crc_ns
+          .saturating_add(parse_total_ns.saturating_sub(decode_ns));
+      } else {
+        state.profile.snapshot_decode_ns = state
+          .profile
+          .snapshot_decode_ns
+          .saturating_add(parse_total_ns);
+      }
+    } else {
+      state.profile.snapshot_decode_ns = state
+        .profile
+        .snapshot_decode_ns
+        .saturating_add(parse_total_ns);
+    }
   }
 
   match parse_result {
@@ -696,6 +730,8 @@ pub fn open_single_file<P: AsRef<Path>>(
   let open_started = Instant::now();
   #[cfg(feature = "bench-profile")]
   let mut open_profile = OpenProfileCounters::default();
+  #[cfg(feature = "bench-profile")]
+  let profile_enabled = open_profile_enabled();
 
   // Validate page size
   if !is_valid_page_size(options.page_size) {
@@ -823,6 +859,8 @@ pub fn open_single_file<P: AsRef<Path>>(
     next_propkey_id: &mut next_propkey_id,
     #[cfg(feature = "bench-profile")]
     profile: &mut open_profile,
+    #[cfg(feature = "bench-profile")]
+    profile_enabled,
   };
   let snapshot = load_snapshot_and_schema(&mut snapshot_state)?;
 
@@ -972,14 +1010,16 @@ pub fn open_single_file<P: AsRef<Path>>(
 
   #[cfg(feature = "bench-profile")]
   {
-    if std::env::var_os("KITEDB_BENCH_PROFILE_OPEN").is_some() {
+    if profile_enabled {
       let total_ns = elapsed_ns(open_started);
       let wal_records = _wal_records_storage.as_ref().map(|r| r.len()).unwrap_or(0);
       eprintln!(
-        "[bench-profile][open] path={} total_ns={} snapshot_parse_ns={} schema_hydrate_ns={} wal_scan_ns={} wal_replay_ns={} vector_init_ns={} snapshot_loaded={} wal_records={} wal_txs={} vector_stores={} vector_lazy_entries={}",
+        "[bench-profile][open] path={} total_ns={} snapshot_parse_ns={} snapshot_crc_ns={} snapshot_decode_ns={} schema_hydrate_ns={} wal_scan_ns={} wal_replay_ns={} vector_init_ns={} snapshot_loaded={} wal_records={} wal_txs={} vector_stores={} vector_lazy_entries={}",
         path.display(),
         total_ns,
         open_profile.snapshot_parse_ns,
+        open_profile.snapshot_crc_ns,
+        open_profile.snapshot_decode_ns,
         open_profile.schema_hydrate_ns,
         open_profile.wal_scan_ns,
         open_profile.wal_replay_ns,
